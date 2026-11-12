@@ -10,7 +10,7 @@ export default function TermsPage() {
       <Legal title="Terms">
         <h3>The software</h3>
         <p>
-          Skywake is open source under the Apache License 2.0. That license, not this page, sets
+          Skywake is open source under the GNU GPL v3. That license, not this page, sets
           what you may do with the code. It comes as is, without warranty.
         </p>
 

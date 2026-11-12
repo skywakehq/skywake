@@ -2,9 +2,9 @@ export type Page = { title: string; description: string; priority: number };
 
 export const pages = {
   "/": {
-    title: "Skywake: Fast filesystem and search on S3 for AI agents",
+    title: "Skywake: A scalable filesystem and search engine for AI agents",
     description:
-      "Open-source filesystem and search on your own S3 bucket. Mount it like a local disk, give every AI agent its own copy in 10 ms, and search it.",
+      "Open-source filesystem and hybrid search on your own S3 bucket. Fork a workspace for every agent in milliseconds, mount it like a local disk, and search by meaning or keyword.",
     priority: 1,
   },
   "/filesystem": {

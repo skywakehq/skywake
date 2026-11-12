@@ -15,7 +15,7 @@ export function Bento({ features }: { features: Feature[] }) {
         {features.map((feature) => (
           <li
             key={feature.name}
-            className={`${CARD} flex flex-col overflow-hidden p-6 ${SPAN[feature.span]}`}
+            className={`${CARD} flex flex-col overflow-hidden p-6 transition-colors hover:border-foreground/15 ${SPAN[feature.span]}`}
           >
             <div
               aria-hidden
