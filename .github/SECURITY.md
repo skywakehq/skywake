@@ -16,7 +16,7 @@ we didn't.
 ## What counts
 
 Anything that lets someone read, change or delete data they shouldn't, or
-break the guarantees the README makes, for example:
+break the guarantees the docs make, for example:
 
 - reading another branch's or tenant's content without access to it
 - a save, takeover or crash that silently loses or corrupts data

@@ -58,7 +58,7 @@ scripts/bench.sh filesystem fleet --s3-latency-ms 20
 
 ## Filesystem on a laptop
 
-The figures in the project [README](../README.md#performance): runs of November 5, 2026 for the
+Runs of November 5, 2026 for the
 [store](../benchmarks/published/20261105-155907.md), the [mount](../benchmarks/published/20261105-121157-mount.md)
 and the [daemon](../benchmarks/published/20261105-125604-daemon.md), on a 10-core laptop against the local object
 storage with no added latency; the mount and daemon suites in the Linux dev VM.
