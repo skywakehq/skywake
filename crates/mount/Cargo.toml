@@ -22,7 +22,7 @@ fuse-backend-rs = { version = "0.14", default-features = false, features = ["vir
 fuser = "0.18.0"
 vhost = { version = "0.15", features = ["vhost-user-backend"] }
 vhost-user-backend = "0.21"
-virtio-queue = "0.17"
+virtio-queue = "0.18"
 vm-memory = { version = "0.17", features = ["backend-mmap", "backend-atomic"] }
 vmm-sys-util = "0.15"
 
