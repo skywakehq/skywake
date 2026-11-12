@@ -1,0 +1,14 @@
+{
+  "pages": [
+    "index",
+    "getting-started",
+    "filesystem",
+    "indexes",
+    "agents",
+    "self-hosting",
+    "security",
+    "pricing",
+    "benchmarks",
+    "reference"
+  ]
+}

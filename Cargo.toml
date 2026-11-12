@@ -1,0 +1,56 @@
+[workspace]
+members = ["crates/*", "bindings/node", "benchmarks", "sdks/rust"]
+exclude = ["vendor/tantivy"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# This workspace's crates.
+skywake-cache = { path = "crates/cache" }
+skywake-core = { path = "crates/core" }
+skywake-daemon = { path = "crates/daemon" }
+skywake-index = { path = "crates/index" }
+skywake-mount = { path = "crates/mount" }
+
+# Everything else, in alphabetical order.
+anyhow = "1.0.104"
+async-trait = "0.1.89"
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio"] }
+bao = "0.13.1"
+blake3 = "1.8.7"
+bytes = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+csv = "1.4.0"
+diffy = "0.4"
+fastcdc = "5.0.0"
+futures = "0.3.34"
+libc = "0.2"
+metrics = "0.24"
+napi = { version = "3.16.1", features = ["async"] }
+napi-build = "2.6.0"
+napi-derive = "3.7.0"
+object_store = { version = "0.14.2", features = ["aws"] }
+parquet = { version = "60.1.0", default-features = false, features = ["snap", "zstd"] }
+postcard = { version = "1.1.3", features = ["use-std"] }
+regex = "1"
+ring = "0.17.14"
+base64 = "0.22.1"
+half = "2"
+reqwest = { version = "0.13.5", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+tracing = "0.1"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "fs", "sync", "io-util", "signal", "net", "time"] }
+zstd = "0.14.3"
+
+# Tantivy with BM25's k1 and b per query: see vendor/tantivy/PATCH.md.
+[patch.crates-io]
+tantivy = { path = "vendor/tantivy" }

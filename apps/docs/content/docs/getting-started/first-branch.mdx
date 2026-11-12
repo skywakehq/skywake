@@ -1,0 +1,56 @@
+---
+title: Your first branch
+icon: GitBranch
+description: Save a folder, fork it, change the fork, and merge it back.
+---
+
+This walks through the basic loop: save a folder as a branch, fork it, change the fork, and merge the change back.
+
+```bash
+skywake new main
+skywake commit main ./project -m "base image"
+skywake new agent-1 --from main
+skywake checkout agent-1 ./agent-1
+# ... change files in ./agent-1 ...
+skywake commit agent-1 ./agent-1 -m "fix auth"
+skywake diff main agent-1
+skywake merge agent-1 main
+```
+
+If you don't pass `--store` or set `SKYWAKE_STORE`, everything is stored in `.skywake` in the current folder. To use a bucket instead, see [install](./install.mdx).
+
+## What each step does
+
+| Command                      | What it does                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------------- |
+| `new main`                   | Makes an empty branch.                                                                  |
+| `commit main ./project`      | Saves the folder as the branch's new version.                                           |
+| `new agent-1 --from main`    | [Forks](../filesystem/branches.mdx#forks) `main`. No data is copied, however big it is. |
+| `checkout agent-1 ./agent-1` | Copies the branch into an empty folder.                                                 |
+| `diff main agent-1`          | Lists paths that differ: `+` added, `-` removed, `~` modified.                          |
+| `merge agent-1 main`         | Merges `agent-1` into `main`, [three-way](../filesystem/diff-and-merge.mdx#merge).      |
+
+A [commit](/reference/cli/commit) reuses any file whose size, timestamp and mode match the previous commit. That way it reads only the files you touched.
+
+## Look at history
+
+```bash
+skywake log main                   # commits, newest first
+skywake history main src/auth.py   # each version of one file
+skywake branches
+```
+
+## Leave files out
+
+To keep files out of commits, list them in `.skywakeignore`, one rule per line. A plain name such as `__pycache__` matches in any folder. A rule with a `/`, such as `/target`, is a path from the root.
+
+If there is no `.skywakeignore`, Skywake skips `/target`, `/node_modules`, `/.venv`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache` and `.DS_Store`. It keeps `.git`.
+
+## Next
+
+<Cards>
+  <Card href="./first-index.mdx" />
+  <Card href="../filesystem/mount.mdx" />
+  <Card href="../filesystem/branches.mdx" />
+  <Card href="/reference/cli/commit" />
+</Cards>

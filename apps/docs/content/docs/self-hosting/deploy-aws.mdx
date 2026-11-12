@@ -1,0 +1,103 @@
+---
+title: Deploy to AWS
+icon: Cloud
+description: Install Skywake in your own AWS account, with everything in one region.
+---
+
+There are two ways in. Both put the API, Postgres and the bucket in **one region**, because that is what Skywake's speeds assume (see [Topology](./what-to-run.mdx#topology)). Pick the region where your agents run.
+
+| Way                                        | What you get                                                    | For                    |
+| ------------------------------------------ | --------------------------------------------------------------- | ---------------------- |
+| [Terraform on EKS](#on-eks-terraform)      | The chart on your cluster, RDS Postgres, an S3 bucket, IRSA     | Production             |
+| [One machine](#one-machine-cloudformation) | One EC2 instance running Compose, an S3 bucket, Postgres or RDS | Trying it, small teams |
+
+## On EKS: Terraform
+
+The module in `deploy/terraform/aws` installs Skywake on an EKS cluster you already have. In the provider's region, it makes:
+
+- an S3 bucket, private and encrypted;
+- RDS Postgres 17 in the cluster's VPC, with `rds.logical_replication=1` for zero-cache;
+- an IAM role for the pods (IRSA) that may use only that bucket. It makes no access keys.
+- the two Secrets, and the [Helm chart](./kubernetes.mdx) from `oci://ghcr.io/skywakehq/charts`. A Job in the chart makes the database roles before the API starts.
+
+```hcl title="main.tf"
+module "skywake" {
+  source       = "github.com/skywakehq/skywake//deploy/terraform/aws"
+  cluster_name = "my-cluster"
+  urls = {
+    console = "https://console.example.com"
+    api     = "https://api.example.com"
+    zero    = "https://zero.example.com"
+  }
+}
+```
+
+Configure the `aws`, `kubernetes` and `helm` providers for the cluster first. `deploy/terraform/aws/examples/eks` shows how. Then:
+
+```bash
+terraform init
+terraform apply
+```
+
+The cluster needs an [IAM OIDC provider](https://docs.aws.amazon.com/eks/latest/userguide/enable-iam-roles-for-service-accounts.html) for IRSA. To reach the console, the API and zero-cache from outside, turn on the chart's Ingress through `values`, as the example does, or route your own ingress to the services.
+
+| Variable        | Default                             | Meaning                                                 |
+| --------------- | ----------------------------------- | ------------------------------------------------------- |
+| `cluster_name`  | required                            | An EKS cluster in the provider's region.                |
+| `urls`          | required                            | The addresses people use for the console, API and zero. |
+| `name`          | `skywake`                           | Names the bucket, database, role and Helm release.      |
+| `bucket_name`   | `<name>-<account>-<region>`         |                                                         |
+| `database`      | `db.t4g.medium`, 50 GB, Postgres 17 | Size, Multi-AZ, backups, deletion protection (on).      |
+| `chart.version` | the newest                          | Pin a release, such as `0.2.0`.                         |
+| `values`        | none                                | More chart values as YAML: ingress, sizes, images.      |
+
+The admin token is in the `admin_token` output (`terraform output -raw admin_token`). Everything else stays in the cluster's Secrets and in Terraform's state, so keep the state private.
+
+## One machine: CloudFormation
+
+`skywake-starter.yaml`, attached to every [release](https://github.com/skywakehq/skywake/releases/latest), makes one stack:
+
+- a VPC with an EC2 instance (Graviton, `t4g.large` by default) that runs the published images with Docker Compose;
+- an S3 bucket, which the instance reaches through its own IAM role, with no keys;
+- Postgres on the instance, or RDS Postgres when you set `Database` to `rds`.
+
+Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home#/stacks/create) **in the region you want**, choose **Upload a template file**, and pick `skywake-starter.yaml`. Or use the CLI:
+
+```bash
+aws cloudformation deploy --region eu-central-1 --stack-name skywake \
+  --template-file skywake-starter.yaml --capabilities CAPABILITY_IAM \
+  --parameter-overrides AllowedCidr=203.0.113.0/24
+```
+
+The stack finishes once every service is healthy, which takes about five minutes. Its outputs give the console's and the API's addresses. Open the console, sign up, and make an organization.
+
+| Parameter      | Default      | Meaning                                             |
+| -------------- | ------------ | --------------------------------------------------- |
+| `Version`      | this release | The Skywake release to run.                         |
+| `Database`     | `local`      | `rds` for RDS Postgres with daily backups.          |
+| `InstanceType` | `t4g.large`  |                                                     |
+| `AllowedCidr`  | `0.0.0.0/0`  | Who may reach ports 3100, 8080 and 4848. Narrow it. |
+
+The starter serves plain HTTP on the instance's address. For real use, put a load balancer with HTTPS in front, and change `CONSOLE_URL`, `API_URL` and `ZERO_URL` in `/opt/skywake/.env`. The stack's `Shell` output opens a shell on the instance through Session Manager. The bucket and an RDS database's final snapshot are kept when you delete the stack.
+
+## Check the placement
+
+The API measures its bucket and Postgres when it starts. If either is in another region or more than 5 ms away, the log says so and names what will be slower:
+
+```json
+{
+  "level": "warn",
+  "msg": "Postgres is in us-west-2, not eu-central-1 (AWS_REGION): every API write waits on it, ...",
+  "check": "placement"
+}
+```
+
+No warning means that everything is close.
+
+## Next
+
+<Cards>
+  <Card href="./kubernetes.mdx" />
+  <Card href="./docker-compose.mdx" />
+  <Card href="./what-to-run.mdx" />
+</Cards>

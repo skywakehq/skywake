@@ -1,0 +1,115 @@
+---
+title: Schemas and types
+icon: Shapes
+description: The vector columns, metrics, element types, attribute types and id types an index schema can use.
+---
+
+```json title="schema"
+{
+  "vectors": [{ "name": "embedding", "dims": 768, "metric": "cosine", "element": "f16" }],
+  "attributes": [
+    { "name": "tag", "type": "string", "filter_index": true },
+    { "name": "stars", "type": "int" },
+    { "name": "published", "type": "datetime" },
+    { "name": "labels", "type": "strings" },
+    { "name": "body", "type": "text", "language": "english" },
+    { "name": "terms", "type": "sparse" }
+  ],
+  "id": "uuid"
+}
+```
+
+A schema tells the index what each document holds. It has `vectors` (up to 8), `attributes` (up to 64) and an optional `id` type. It needs at least one vector column or one `text` attribute, and the names in each list must be unique.
+
+## Names
+
+A name has up to 64 letters, digits, `_` and `.`. No part between dots may start with a digit. You can't name an attribute `and`, `or`, `not` or `id`, because filters use those words.
+
+## Vector columns
+
+| Field     | Type                           | Default  | Meaning                                                                                      |
+| --------- | ------------------------------ | -------- | -------------------------------------------------------------------------------------------- |
+| `name`    | string                         |          | The column name.                                                                             |
+| `dims`    | int, 1 to 4096                 |          | Numbers in each vector.                                                                      |
+| `metric`  | `cosine`, `euclidean` or `dot` | `cosine` | How vectors are compared.                                                                    |
+| `element` | `f32`, `f16` or `i8`           | `f32`    | How each number is stored.                                                                   |
+| `embed`   | `{model}`                      |          | Lets documents and queries give text instead. See [embeddings](./embeddings-and-rerank.mdx). |
+
+Vector columns can't change after the index is created, so choose `dims`, `metric` and `element` with care.
+
+### Metrics
+
+Every metric returns a [distance](./vector.mdx), so a smaller value means closer.
+
+| Metric      | `distance`               |
+| ----------- | ------------------------ |
+| `cosine`    | `1 - cos`                |
+| `euclidean` | The squared distance     |
+| `dot`       | The negative dot product |
+
+### Element types
+
+`f16` uses half the bytes of `f32`. `i8` uses a quarter, and holds whole numbers from -128 to 127. An `i8` column works with `euclidean` or `dot`. It can't use `cosine`.
+
+## Attribute types
+
+| Type       | Value                                    | Notes                                                                                                                       |
+| ---------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `string`   | `"billing"`                              | One string.                                                                                                                 |
+| `number`   | `9.5`                                    | One number.                                                                                                                 |
+| `int`      | `9`                                      | A whole number. You can compare it with any number: `n < 2.5` is the same as `n <= 2`.                                      |
+| `bool`     | `true`                                   | Can only be filtered with `eq`, `ne` and `in`.                                                                              |
+| `uuid`     | `"4f1c2a9e-8b3d-4e5f-9a1b-2c3d4e5f6a7b"` | Written and read as a string.                                                                                               |
+| `datetime` | `"2026-11-09T10:00:00Z"`                 | RFC 3339, a date, or milliseconds since 1970. Comes back in UTC.                                                            |
+| `strings`  | `["a", "b"]`                             | A list. A filter matches if it matches any item.                                                                            |
+| `ints`     | `[1, 2]`                                 | A list.                                                                                                                     |
+| `numbers`  | `[0.5, 2]`                               | A list.                                                                                                                     |
+| `text`     | `"How to reset a password"`              | Searched by BM25. See [full-text search](./full-text.mdx).                                                                  |
+| `sparse`   | `{"indices": [12], "values": [0.8]}`     | In the form SPLADE writes. Only used for scoring, never filtered or ordered by.                                             |
+| `vectors`  | `[[0.1, 0.2], [0.3, 0.4]]`               | Vectors of one length, as ColBERT writes. Only used for scoring. See [late interaction](./sparse-and-late-interaction.mdx). |
+
+### Text options
+
+These options control how a `text` attribute is split into words and scored. Only a `text` attribute takes them.
+
+| Field              | Type       | Default   | Meaning                                                                     |
+| ------------------ | ---------- | --------- | --------------------------------------------------------------------------- |
+| `language`         | a language | `english` | The stemming language. `none` keeps words whole.                            |
+| `stopwords`        | bool       | `false`   | Drop the language's stopwords, such as `the` and `of`.                      |
+| `k1`               | 0 to 10    | `1.2`     | BM25 term saturation.                                                       |
+| `b`                | 0 to 1     | `0.75`    | BM25 length normalization.                                                  |
+| `stemming`         | bool       | `true`    | Match words by their stem, so `running` finds `run`.                        |
+| `filterable`       | bool       | `false`   | Also lets you filter, order and group by the whole value, like a `string`.  |
+| `case_sensitive`   | bool       | `false`   | Tell `Apple` from `apple`.                                                  |
+| `ascii_folding`    | bool       | `false`   | Match `café` with `cafe`.                                                   |
+| `max_token_length` | 1 to 1024  | `39`      | Words longer than this are left out.                                        |
+| `pre_tokenized`    | bool       | `false`   | The value is a list of strings, and each string is one word, used as it is. |
+
+### Filter index
+
+Set `filter_index: true` when your vector queries often filter on this attribute and the filter matches only a few documents. The index then also keeps the documents sorted by this attribute, so such a query reads just those documents.
+
+It works only on an attribute with a single value, so not on a list, `sparse` or `vectors`. You can turn it on later with an update, and the next build creates it. See [filter-first search](./filters.mdx#filter-first-search).
+
+## Id type
+
+| `id`   | Ids it accepts                                                                                                   |
+| ------ | ---------------------------------------------------------------------------------------------------------------- |
+| unset  | A string of 1 to 256 characters, or a whole number from 0 to 2^53 - 1.                                           |
+| `uuid` | A UUID, stored in 16 bytes. Written as text with or without dashes, in any case; returned lowercase with dashes. |
+
+The id type can't change.
+
+## Changing a schema
+
+You can add attributes with `PATCH /v1/indexes/{index}` (see [create](./create.mdx#change-an-index)) or by writing documents that have them ([new attributes](./write.mdx#new-attributes)). An attribute the index already has keeps its type, but you can turn on `filter_index` for it. Vector columns and the id type are fixed.
+
+To remove attributes, list them in `drop_attributes` in the same `PATCH`. This removes them and clears their values. You can add a dropped attribute back later, but only as it was before. The request is refused while the index has more than one branch, because branches share the index's data.
+
+## Next
+
+<Cards>
+  <Card href="./vector.mdx" />
+  <Card href="./full-text.mdx" />
+  <Card href="/reference/api/indexes/createIndex" />
+</Cards>

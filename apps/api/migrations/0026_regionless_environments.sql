@@ -1,0 +1,1 @@
+ALTER TABLE "api"."environments" DROP COLUMN "region";

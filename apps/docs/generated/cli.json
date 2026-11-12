@@ -1,0 +1,3393 @@
+{
+  "about": "Skywake: a filesystem for agents",
+  "afterHelp": null,
+  "args": [
+    {
+      "default": [],
+      "env": "SKYWAKE_STORE",
+      "global": false,
+      "help": "`s3://bucket` or a local directory (default `.skywake`). Without it, `new`, `merge`, `delete` and `recover` go through skywaked if it runs, to its store, as its access file allows",
+      "id": "store",
+      "long": "store",
+      "longHelp": null,
+      "multiple": false,
+      "positional": false,
+      "required": false,
+      "short": null,
+      "valueNames": [
+        "STORE"
+      ],
+      "values": []
+    },
+    {
+      "default": [],
+      "env": "SKYWAKE_ROOT",
+      "global": false,
+      "help": "Folder where skywaked keeps its socket and local files. Default: `$XDG_STATE_HOME/skywake` (`~/.local/state/skywake`), or `/var/lib/skywake` as root or when only the system skywaked runs",
+      "id": "root",
+      "long": "root",
+      "longHelp": null,
+      "multiple": false,
+      "positional": false,
+      "required": false,
+      "short": null,
+      "valueNames": [
+        "ROOT"
+      ],
+      "values": []
+    },
+    {
+      "default": [
+        "bucket"
+      ],
+      "env": "SKYWAKE_HEADS",
+      "global": true,
+      "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+      "id": "heads",
+      "long": "heads",
+      "longHelp": null,
+      "multiple": false,
+      "positional": false,
+      "required": false,
+      "short": null,
+      "valueNames": [
+        "HEADS"
+      ],
+      "values": []
+    },
+    {
+      "default": [],
+      "env": null,
+      "global": false,
+      "help": "Print help",
+      "id": "help",
+      "long": "help",
+      "longHelp": null,
+      "multiple": false,
+      "positional": false,
+      "required": false,
+      "short": "h",
+      "valueNames": [],
+      "values": []
+    },
+    {
+      "default": [],
+      "env": null,
+      "global": false,
+      "help": "Print version",
+      "id": "version",
+      "long": "version",
+      "longHelp": null,
+      "multiple": false,
+      "positional": false,
+      "required": false,
+      "short": "V",
+      "valueNames": [],
+      "values": []
+    }
+  ],
+  "longAbout": null,
+  "name": "skywake",
+  "path": [],
+  "subcommands": [
+    {
+      "about": "Create a branch, empty or forked from another one",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "name",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "NAME"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "from",
+          "long": "from",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "FROM"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "new",
+      "path": [
+        "new"
+      ],
+      "subcommands": [],
+      "usage": "skywake new [OPTIONS] <NAME>"
+    },
+    {
+      "about": "Save a directory as the new version of a branch. Through the API, only what changed since `checkout` is sent",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "dir",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "DIR"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            ""
+          ],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "message",
+          "long": "message",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "m",
+          "valueNames": [
+            "MESSAGE"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": false,
+          "help": "The API. With SKYWAKE_KEY too, and no --store, the folder is copied through the API",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_KEY",
+          "global": false,
+          "help": "An API key (`sw_...`), made in the console",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_NAMESPACE",
+          "global": false,
+          "help": "The namespace, such as `prod/app`, when going through the API",
+          "id": "namespace",
+          "long": "namespace",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "NAMESPACE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "commit",
+      "path": [
+        "commit"
+      ],
+      "subcommands": [],
+      "usage": "skywake commit [OPTIONS] <BRANCH> <DIR>"
+    },
+    {
+      "about": "Copy a branch into an empty directory. With SKYWAKE_URL and SKYWAKE_KEY set (and no --store), through the API",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "dir",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "DIR"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": false,
+          "help": "The API. With SKYWAKE_KEY too, and no --store, the folder is copied through the API",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_KEY",
+          "global": false,
+          "help": "An API key (`sw_...`), made in the console",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_NAMESPACE",
+          "global": false,
+          "help": "The namespace, such as `prod/app`, when going through the API",
+          "id": "namespace",
+          "long": "namespace",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "NAMESPACE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "checkout",
+      "path": [
+        "checkout"
+      ],
+      "subcommands": [],
+      "usage": "skywake checkout [OPTIONS] <BRANCH> <DIR>"
+    },
+    {
+      "about": "Show which paths differ between two branches",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "from",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "FROM"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "to",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "TO"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "diff",
+      "path": [
+        "diff"
+      ],
+      "subcommands": [],
+      "usage": "skywake diff [OPTIONS] <FROM> <TO>"
+    },
+    {
+      "about": "Merge one branch into another. Files both changed merge line by line; changes that overlap are reported and nothing is saved",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "from",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "FROM"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "into",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "INTO"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "message",
+          "long": "message",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "m",
+          "valueNames": [
+            "MESSAGE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "merge",
+      "path": [
+        "merge"
+      ],
+      "subcommands": [],
+      "usage": "skywake merge [OPTIONS] <FROM> <INTO>"
+    },
+    {
+      "about": "Show the commits on a branch, newest first",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "log",
+      "path": [
+        "log"
+      ],
+      "subcommands": [],
+      "usage": "skywake log [OPTIONS] <BRANCH>"
+    },
+    {
+      "about": "Show the versions of one file on a branch, newest first: each commit that changed it, and its size after",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "path",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "PATH"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "history",
+      "path": [
+        "history"
+      ],
+      "subcommands": [],
+      "usage": "skywake history [OPTIONS] <BRANCH> <PATH>"
+    },
+    {
+      "about": "List branches",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "branches",
+      "path": [
+        "branches"
+      ],
+      "subcommands": [],
+      "usage": "skywake branches [OPTIONS]"
+    },
+    {
+      "about": "Delete a branch. Its data stays until `gc`",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "delete",
+      "path": [
+        "delete"
+      ],
+      "subcommands": [],
+      "usage": "skywake delete [OPTIONS] <BRANCH>"
+    },
+    {
+      "about": "Delete data that no branch uses any more. Only data older than the grace period is deleted, so saves in progress are safe",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [
+            "11520"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Must be longer than any save takes, and than the API keeps uploaded parts waiting for a commit (7 days). Under 2 days is unsafe while anyone writes to the store",
+          "id": "grace_minutes",
+          "long": "grace-minutes",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "GRACE_MINUTES"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Only count what would be deleted. Delete nothing",
+          "id": "dry_run",
+          "long": "dry-run",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "gc",
+      "path": [
+        "gc"
+      ],
+      "subcommands": [],
+      "usage": "skywake gc [OPTIONS]"
+    },
+    {
+      "about": "Mount a branch as a folder (needs skywaked). Changes are saved every few seconds. Use `commit` on the folder to save a named version",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "mountpoint",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "MOUNTPOINT"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Serve the branch to a VM instead. MOUNTPOINT is then the socket the VM connects to. Inside the VM, run `mount -t virtiofs skywake /mnt`",
+          "id": "vm",
+          "long": "vm",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Mount the current commit read-only, without claiming the branch. Any number of readers can do this at once",
+          "id": "read_only",
+          "long": "read-only",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Fork the branch as NAME first, and mount the fork",
+          "id": "fork",
+          "long": "fork",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "NAME"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Who owns the branch's files in the mount. Default: the user running skywaked, or you if you are a member of its group. Members may only name themselves",
+          "id": "owner",
+          "long": "owner",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "UID:GID"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Let other users use the mount too. Permission bits still apply. Without it, only the owner of the files can use the mount",
+          "id": "allow_other",
+          "long": "allow-other",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "mount",
+      "path": [
+        "mount"
+      ],
+      "subcommands": [],
+      "usage": "skywake mount [OPTIONS] <BRANCH> <MOUNTPOINT>"
+    },
+    {
+      "about": "Save a mounted folder's changes now. Returns when they are in the bucket. `fsync` on any file does the same",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "mountpoint",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "MOUNTPOINT"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "sync",
+      "path": [
+        "sync"
+      ],
+      "subcommands": [],
+      "usage": "skywake sync [OPTIONS] <MOUNTPOINT>"
+    },
+    {
+      "about": "Save the last changes and unmount the folder",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "mountpoint",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "MOUNTPOINT"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "unmount",
+      "path": [
+        "unmount"
+      ],
+      "subcommands": [],
+      "usage": "skywake unmount [OPTIONS] <MOUNTPOINT>"
+    },
+    {
+      "about": "List the folders skywaked has mounted",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "mounts",
+      "path": [
+        "mounts"
+      ],
+      "subcommands": [],
+      "usage": "skywake mounts [OPTIONS]"
+    },
+    {
+      "about": "Show how far each mount's saves are behind, and the chunk cache",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "status",
+      "path": [
+        "status"
+      ],
+      "subcommands": [],
+      "usage": "skywake status [OPTIONS]"
+    },
+    {
+      "about": "Save changes a mount could not save, kept in skywaked's `unsaved/` folder, as a commit on a new branch forked from the mount's branch",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The kept folder, as skywaked reported it",
+          "id": "folder",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "FOLDER"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The new branch",
+          "id": "branch",
+          "long": null,
+          "longHelp": null,
+          "multiple": false,
+          "positional": true,
+          "required": true,
+          "short": null,
+          "valueNames": [
+            "BRANCH"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "Recover unsaved changes"
+          ],
+          "env": null,
+          "global": false,
+          "help": null,
+          "id": "message",
+          "long": "message",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "m",
+          "valueNames": [
+            "MESSAGE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "recover",
+      "path": [
+        "recover"
+      ],
+      "subcommands": [],
+      "usage": "skywake recover [OPTIONS] <FOLDER> <BRANCH>"
+    },
+    {
+      "about": "Search indexes: make them, write and query documents, fork branches. Talks to the API at SKYWAKE_URL with the key in SKYWAKE_KEY",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [
+            "http://localhost:8080"
+          ],
+          "env": "SKYWAKE_URL",
+          "global": true,
+          "help": "The API",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_KEY",
+          "global": true,
+          "help": "An API key (`sw_...`), made in the console",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": true,
+          "help": "Print the API's JSON instead of a table, for scripts",
+          "id": "json",
+          "long": "json",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "index",
+      "path": [
+        "index"
+      ],
+      "subcommands": [
+        {
+          "about": "List the indexes you can reach",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "list",
+          "path": [
+            "index",
+            "list"
+          ],
+          "subcommands": [],
+          "usage": "skywake index list [OPTIONS]"
+        },
+        {
+          "about": "Make an index with an empty `main` branch. Its columns can't change later",
+          "afterHelp": "Examples:\n  skywake index create prod/products --vector embedding:768 --attr tag:string --attr price:number\n  skywake index create prod/products --schema schema.json",
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Such as `prod/products`. The part before `/` is the environment",
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "A vector column, as NAME:DIMS or NAME:DIMS:METRIC. METRIC is cosine (the default), euclidean or dot",
+              "id": "vectors",
+              "long": "vector",
+              "longHelp": null,
+              "multiple": true,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME:DIMS[:METRIC]"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "An attribute, as NAME:TYPE. TYPE is string, number, bool or strings (a list of strings)",
+              "id": "attributes",
+              "long": "attr",
+              "longHelp": null,
+              "multiple": true,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME:TYPE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The schema as a JSON file: {\"vectors\": [..], \"attributes\": [..]}",
+              "id": "schema",
+              "long": "schema",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "SCHEMA"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Where the index keeps its data; the default region if not given. Can't change later",
+              "id": "region",
+              "long": "region",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "REGION"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "create",
+          "path": [
+            "index",
+            "create"
+          ],
+          "subcommands": [],
+          "usage": "skywake index create [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Show an index's columns, and the counts of its `main` branch",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "get",
+          "path": [
+            "index",
+            "get"
+          ],
+          "subcommands": [],
+          "usage": "skywake index get [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Show the counts of one branch",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": "branch",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "b",
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "stats",
+          "path": [
+            "index",
+            "stats"
+          ],
+          "subcommands": [],
+          "usage": "skywake index stats [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Delete an index, every branch and all its data",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": false,
+              "help": "Delete without asking. Needed when not at a terminal",
+              "id": "yes",
+              "long": "yes",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "y",
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "delete",
+          "path": [
+            "index",
+            "delete"
+          ],
+          "subcommands": [],
+          "usage": "skywake index delete [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Write documents from JSON lines, CSV or Parquet, in batches. Each replaces any earlier one with its id, so running it again is safe",
+          "afterHelp": "A row has `id`, then each column by name:\n  {\"id\": 1, \"embedding\": [0.1, 0.2], \"tag\": \"billing\"}\nThe API's own shape works too: {\"id\", \"vectors\": {..}, \"attributes\": {..}}.\nIn CSV, write a vector as a JSON list (\"[0.1, 0.2]\"), a list of strings as a|b,\nand leave a cell empty to leave the attribute out. Ids of only digits are numbers.",
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The file. Without it, or with `-`, stdin",
+              "id": "file",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": "branch",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "b",
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Default: from the file's extension (.csv, .parquet), else JSON lines",
+              "id": "format",
+              "long": "format",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FORMAT"
+              ],
+              "values": [
+                "jsonl",
+                "csv",
+                "parquet"
+              ]
+            },
+            {
+              "default": [
+                "1000"
+              ],
+              "env": null,
+              "global": false,
+              "help": "Documents in one request",
+              "id": "batch_size",
+              "long": "batch-size",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "BATCH_SIZE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "upsert",
+          "path": [
+            "index",
+            "upsert"
+          ],
+          "subcommands": [],
+          "usage": "skywake index upsert [OPTIONS] <NAME> [FILE]"
+        },
+        {
+          "about": "Delete documents by id. Ids that are not there are ignored",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Ids of only digits are taken as numbers",
+              "id": "ids",
+              "long": null,
+              "longHelp": null,
+              "multiple": true,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "IDS"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": "branch",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "b",
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "delete-docs",
+          "path": [
+            "index",
+            "delete-docs"
+          ],
+          "subcommands": [],
+          "usage": "skywake index delete-docs [OPTIONS] <NAME> <IDS>..."
+        },
+        {
+          "about": "Find the documents nearest to a vector, nearest first",
+          "afterHelp": "Filters:\n  tag = billing and price < 10\n  (tag = a or tag = b) and not live = false\n  tag in (a, b, 'c d')    tag not in (x)    tag != x\nOperators: = != < <= > >= in. A value is a number, true, false, a word or a quoted string.\nJSON in the API's form works too: '{\"price\": {\"lt\": 10}}'.",
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The vector, as a JSON list",
+              "id": "vector",
+              "long": "vector",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "VECTOR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "A file holding the vector as a JSON list; `-` for stdin",
+              "id": "vector_file",
+              "long": "vector-file",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "VECTOR_FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The vector column. Needed only when the index has more than one",
+              "id": "column",
+              "long": "column",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "COLUMN"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Which documents may match, such as `tag = billing and price < 10`",
+              "id": "filter",
+              "long": "filter",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "f",
+              "valueNames": [
+                "FILTER"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "10"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "top_k",
+              "long": "top-k",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "k",
+              "valueNames": [
+                "TOP_K"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Attributes to show with each hit, comma separated; `*` for all",
+              "id": "include",
+              "long": "include",
+              "longHelp": null,
+              "multiple": true,
+              "positional": false,
+              "required": false,
+              "short": "i",
+              "valueNames": [
+                "INCLUDE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Clusters to read. More is slower and finds more of the true nearest. The server picks one by default",
+              "id": "probe",
+              "long": "probe",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROBE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": "branch",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "b",
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "query",
+          "path": [
+            "index",
+            "query"
+          ],
+          "subcommands": [],
+          "usage": "skywake index query [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Fork a branch. Nothing is copied; each then sees only its own writes",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The new branch",
+              "id": "branch",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": "The branch to fork",
+              "id": "from",
+              "long": "from",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FROM"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "fork",
+          "path": [
+            "index",
+            "fork"
+          ],
+          "subcommands": [],
+          "usage": "skywake index fork [OPTIONS] <NAME> <BRANCH>"
+        },
+        {
+          "about": "List an index's branches",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "branches",
+          "path": [
+            "index",
+            "branches"
+          ],
+          "subcommands": [],
+          "usage": "skywake index branches [OPTIONS] <NAME>"
+        },
+        {
+          "about": "Delete a branch. `main` stays while the index does",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "delete-branch",
+          "path": [
+            "index",
+            "delete-branch"
+          ],
+          "subcommands": [],
+          "usage": "skywake index delete-branch [OPTIONS] <NAME> <BRANCH>"
+        },
+        {
+          "about": "Start clustering a branch's rows, so queries read less. It answers once the build has started; `stats` shows when it is done",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "name",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": true,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "main"
+              ],
+              "env": null,
+              "global": false,
+              "help": null,
+              "id": "branch",
+              "long": "branch",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "b",
+              "valueNames": [
+                "BRANCH"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "http://localhost:8080"
+              ],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "The API",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_KEY",
+              "global": true,
+              "help": "An API key (`sw_...`), made in the console",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print the API's JSON instead of a table, for scripts",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "bucket"
+              ],
+              "env": "SKYWAKE_HEADS",
+              "global": true,
+              "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+              "id": "heads",
+              "long": "heads",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HEADS"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "build",
+          "path": [
+            "index",
+            "build"
+          ],
+          "subcommands": [],
+          "usage": "skywake index build [OPTIONS] <NAME>"
+        }
+      ],
+      "usage": "skywake index [OPTIONS] <COMMAND>"
+    }
+  ],
+  "usage": "skywake [OPTIONS] <COMMAND>"
+}

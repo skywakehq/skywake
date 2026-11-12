@@ -1,0 +1,88 @@
+---
+title: Branches and forks
+icon: GitFork
+description: A branch is a folder tree with its own history. A fork copies a pointer, never the data.
+---
+
+A branch holds a whole folder tree and its history. Fork a branch when you want to change it without touching the original, for example to give an agent its own copy of `main`.
+
+```bash
+skywake new main                      # an empty branch
+skywake new agent-37 --from main      # a fork of main
+skywake branches
+skywake delete agent-37
+```
+
+## Forks
+
+A fork takes two requests to the bucket: one reads the source branch's head, and one writes the new branch's head. So it takes the same time however much the branch holds. From then on, each branch sees only its own commits, and the data both of them share is stored only once.
+
+```py tab="Python"
+from skywake import Skywake
+
+sky = Skywake("http://localhost:8080", "sw_...")
+fork = sky.namespace("prod/app").branch("main").fork("agents/42")
+```
+
+```ts tab="TypeScript"
+import { Skywake } from "@skywake/sdk";
+
+const sky = new Skywake({ url: "http://localhost:8080", key: "sw_..." });
+const fork = await sky.namespace("prod/app").branch("main").fork("agents/42");
+```
+
+To fork an older commit instead of the head, pass it as `at`: `fork("audit/oct-31", hash)` in TypeScript, `fork("audit/oct-31", at=hash)` in Python, or `at` in [`POST /v1/namespaces/{namespace}/branches`](/reference/api/branches/createBranch).
+
+## Where a branch forked
+
+[`GET .../branches/{branch}`](/reference/api/branches/getBranch) returns `head`, `forked_from` and `base`, which tell you where the branch came from.
+
+| Field         | Meaning                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `head`        | The commit the branch points to.                                                                       |
+| `forked_from` | The branch it was forked from.                                                                         |
+| `base`        | The newest commit it shares with `forked_from`: where it forked, or where the two branches last merged. |
+
+`base` is `null` for an empty branch, and also once the `forked_from` branch is deleted. To see only what a fork changed, diff it [against its base](./diff-and-merge.mdx#review-a-fork).
+
+```ts
+const info = await sky.namespace("prod/app").branch("agents/42").info();
+// { name: "agents/42", forked_from: "main", head: "9c1e…", base: "3f9a…", ... }
+```
+
+## Undo
+
+You can undo work on a branch in two ways. [Revert](./diff-and-merge.mdx#revert-a-commit) undoes one commit. [Reset](./diff-and-merge.mdx#reset-a-branch) makes the branch what it was at a given commit. Both add a new commit on top, so the history is kept.
+
+## Two writers on one branch
+
+Moving a branch head is a conditional write. When two writers start from the same head at the same time, exactly one of them wins and the other gets a conflict. To avoid this, give [each agent its own fork](../agents/cli.mdx#one-fork-per-agent). Then they never wait for each other.
+
+## Deleting
+
+[`skywake delete`](/reference/cli/delete) removes the branch. Its data stays until garbage collection removes it:
+
+```bash
+skywake gc --dry-run    # count what would be deleted
+skywake gc
+```
+
+| Flag              | Default          | Meaning                                                                                                                         |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `--grace-minutes` | `11520` (8 days) | Only data older than this is deleted, so saves that are still in progress are safe. Under 2 days is unsafe while anyone writes. |
+| `--dry-run`       | off              | Only count. Delete nothing.                                                                                                     |
+
+[`gc`](/reference/cli/gc) needs delete rights on the whole store.
+
+## Through skywaked
+
+If you don't pass `--store`, `SKYWAKE_STORE` is not set, and `skywaked` is running, then `new`, [`merge`](./diff-and-merge.mdx#merge), `delete` and [`recover`](./autosave.mdx#recover) go through the daemon. They act on the daemon's store, as far as its access file allows. See [mount](./mount.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./mount.mdx" />
+  <Card href="./diff-and-merge.mdx" />
+  <Card href="/reference/cli/new" />
+  <Card href="/reference/sdk/fork-filesystem" />
+</Cards>

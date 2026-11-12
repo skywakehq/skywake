@@ -1,0 +1,31 @@
+[package]
+name = "skywake-client"
+description = "Skywake for Rust: vector, full-text and hybrid search over indexes on your own S3 bucket, with branches."
+keywords = ["vector-search", "full-text-search", "s3", "rag", "ai-agents"]
+categories = ["database", "api-bindings", "web-programming::http-client"]
+homepage = "https://skywake.dev"
+documentation = "https://skywake.dev/docs"
+repository = "https://github.com/skywakehq/skywake"
+readme = "README.md"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "skywake"
+
+[dependencies]
+fastrand = "2"
+futures.workspace = true
+http = "1"
+percent-encoding = "2"
+reqwest = { workspace = true, features = ["json", "query", "rustls", "stream"] }
+serde.workspace = true
+serde_json.workspace = true
+serde_with = { version = "3", default-features = false, features = ["macros"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+axum.workspace = true
+tokio.workspace = true

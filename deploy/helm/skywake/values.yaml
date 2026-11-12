@@ -1,0 +1,138 @@
+# Skywake in your own cloud. Postgres and the bucket are yours: point the
+# chart at them. Everything secret comes from one Secret you make (see
+# README.md for its keys).
+
+# The Secret with the database URLs, tokens and keys.
+secret: skywake
+
+# Where the images come from: `<registry>/skywake-api:<tag>` and so on.
+# Each component's `image` replaces this with a full reference of its own.
+images:
+  registry: ghcr.io/skywakehq
+  # Empty for the chart's appVersion.
+  tag: ""
+
+# Makes the database roles before each install and upgrade, by running
+# files/roles.sh (the same as docker/postgres/roles.sh) as the database's
+# owner. Off when you make the roles yourself. The Secret needs: host,
+# port, user, password, database, api-password, console-password and
+# zero-password.
+bootstrap:
+  enabled: false
+  secret: skywake-bootstrap
+  image: postgres:17.6-alpine
+
+# Where branches and indexes live: `s3://bucket`.
+store: s3://skywake
+aws:
+  region: us-east-1
+  # Empty for AWS; the address of any other S3-compatible store.
+  endpoint: ""
+  # Read the access keys from the Secret. Leave false to use the pods'
+  # own identity (IRSA, workload identity) through serviceAccount.
+  keysFromSecret: false
+
+serviceAccount:
+  # Annotations for the cloud identity, such as
+  # eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/skywake
+  annotations: {}
+
+api:
+  # Empty for the published image (see `images`).
+  image: ""
+  # Copies when autoscaling is off.
+  replicas: 2
+  autoscaling:
+    enabled: true
+    min: 2
+    max: 20
+    # Average CPU use, in percent of the request, that adds copies.
+    cpu: 70
+  # Database connections per copy. Keep max copies × pool under
+  # Postgres's max_connections, or put PgBouncer in front.
+  databasePool: 10
+  # Proxies in front of the API: 1 for one load balancer.
+  trustProxy: 1
+  # Each copy keeps the index blobs it reads on its own disk, and asks the
+  # cache nodes for the ones it lacks. Null to turn it off.
+  indexCache:
+    gb: 10
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { memory: 4Gi }
+  # More settings, as environment variables (see apps/api/README.md).
+  env: {}
+
+console:
+  enabled: true
+  # Empty for the published image (see `images`).
+  image: ""
+  replicas: 2
+  # The addresses people use, behind your ingress and HTTPS. With a base
+  # path, `url` is the host alone and the console is at url + basePath.
+  url: https://console.example.com
+  # Empty for the root of its host, or a path such as /dashboard to share a
+  # host with your site. Fixed when the image is built (`--build-arg
+  # CONSOLE_BASE_PATH=/dashboard`), so it must match the image.
+  basePath: ""
+  apiUrl: https://api.example.com
+  zeroUrl: https://zero.example.com
+  # Your ingress's addresses or CIDRs, such as the pod network 10.0.0.0/8.
+  # The console reads X-Forwarded-For only from these; without them every
+  # person seems to come from the ingress, and an IP allowlist refuses them.
+  trustedProxies: ""
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 1Gi }
+
+zero:
+  enabled: true
+  image: rocicorp/zero:1.11.4
+  storage: 10Gi
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 2Gi }
+
+# The shared chunk cache: each object is read from the bucket once and
+# then served from these nodes. Changing the count moves most chunks to
+# another node, so pick it once.
+cache:
+  enabled: true
+  # Empty for the published image (see `images`).
+  image: ""
+  replicas: 3
+  # Disk per node; the cache keeps 90% of it.
+  storage: 200Gi
+  storageClass: ""
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 2Gi }
+
+# The docs, optional. They need nothing else in the chart. The base path is
+# fixed when the image is built (`/docs` by default; `--build-arg
+# DOCS_BASE_PATH=` for the root of a host), so `basePath` must match it.
+docs:
+  enabled: false
+  # Empty for the published image (see `images`).
+  image: ""
+  replicas: 1
+  basePath: /docs
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+# One Ingress in front of everything, optional; or bring your own and route
+# to the Services. Each component gets a host; the docs and the console get
+# their base path on theirs, so they can share one host with your site. The
+# API and zero-cache serve from the root of their hosts.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Such as [{ secretName: skywake-tls, hosts: [console.example.com] }].
+  tls: []
+  hosts:
+    api: api.example.com
+    console: console.example.com
+    zero: zero.example.com
+    docs: example.com

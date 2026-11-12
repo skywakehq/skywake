@@ -1,0 +1,75 @@
+---
+title: Keep an index in step with a branch
+icon: RefreshCw
+description: Index a branch's files, fork the index with the branch, and merge both together.
+---
+
+If your agents search the files on a branch, you want the index to match those files. `syncIndex` keeps an index up to date with a branch, and the pattern below keeps each agent's index fork in step with its file fork.
+
+```ts
+import { Skywake, syncIndex } from "@skywake/sdk";
+
+const sky = new Skywake({ url: process.env.SKYWAKE_URL!, key: process.env.SKYWAKE_KEY! });
+const main = sky.namespace("team/app").branch("main");
+const code = await sky.indexes.create(
+  "team/code",
+  {
+    attributes: [
+      { name: "path", type: "string" },
+      { name: "text", type: "text" },
+    ],
+  },
+  { ifMissing: true },
+);
+
+let synced = await syncIndex(main, code); // every file, the first time
+// later, after more commits:
+synced = await syncIndex(main, code, { since: synced.head });
+```
+
+`syncIndex` (TypeScript) upserts the files that changed since `since`, and deletes the documents of files that were removed. It returns `{head, upserted, deleted}`. Keep `head` and pass it as `since` the next time you sync.
+
+## The pattern
+
+Give each agent a fork of the files and a fork of the index, both with the same name. As the agent commits, sync its index fork. When the agent is done, merge both forks, or delete both.
+
+```ts
+// 1. Fork both from the same commit of main.
+const files = await main.fork("agents/42", synced.head);
+const docs = await code.fork("agents/42");
+
+// 2. As the agent commits, sync its index fork.
+let since = synced.head;
+since = (await syncIndex(files, docs, { since })).head;
+
+// 3. Merge both together.
+const merged = await files.mergeInto("main");
+if (merged.conflicts.length === 0) await code.merge("agents/42");
+```
+
+- `fork(name, at)` forks the files at the commit the index was last synced to. That way the index fork matches the file fork from the start, and the first sync sends only the agent's own changes.
+- What an agent writes lands only in its own index fork. Searches on `main` and on other agents' forks never see the notes or code of a fork that was not merged.
+- If you don't keep a fork, delete both the branch and the index branch: `files.delete()` and `docs.deleteBranch()`.
+
+After a merge, sync `main` again with its own `since`. Upserts replace documents by id, so it is safe to send the same file twice.
+
+## Options
+
+| Option        | Default                                                                | Meaning                                                                      |
+| ------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `since`       | none: every file is upserted, none deleted                             | The `head` an earlier sync returned.                                         |
+| `document`    | UTF-8 files as `{id: path, attributes: {path, text}}`; others left out | Turns a file (`{path, bytes}`) into its document, or `null` to leave it out. |
+| `id`          | the path                                                               | The id of a file's document, to delete it. Must match `document`.            |
+| `concurrency` | `8`                                                                    | Files read at once.                                                          |
+
+Symlinks are left out. A folder counts through the files it holds. If 1,000 or more commits have happened since `since`, the sync compares the two whole trees instead of reading each commit.
+
+To embed text into a vector column, give the column `embed` and put the text in that column in `document`. See [embeddings](./embeddings-and-rerank.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./time-travel.mdx" />
+  <Card href="../filesystem/diff-and-merge.mdx" />
+  <Card href="../agents/mcp.mdx" />
+</Cards>

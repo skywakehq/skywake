@@ -1,0 +1,21 @@
+name: Feature request
+description: Something Skywake should do that it doesn't yet.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you imagine it working. Commands or API sketches welcome.
+  - type: textarea
+    id: scale
+    attributes:
+      label: Scale
+      description: Roughly how many agents, branches, files and bytes are involved.

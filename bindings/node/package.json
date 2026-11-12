@@ -1,0 +1,22 @@
+{
+  "name": "@skywake/engine",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "The Skywake engine in Node.js: the Rust core, loaded through N-API.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "cargo build --release -p skywake-node && node build.js",
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

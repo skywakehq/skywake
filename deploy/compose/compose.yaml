@@ -1,0 +1,169 @@
+# Skywake on one machine, from the published images. Nothing is built.
+#
+#   base=https://github.com/skywakehq/skywake/releases/latest/download
+#   curl -LO $base/compose.yaml -LO $base/roles.sh -L -o .env $base/compose.env.example
+#   # fill in .env, then:
+#   docker compose up -d
+#
+# The bundled Postgres and S3 server are on by default (COMPOSE_PROFILES in
+# .env). For your own database or bucket, drop their profile and set the
+# settings .env lists for them. Put the machine, the database and the bucket
+# in one region: commits wait on several bucket requests one after another,
+# and every API write waits on Postgres.
+name: skywake
+
+services:
+  # The control plane's database. Branch data stays in the bucket.
+  postgres:
+    profiles: [postgres]
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skywake}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-skywake}
+    # The console's sync engine follows changes through logical replication.
+    command: postgres -c wal_level=logical
+    volumes: [postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: pg_isready -U ${POSTGRES_USER:-skywake}
+      interval: 2s
+      retries: 30
+
+  # Gives each service its own role, on the bundled Postgres or your own.
+  # Runs at every start and changes nothing the second time.
+  roles:
+    image: postgres:17.6-alpine
+    depends_on:
+      postgres: { condition: service_healthy, required: false }
+    entrypoint: [sh, /roles.sh]
+    environment:
+      PGHOST: ${DATABASE_HOST:-postgres}
+      PGPORT: ${DATABASE_PORT:-5432}
+      PGSSLMODE: prefer
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-skywake}
+      POSTGRES_DB: ${POSTGRES_DB:-skywake}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in .env}
+      CONSOLE_DB_PASSWORD: ${CONSOLE_DB_PASSWORD:?set CONSOLE_DB_PASSWORD in .env}
+      ZERO_DB_PASSWORD: ${ZERO_DB_PASSWORD:?set ZERO_DB_PASSWORD in .env}
+    configs: [{ source: roles, target: /roles.sh }]
+
+  # S3 for the branches, to try Skywake. Use your own bucket for real work.
+  s3:
+    profiles: [s3]
+    image: rustfs/rustfs:1.0.3
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:-}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    volumes: [s3:/data]
+
+  # Makes the bucket on the bundled S3, once.
+  bucket:
+    profiles: [s3]
+    image: curlimages/curl:8.11.1
+    depends_on: [s3]
+    entrypoint: sh -c
+    command:
+      - curl --retry 30 --retry-connrefused --retry-delay 1 -s
+        --aws-sigv4 aws:amz:${AWS_REGION:-us-east-1}:s3
+        --user "$$AWS_ACCESS_KEY_ID:$$AWS_SECRET_ACCESS_KEY" -X PUT http://s3:9000/skywake > /dev/null
+    environment: [AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]
+
+  api:
+    image: ${SKYWAKE_REGISTRY:-ghcr.io/skywakehq}/skywake-api:${SKYWAKE_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      roles: { condition: service_completed_successfully }
+      bucket: { condition: service_completed_successfully, required: false }
+    environment:
+      - SKYWAKE_API_DATABASE=${API_DATABASE_URL:-postgres://skywake_api:${API_DB_PASSWORD}@postgres/skywake}
+      - SKYWAKE_API_ADMIN_TOKEN=${SKYWAKE_API_ADMIN_TOKEN:?set SKYWAKE_API_ADMIN_TOKEN in .env}
+      - SKYWAKE_STORE=${SKYWAKE_STORE:-s3://skywake}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_ENDPOINT=${AWS_ENDPOINT:-http://s3:9000}
+      - AWS_ALLOW_HTTP=${AWS_ALLOW_HTTP:-true}
+      # Passed only when set: leave both out of .env to use the machine's
+      # own identity (an EC2 instance role).
+      - AWS_ACCESS_KEY_ID
+      - AWS_SECRET_ACCESS_KEY
+      - SKYWAKE_API_JWKS_URL=http://console:3100/api/auth/jwks
+      - SKYWAKE_API_JWT_ISSUER=skywake-console
+      - SKYWAKE_API_JWT_AUDIENCE=skywake-console
+      - SKYWAKE_API_METRICS_LISTEN=0.0.0.0:9464
+      - SKYWAKE_API_STS_ROLE_ARN
+      - SKYWAKE_API_STS_ENDPOINT
+      - SKYWAKE_API_EMBED_URL
+      - SKYWAKE_API_EMBED_KEY
+      - SKYWAKE_API_RERANK_URL
+      - SKYWAKE_API_RERANK_KEY
+    ports: ["${API_PORT:-8080}:8080"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:8080/ready').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      retries: 30
+
+  console:
+    image: ${SKYWAKE_REGISTRY:-ghcr.io/skywakehq}/skywake-console:${SKYWAKE_VERSION:-latest}
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      - DATABASE_URL=${CONSOLE_DATABASE_URL:-postgres://skywake_console:${CONSOLE_DB_PASSWORD}@postgres/skywake}
+      - BETTER_AUTH_URL=${CONSOLE_URL:-http://localhost:3100}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      - SKYWAKE_API_URL=http://api:8080/v1
+      - SKYWAKE_API_ADMIN_TOKEN=${SKYWAKE_API_ADMIN_TOKEN}
+      - PUBLIC_ZERO_URL=${ZERO_URL:-http://localhost:4848}
+      - PUBLIC_API_URL=${API_URL:-http://localhost:8080}
+      - TRUSTED_PROXIES
+    ports: ["${CONSOLE_PORT:-3100}:3100"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3100/sign-in').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      retries: 60
+
+  # Copies each organization's rows into the browser and keeps them current.
+  zero:
+    image: rocicorp/zero:1.11.4
+    restart: unless-stopped
+    depends_on:
+      console: { condition: service_healthy }
+    environment:
+      ZERO_UPSTREAM_DB: ${ZERO_DATABASE_URL:-postgres://skywake_zero:${ZERO_DB_PASSWORD}@postgres/skywake}
+      ZERO_APP_PUBLICATIONS: console
+      ZERO_REPLICA_FILE: /data/replica.db
+      ZERO_ADMIN_PASSWORD: ${ZERO_ADMIN_PASSWORD:?set ZERO_ADMIN_PASSWORD in .env}
+      ZERO_QUERY_URL: http://console:3100/api/zero/query
+      ZERO_MUTATE_URL: http://console:3100/api/zero/mutate
+      ZERO_QUERY_FORWARD_COOKIES: "true"
+      ZERO_MUTATE_FORWARD_COOKIES: "true"
+      ZERO_QUERY_ALLOWED_REQUEST_HEADERS: x-forwarded-for
+      ZERO_MUTATE_ALLOWED_REQUEST_HEADERS: x-forwarded-for
+    volumes: [zero:/data]
+    ports: ["${ZERO_PORT:-4848}:4848"]
+
+  # The docs, optional: add `docs` to COMPOSE_PROFILES. Served at /docs.
+  docs:
+    profiles: [docs]
+    image: ${SKYWAKE_REGISTRY:-ghcr.io/skywakehq}/skywake-docs:${SKYWAKE_VERSION:-latest}
+    restart: unless-stopped
+    ports: ["${DOCS_PORT:-3200}:3200"]
+
+configs:
+  roles:
+    file: ./roles.sh
+
+volumes:
+  postgres:
+  s3:
+  zero:

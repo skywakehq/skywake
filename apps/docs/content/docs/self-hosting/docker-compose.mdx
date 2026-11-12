@@ -1,0 +1,101 @@
+---
+title: Docker Compose
+icon: Container
+description: Run the API, the console and everything they need on one machine.
+---
+
+Run Skywake on a single machine with one command:
+
+```bash
+git clone https://github.com/skywakehq/skywake && cd skywake
+scripts/start.sh
+```
+
+It installs Docker if it is missing (asking first), writes `.env` with every secret filled in, builds the images, starts everything and waits until it answers: the console on `http://localhost:3100`, the API on `:8080`. Docker needs about 6 GB of memory to build; on a Mac with Colima, the script offers to give it that. `scripts/start.sh stop` stops it and keeps the data. If a port is taken, set `CONSOLE_PORT`, `API_PORT` or `ZERO_PORT` in `.env` and run it again.
+
+The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment and a filesystem, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key.
+
+## Without the source
+
+Every release publishes the images and a compose file that uses them, so a server needs only three files:
+
+```bash
+base=https://github.com/skywakehq/skywake/releases/latest/download
+curl -LO $base/compose.yaml -LO $base/roles.sh -L -o .env $base/compose.env.example
+# fill in the secrets in .env, then:
+docker compose up -d
+```
+
+It runs the bundled Postgres and object storage by default (`COMPOSE_PROFILES=postgres,s3`). Drop either profile to use your own database or bucket, as `.env` explains. On AWS, the [starter stack](./deploy-aws.mdx#one-machine-cloudformation) sets all of this up on one instance.
+
+## Services
+
+Compose starts these services:
+
+| Service    | What it is                                                                    | Port |
+| ---------- | ----------------------------------------------------------------------------- | ---- |
+| `api`      | The API that agents, the SDKs and the console talk to                         | 8080 |
+| `console`  | The web console                                                               | 3100 |
+| `zero`     | zero-cache, which keeps the console up to date as agents work                 | 4848 |
+| `postgres` | The API's and the console's database                                          |      |
+| `s3`       | RustFS, an object storage server for the data                                 |      |
+| `docs`     | These docs, only with `--profile docs`. See [What to run](./what-to-run.mdx). | 3200 |
+
+## Secrets in .env
+
+`.env` at the repository's root is the only settings file, and `.env.example` lists every setting. `scripts/setup.sh` fills in the secrets below and never changes a value that is already set.
+
+| Variable                                                     | What it is for                                                                         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`                                          | The database superuser.                                                                |
+| `API_DB_PASSWORD`, `CONSOLE_DB_PASSWORD`, `ZERO_DB_PASSWORD` | Each service's own Postgres role.                                                      |
+| `SKYWAKE_API_ADMIN_TOKEN`                                    | Creates [organizations](./local-api.mdx#make-an-organization). At least 16 characters. |
+| `BETTER_AUTH_SECRET`                                         | Signs the console's sessions.                                                          |
+| `ZERO_ADMIN_PASSWORD`                                        | zero-cache's admin pages.                                                              |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`                 | The bucket's keys; by default, the bundled object storage server's.                    |
+
+## Your own bucket
+
+The bundled object storage server is fine for trying Skywake. For real use, point it at your own bucket: set `SKYWAKE_STORE=s3://your-bucket`, the bucket's keys, and `AWS_ENDPOINT` (such as `https://s3.us-east-1.amazonaws.com` for AWS, or the account's endpoint for R2). The bucket must support [conditional writes](../getting-started/install.mdx#where-data-goes).
+
+## On a server
+
+Put the console, the API and zero-cache behind HTTPS, and set `CONSOLE_URL`, `API_URL` and `ZERO_URL` to the addresses people use. To change ports, set `CONSOLE_PORT`, `API_PORT` and `ZERO_PORT`. Port 4848 must stay public, because browsers sync through it. Never let Postgres be reached from outside the compose network. If a proxy sits in front of the console, set `TRUSTED_PROXIES` to its address, so that the [IP allowlist](../security/ip-allowlist.mdx) sees people's own addresses.
+
+## Optional
+
+Set these only when you need the feature.
+
+| Variable                                               | What it does                                                                                                |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                          |
+| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, to give [index vectors as text](../indexes/embeddings-and-rerank.mdx). |
+| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                  |
+| `SKYWAKE_API_PROVIDERS`                                | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.            |
+
+## Health and metrics
+
+`/health` responds while the API is running. `/ready` also checks Postgres and the bucket. Prometheus metrics are served on port 9464 inside the compose network. The API logs one JSON line per request.
+
+## Update
+
+```bash
+git pull
+scripts/start.sh
+```
+
+With the published images, set `SKYWAKE_VERSION` in `.env` to the new release and run `docker compose up -d`.
+
+The API and the console update their tables when they start. Data lives in the `postgres`, `s3` and `zero` volumes. `docker compose down` keeps them, and `docker compose down -v` deletes them.
+
+For more traffic, run several API copies behind a load balancer, or use [Kubernetes](./kubernetes.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./deploy-aws.mdx" />
+  <Card href="./kubernetes.mdx" />
+  <Card href="./what-to-run.mdx" />
+  <Card href="./local-api.mdx" />
+  <Card href="../getting-started/first-index.mdx" />
+</Cards>

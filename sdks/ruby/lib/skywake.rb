@@ -1,0 +1,8 @@
+require "skywake/version"
+require "skywake/error"
+require "skywake/client"
+require "skywake/paging"
+require "skywake/results"
+require "skywake/routes"
+require "skywake/indexes"
+require "skywake/search_index"

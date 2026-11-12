@@ -1,0 +1,136 @@
+---
+title: Full-text search
+icon: TextSearch
+description: Search text attributes by keyword with BM25, with languages, stopwords, phrases, fuzzy matching and highlights.
+---
+
+Use full-text search when your users type words and expect the documents that contain them. Documents are scored with BM25.
+
+```json title="POST /v1/indexes/docs/branches/main/search"
+{
+  "query": "reset password",
+  "topK": 10,
+  "boosts": { "title": 2 },
+  "highlight": ["body"]
+}
+```
+
+```ts tab="TypeScript"
+const hits = await sky.index("docs").search({
+  query: "reset password",
+  topK: 10,
+  boosts: { title: 2 },
+  highlight: ["body"],
+});
+```
+
+```py tab="Python"
+hits = sky.index("docs").search("reset password", top_k=10, boosts={"title": 2}, highlight=["body"])
+```
+
+To search, the [schema](./schemas.mdx#text-options) needs a `text` attribute:
+
+```json
+{ "name": "body", "type": "text", "language": "english", "stopwords": false }
+```
+
+Each hit has a BM25 `score` (larger is better), the `attributes` you asked for, and [`highlights`](#highlights). Search is exact over every document, including the ones written since the last build.
+
+## Fields
+
+| Field                                                          | Type                     | Default           | Meaning                                                          |
+| -------------------------------------------------------------- | ------------------------ | ----------------- | ---------------------------------------------------------------- |
+| `query`                                                        | string, up to 4096 chars |                   | The words to search for.                                         |
+| `fields`                                                       | list of text attributes  | every one         | Where to search.                                                 |
+| `boosts`                                                       | `{field: weight}`        | `1` each          | A weight per field, 0 to 1000. Each must be a searched field.    |
+| `topK`                                                         | int, 1 to 1000           | `10`              | Hits to return.                                                  |
+| `k1`                                                           | 0 to 10                  | the first field's | BM25 term saturation for this query.                             |
+| `b`                                                            | 0 to 1                   | the first field's | BM25 length normalization for this query.                        |
+| `fuzzy`                                                        | 0, 1 or 2                | `0`               | Also match words within this many edits.                         |
+| `lastAsPrefix`                                                 | bool                     | `false`           | The last word also matches longer words. See below.              |
+| `highlight`                                                    | up to 8 text attributes  |                   | Return the best fragment of each, with the matched words marked. |
+| `filter`                                                       | [filter](./filters.mdx)  |                   | Only documents that pass. May hold text filters, below.          |
+| `include`, `exclude`, `offset`, `per`, `consistency`, `rerank` |                          |                   | As in [vector search](./vector.mdx#fields).                      |
+
+## How text is analyzed
+
+A `text` value is turned into a list of words in these steps:
+
+1. The text is split into words at anything that is not a letter or a digit.
+2. Words longer than `max_token_length` bytes (39 by default) are dropped.
+3. Each word is lowercased, unless the attribute is `case_sensitive`.
+4. Accents are folded, if the attribute sets `ascii_folding`.
+5. Stopwords are dropped, if the attribute asks for it.
+6. The remaining words are stemmed in the attribute's `language`, unless it sets `stemming: false`.
+
+A `pre_tokenized` attribute skips these steps: its value is a list of strings, and each string is kept as one word. The query is analyzed the same way as the attribute. See [text options](./schemas.mdx#text-options).
+
+### Languages
+
+An attribute's `language` can be `english` (the default), `arabic`, `danish`, `dutch`, `finnish`, `french`, `german`, `greek`, `hungarian`, `italian`, `norwegian`, `portuguese`, `romanian`, `russian`, `spanish`, `swedish`, `tamil`, `turkish`, or `none`, which keeps words whole.
+
+### Stopwords
+
+`stopwords: true` drops the language's stopwords, such as `the` and `of`. It is `false` by default, so that phrases like `to be or not to be` still match.
+
+Only these languages have a stopword list: `english`, `danish`, `dutch`, `finnish`, `french`, `german`, `hungarian`, `italian`, `norwegian`, `portuguese`, `russian`, `spanish`, `swedish`. For any other language, `stopwords: true` is refused.
+
+## BM25 parameters
+
+You set `k1` (default `1.2`) and `b` (default `0.75`) for each attribute in the schema. A search can override both for that one query.
+
+## Text filters
+
+In a search, you can filter a `text` attribute on the words it contains, with four operators:
+
+| Op                    | Matches when the text has                    |
+| --------------------- | -------------------------------------------- |
+| `phrase`              | These words, in order.                       |
+| `prefix`              | These words in order, the last one a prefix. |
+| `contains_all_tokens` | Every word, anywhere.                        |
+| `contains_any_token`  | At least one word.                           |
+
+```json
+{
+  "query": "reset password",
+  "filter": {
+    "and": [
+      { "body": { "phrase": "reset password" } },
+      { "title": { "contains_any_token": "reset" } }
+    ]
+  }
+}
+```
+
+Text filters work only at the top level of the filter or inside `and`. You can't put them under `or` or `not`. Their words are analyzed the same way as the attribute. A vector query can't filter on a `text` attribute.
+
+## Highlights
+
+When you ask for `highlight` on a field, each hit shows where the query matched in it:
+
+```json
+"highlights": {
+  "body": { "text": "to reset your password, open Settings", "marks": [[3, 8], [14, 22]] }
+}
+```
+
+`text` is about 200 characters around the best match. `marks` gives the `[start, end)` position of each matched word in `text`, counted in UTF-16 code units.
+
+## Fuzzy matching
+
+Fuzzy matching helps when users make typos. `fuzzy: 1` also matches words one edit away. An edit is a letter added, removed or changed, or two letters swapped. `fuzzy: 2` allows two edits.
+
+## Search as you type
+
+When you search while the user is still typing, the last word is often unfinished. `lastAsPrefix: true` lets the query's last word also match longer words that start with it, so `"red sho"` finds `red shoes`.
+
+To combine text search with vector search, see [hybrid search](./hybrid.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./hybrid.mdx" />
+  <Card href="./embeddings-and-rerank.mdx" />
+  <Card href="/reference/api/indexes/searchIndex" />
+  <Card href="/reference/sdk/search" />
+</Cards>

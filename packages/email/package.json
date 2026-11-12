@@ -1,0 +1,26 @@
+{
+  "name": "@skywake/email",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "The emails the hosted service sends, and one send() over Resend or SMTP. Off when neither is set.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "nodemailer": "^10.5.0"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@types/nodemailer": "^8.0.2",
+    "typescript": "^5.9.3"
+  }
+}

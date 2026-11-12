@@ -1,0 +1,118 @@
+---
+title: Sparse and late interaction
+icon: Grid3x3
+description: Score documents exactly with a sparse dot product (SPLADE) or MaxSim over many vectors (ColBERT).
+---
+
+Some retrieval models don't give one dense vector per document. SPLADE-style models give a sparse vector, and ColBERT-style models give one vector per token. You can store both kinds and score documents with them.
+
+```json title="POST /v1/indexes/docs/branches/main/rank"
+{
+  "score": { "dot": { "attribute": "terms", "indices": [12, 4071], "values": [0.8, 1.3] } },
+  "topK": 10,
+  "filter": { "lang": { "eq": "en" } }
+}
+```
+
+```ts tab="TypeScript"
+const hits = await sky.index("docs").rank({
+  score: { dot: { attribute: "terms", indices: [12, 4071], values: [0.8, 1.3] } },
+  topK: 10,
+  filter: { lang: { eq: "en" } },
+});
+```
+
+```py tab="Python"
+hits = sky.index("docs").rank(
+    {"dot": {"attribute": "terms", "indices": [12, 4071], "values": [0.8, 1.3]}},
+    top_k=10,
+    filter={"lang": {"eq": "en"}},
+)
+```
+
+[`rank`](/reference/api/indexes/rankDocuments) scores every document that passes the filter, exactly, and returns them best first. Each hit has `id`, `score` and `attributes`. Documents that score 0 are left out.
+
+## Declare the attributes
+
+Sparse and multi-vector values are stored as attributes with their own types. Declare them in the [schema](./schemas.mdx) or with an [update](./create.mdx#change-an-index). A write can also add them: a new `{indices, values}` attribute becomes `sparse`, and a list of number lists becomes `vectors`.
+
+```json
+{
+  "vectors": [{ "name": "embedding", "dims": 768 }],
+  "attributes": [
+    { "name": "terms", "type": "sparse" },
+    { "name": "tokens", "type": "vectors" }
+  ]
+}
+```
+
+| Type      | Value                                | Produced by          |
+| --------- | ------------------------------------ | -------------------- |
+| `sparse`  | `{"indices": [..], "values": [..]}`  | Models like SPLADE.  |
+| `vectors` | A list of vectors, all of one length | Models like ColBERT. |
+
+```json title="a document"
+{
+  "id": 1,
+  "vectors": { "embedding": [0.1, 0.2, 0.3] },
+  "attributes": {
+    "terms": { "indices": [12, 4071, 9002], "values": [0.5, 1.1, 0.2] },
+    "tokens": [
+      [0.1, 0.4],
+      [0.3, 0.2],
+      [0.9, 0.1]
+    ]
+  }
+}
+```
+
+You can only score these attributes. They can't be filtered, ordered, [grouped](./aggregations.mdx#groups) or given a `filter_index`.
+
+## Sparse: dot product
+
+`{dot: {attribute, indices, values}}` is the dot product of the query's sparse vector with the document's. Each entry in `indices` pairs with the entry at the same position in `values`. You need at least one entry, and the pairs can come in any order.
+
+## Late interaction: MaxSim
+
+`{max_sim: {attribute, vectors}}` takes each query vector, finds its best dot product with any one of the document's vectors, and adds up those best values.
+
+```json
+{
+  "score": {
+    "max_sim": {
+      "attribute": "tokens",
+      "vectors": [
+        [0.2, 0.3],
+        [0.8, 0.1]
+      ]
+    }
+  },
+  "topK": 10
+}
+```
+
+## Fields
+
+| Field                               | Type                    | Default | Meaning                                     |
+| ----------------------------------- | ----------------------- | ------- | ------------------------------------------- |
+| `score`                             | a score expression      |         | What to rank by.                            |
+| `topK`                              | int, 1 to 1000          | `10`    | Hits to return.                             |
+| `offset`                            | int, 0 to 10000         | `0`     | Hits to skip.                               |
+| `filter`                            | [filter](./filters.mdx) |         | Only documents that pass are scored.        |
+| `include`, `exclude`, `consistency` |                         |         | As in [vector search](./vector.mdx#fields). |
+
+`score` takes any [score expression](./hybrid.mdx#score-expressions), so you can combine `dot` and `max_sim` with attributes, `sum`, `decay` and the others. The one exception is `{search: name}`: `rank` runs no searches, so it fails with `400`.
+
+<Callout type="info">
+  `rank` reads every document that passes the filter. Narrow
+  it with a filter, or use `dot` and `max_sim` inside a [hybrid](./hybrid.mdx) `rank` to score only
+  the hits its searches found.
+</Callout>
+
+## Next
+
+<Cards>
+  <Card href="./filters.mdx" />
+  <Card href="./hybrid.mdx" />
+  <Card href="/reference/api/indexes/rankDocuments" />
+</Cards>

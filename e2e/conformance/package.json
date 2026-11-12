@@ -1,0 +1,19 @@
+{
+  "name": "@skywake/conformance",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Tests any Skywake HTTP API from the outside, so a new server can prove it behaves like the old one.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "e2e": "node --test \"*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

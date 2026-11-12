@@ -1,0 +1,86 @@
+---
+title: API keys
+icon: KeyRound
+description: Give agents, the SDKs, the MCP server and the CLI their own key, limited by role and namespace.
+---
+
+Every call to the API needs a key. Give each agent or tool its own key, with only the role and namespaces it needs, so you can see what it did and revoke it on its own.
+
+```bash
+curl -X POST "$SKYWAKE_URL/v1/keys" \
+  -H "Authorization: Bearer $SKYWAKE_KEY" -H "Content-Type: application/json" \
+  -d '{"name": "agent-fleet", "role": "write", "namespaces": "prod/*", "expires_in_days": 30}'
+# {"id": "...", "key": "sw_..."}
+```
+
+You can also make one in the console under **Settings → API keys**. The key is shown only once, so copy it right away. Send it as a bearer token: `Authorization: Bearer sw_...`.
+
+## Roles
+
+Each role can do everything the role before it can, and more.
+
+| Role    | Files                                                                                                                       | Indexes                                                                            |
+| ------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `read`  | Read files, history, diffs and sessions.                                                                                    | List and describe indexes, query, search, and list branches and versions.          |
+| `write` | Also fork, commit, revert, reset, merge and start sessions.                                                                 | Also upsert and delete documents; fork, merge, restore and delete branches; build. |
+| `admin` | Also make namespaces, merge into [protected branches](../filesystem/protection.mdx), manage keys and read the audit log. | Also create, copy, change and delete indexes, and collect old data.                |
+
+If a key lacks the role a call needs, the call fails with `403`. For example, an upsert with a `read` key returns ``this needs the `write` role``. An upsert that [creates the index](../indexes/create.mdx#create-on-first-write) needs `admin`.
+
+The key's `namespaces` pattern limits both files and indexes. A key can reach a namespace or an index only when the pattern matches its whole name. For example, a key for `team/*` can reach the index `team/code`. See [index names](../indexes/index.mdx#names-and-environments).
+
+## Fields
+
+| Field             | Meaning                                                                                                                             |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | 1 to 100 characters.                                                                                                                |
+| `role`            | `read`, `write` or `admin`.                                                                                                         |
+| `namespaces`      | A namespace name, `FOLDER/*` for every namespace under a folder, or `*` (the default). `prod/*` matches `prod/x`, not `production`. |
+| `expires_in_days` | 1 to 3650. Without it, the key does not expire.                                                                                     |
+
+To make a key, you need `admin` on the namespaces it names. A key made with another key never outlives the key that made it.
+
+A key belongs to the person who made it in the console. When that person leaves the organization or is removed from it, their keys are revoked, and so are any keys made with those keys.
+
+## List and revoke
+
+```bash
+curl "$SKYWAKE_URL/v1/keys" -H "Authorization: Bearer $SKYWAKE_KEY"
+curl -X DELETE "$SKYWAKE_URL/v1/keys/KEY_ID" -H "Authorization: Bearer $SKYWAKE_KEY"
+```
+
+## From TypeScript
+
+```ts
+const made = await sky.keys.create("agent-fleet", "write", {
+  namespaces: "prod/*",
+  expiresInDays: 30,
+});
+// made.key is shown only this once
+const all = await sky.keys.list();
+await sky.keys.revoke(made.id);
+```
+
+[Listing keys](/reference/api/keys/listKeys) never returns the keys themselves. It returns each key's id, name, role, namespaces, expiry, last use and who made it:
+
+- `created_by` is the person's id, or `key:ID` for a key made with another key.
+- `created_by_email` is that person's email.
+- Both are empty for the key made with the organization.
+
+[Revoking a key](/reference/api/keys/deleteKey) takes effect at once for API calls. To list or revoke keys, you need an `admin` key for every namespace (`*`).
+
+<Callout type="info">
+  Keys look like `sw_...` and end in a checksum, so secret scanners can spot a leaked one. Store
+  credentials made with a key keep working until they expire (900 seconds by default), even after
+  you revoke the key. See [scoped credentials](./scoped-credentials.mdx).
+</Callout>
+
+Making and revoking keys is recorded in the [audit log](./audit-log.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./scoped-credentials.mdx" />
+  <Card href="../agents/mcp.mdx" />
+  <Card href="/reference/api/keys/createKey" />
+</Cards>

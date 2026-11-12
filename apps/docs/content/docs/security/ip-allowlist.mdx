@@ -1,0 +1,44 @@
+---
+title: IP allowlist
+icon: Network
+description: Limit the addresses from which your organization's keys and people can call the API.
+---
+
+Set an IP allowlist when your agents and people should only reach Skywake from known networks, such as your office or your own servers. Calls from any other address are refused, even with a valid key.
+
+```bash
+curl -X PUT "$SKYWAKE_URL/v1/orgs/$ORG/ip-allowlist" \
+  -H "Authorization: Bearer $SKYWAKE_KEY" -H "Content-Type: application/json" \
+  -d '{"cidrs": ["203.0.113.0/24", "2001:db8::/32"]}'
+```
+
+You can also set it in the console under **Settings → IP allowlist**.
+
+## Rules
+
+- Entries are CIDRs such as `203.0.113.0/24` or `2001:db8::/32`. A single address matches only itself. You can have up to 100 entries.
+- An empty list lets every address in. That is the default.
+- A call from any other address fails with `403` and the code `ip_not_allowed`. The list applies to API keys and console sessions alike.
+- If the new list leaves out the address you are setting it from, the request fails with `409`. This way an admin can never lock themselves out.
+- To read or set the list, you need to be an org admin, for example with an [`admin` key](./api-keys.mdx#roles) for every namespace (`*`). `$ORG` is your organization's id.
+- Each API server rereads the list at most every 5 seconds, so a change can take that long to reach every server.
+
+## Behind a proxy
+
+If the API runs behind a load balancer, set `SKYWAKE_API_TRUST_PROXY` (`api.trustProxy` on the [Helm chart](../self-hosting/kubernetes.mdx#values)) to the number of proxies in front of it. Then the API sees the caller's address instead of the proxy's.
+
+The console checks people by the address of their own connection. If the console runs behind a proxy, list the proxy's addresses or CIDRs in the console's `TRUSTED_PROXIES` (`console.trustedProxies` on the Helm chart). Only then does the console read `X-Forwarded-For` and `X-Real-IP`, and it uses only the address that the nearest untrusted hop added. Without this setting, it ignores those headers when a browser sends them, and everyone seems to come from the proxy. The [audit log](./audit-log.mdx) records the same address.
+
+Changes made in the console's live views reach the console through zero-cache, which passes on `X-Forwarded-For`. Add zero-cache's address to `TRUSTED_PROXIES` only when zero-cache itself sits behind a proxy that adds the client's address to that header. If browsers reach zero-cache directly, they could write the header themselves, so leave zero-cache out. In that case, while an allowlist is set, those changes are refused instead of being let through.
+
+## Audit
+
+Changes to the list are recorded in the [audit log](./audit-log.mdx) as `setIpAllowlist`, with the new list. For the full requests and responses, see [`getIpAllowlist`](/reference/api/orgs/getIpAllowlist) and [`setIpAllowlist`](/reference/api/orgs/setIpAllowlist) in the API reference.
+
+## Next
+
+<Cards>
+  <Card href="./audit-log.mdx" />
+  <Card href="./sso.mdx" />
+  <Card href="./api-keys.mdx" />
+</Cards>

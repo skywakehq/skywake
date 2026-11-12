@@ -1,0 +1,37 @@
+[project]
+name = "skywake-mcp"
+version = "0.1.0"
+description = "The Skywake MCP server: give any AI agent its own branch of files, and vector, full-text and hybrid search, on your own S3 bucket."
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["skywake[mcp]==0.1.0"]
+keywords = [
+  "mcp", "mcp-server", "model-context-protocol", "ai-agents", "agents", "filesystem", "s3",
+  "object-storage", "vector-search", "full-text-search", "hybrid-search", "rag",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: System :: Filesystems",
+]
+
+[project.urls]
+Homepage = "https://skywake.dev"
+Documentation = "https://skywake.dev/docs/agents/mcp"
+Repository = "https://github.com/skywakehq/skywake"
+Issues = "https://github.com/skywakehq/skywake/issues"
+
+[project.scripts]
+skywake-mcp = "skywake.mcp:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The server's code is in the skywake package; this one only adds the command.
+[tool.hatch.build.targets.wheel]
+bypass-selection = true

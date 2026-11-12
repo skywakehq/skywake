@@ -1,0 +1,44 @@
+---
+title: Encryption keys
+icon: LockKeyhole
+description: Encrypt a search index with your own key, kept in your cloud's key service.
+---
+
+Use your own encryption key when you need to control access to an index's data yourself. If you revoke the key in your cloud's key service, the index's data becomes unreadable.
+
+```py tab="Python"
+sky.indexes.create(
+    "prod/products",
+    vectors=[{"name": "embedding", "dims": 768}],
+    kms_key_id="arn:aws:kms:us-east-1:123456789012:key/...",
+)
+```
+
+```ts tab="TypeScript"
+await sky.indexes.create(
+  "prod/products",
+  { vectors: [{ name: "embedding", dims: 768 }], attributes: [] },
+  { encryption: { kms_key_id: "arn:aws:kms:us-east-1:123456789012:key/..." } },
+);
+```
+
+## Per index
+
+Pass `encryption.kms_key_id` to [`POST /v1/indexes`](/reference/api/indexes/createIndex). It is a key id or ARN in your cloud's key service. Every object of the index is encrypted with that key.
+
+- Set the key when you make the index. A [copy](../indexes/create.mdx#copy-an-index) (`POST /v1/indexes/{index}/copy`) takes its own key, and has none by default.
+- The index's store must be an `s3://` bucket.
+- [`GET /v1/indexes/{index}`](/reference/api/indexes/getIndex) shows the key as `encryption`, or `null` when there is none.
+- The API's local index cache (`SKYWAKE_INDEX_CACHE_DIR`) never holds blobs of an index that has its own key. A build of such an index never writes its rows to local disk either.
+
+## The whole bucket
+
+To encrypt everything with your own KMS key, filesystems included, set that key as the bucket's default encryption. On the [Helm chart](../self-hosting/kubernetes.mdx), the pods' role then also needs `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey` on the key.
+
+## Next
+
+<Cards>
+  <Card href="./audit-log.mdx" />
+  <Card href="../self-hosting/kubernetes.mdx" />
+  <Card href="../benchmarks.mdx" />
+</Cards>

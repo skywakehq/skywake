@@ -1,0 +1,53 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.skywake/skywake",
+  "title": "Skywake",
+  "description": "Files with branches and vector, full-text and hybrid search for agents, on your own S3 bucket.",
+  "websiteUrl": "https://skywake.dev/docs/agents/mcp",
+  "repository": {
+    "url": "https://github.com/skywakehq/skywake",
+    "source": "github",
+    "subfolder": "sdks/python/mcp"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "skywake-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SKYWAKE_URL",
+          "description": "The Skywake API, such as http://localhost:8080.",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_KEY",
+          "description": "A Skywake API key.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_NAMESPACE",
+          "description": "The namespace to work in. Without it, only the index tools are offered.",
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_BRANCH",
+          "description": "The branch the file tools use by default. main if unset.",
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_FORK_FROM",
+          "description": "Fork SKYWAKE_BRANCH from this branch when the server starts.",
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

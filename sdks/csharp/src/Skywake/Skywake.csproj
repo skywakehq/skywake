@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Skywake</RootNamespace>
+    <PackageId>Skywake</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Skywake</Authors>
+    <Description>Skywake for .NET: vector, full-text and hybrid search over indexes on your own S3 bucket, with branches.</Description>
+    <PackageTags>skywake;vector-search;full-text-search;hybrid-search;bm25;s3;object-storage;rag;ai-agents</PackageTags>
+    <PackageProjectUrl>https://skywake.dev</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/skywakehq/skywake</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

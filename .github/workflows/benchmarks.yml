@@ -1,0 +1,76 @@
+name: Benchmarks
+
+# Heavy and cloud runs, started by hand. Every result is uploaded as an artifact; compare two with
+# scripts/compare-benchmarks.sh. The pull-request job in ci.yml only compiles and runs the quick ones.
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: What to run
+        type: choice
+        options: [micro, index, filesystem, pinning, aws]
+        default: micro
+      dataset:
+        description: "index: a set from benchmarks/datasets/fetch.py list"
+        default: sift-1m
+      aws:
+        description: "aws: plan, up, status, fetch or down"
+        default: plan
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  run:
+    name: ${{ inputs.group }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install FUSE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fuse3 libfuse3-dev pkg-config
+          sudo modprobe fuse || true
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        if: inputs.group == 'pinning'
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        if: inputs.group == 'pinning'
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: inputs.group == 'micro'
+        run: scripts/bench.sh micro
+      - if: inputs.group == 'index'
+        env:
+          DATASET: ${{ inputs.dataset }}
+        run: |
+          uv run --script benchmarks/datasets/fetch.py get "$DATASET"
+          scripts/bench.sh index "benchmarks/datasets/data/$DATASET" --store slow
+      - if: inputs.group == 'filesystem'
+        run: scripts/bench.sh filesystem --allow-dirty --client "github ubuntu-24.04 runner"
+      - if: inputs.group == 'pinning'
+        run: |
+          pnpm install --frozen-lockfile --filter @skywake/api... --filter @skywake/engine
+          scripts/bench.sh pinning
+      - if: inputs.group == 'aws'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.BENCH_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCH_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.BENCH_AWS_REGION || 'us-west-2' }}
+          ACTION: ${{ inputs.aws }}
+        run: scripts/bench.sh cloud aws "$ACTION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: benchmarks-${{ inputs.group }}-${{ github.run_id }}
+          path: benchmarks/results/
+          if-no-files-found: ignore

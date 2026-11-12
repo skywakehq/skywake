@@ -1,0 +1,1 @@
+ALTER TABLE "api"."orgs" ADD COLUMN "ip_allowlist" text[] DEFAULT '{}' NOT NULL;

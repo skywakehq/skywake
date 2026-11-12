@@ -1,0 +1,124 @@
+---
+title: Consistency and limits
+icon: Gauge
+description: What a read sees, how to run several reads on one snapshot, and the limits on every request.
+---
+
+Every read takes a `consistency` setting. Leave it at the default when a read must see the latest writes, and set it to `eventual` when a slightly older view is fine and you want to save a round trip.
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/query"
+{
+  "vector": { "column": "embedding", "value": [0.1, 0.2, 0.3] },
+  "consistency": "eventual"
+}
+```
+
+## Consistency
+
+| Value      | A read sees                                                                     |
+| ---------- | ------------------------------------------------------------------------------- |
+| `strong`   | Every write that finished before the request. The default.                      |
+| `eventual` | What this server read up to a minute ago. Skips a round trip to object storage. |
+
+A write is durable by the time the request returns. With `strong`, the next read sees it, even before a build, because rows written since the last build are searched exactly.
+
+A server that reads an index often takes a short read lease on it. While it holds the lease, every write on any server tells it about the change before the write returns. So the server can reuse the snapshot it read last, and a `strong` read of a warm index makes no request to Postgres or object storage. If the write can't reach a lease holder, it revokes that lease and waits until it is over (at most about 11 seconds), so a `strong` read never sees an old snapshot.
+
+Leases need `SKYWAKE_API_PEER_TOKEN`, the same token [pinned indexes](./pinning-and-replicas.mdx#self-hosting) use. Without it, each `strong` read asks object storage for the branch head, which costs about one round trip.
+
+Servers also cache keys, index settings and IP allowlists for up to 30 seconds, and Postgres tells every server as soon as one of them changes. A deleted key stops working right away. Writes and admin calls always check the key in Postgres, so they never use a cached one. Servers get these updates through `LISTEN`, so connect them to Postgres directly or through a pooler in session mode. A pooler in transaction mode won't work.
+
+You can set `consistency` on [`query`](./vector.mdx), [`search`](./full-text.mdx), [`hybrid`](./hybrid.mdx), [`order`](./filters.mdx#order-by-an-attribute), [`rank`](./sparse-and-late-interaction.mdx), [`aggregate`](./aggregations.mdx) and `multi`.
+
+## Many requests on one snapshot
+
+Sometimes you need several reads that agree with each other, for example a search and a count over the same data. [`POST .../multi`](/reference/api/indexes/multiQuery) runs up to 16 requests that all see the same snapshot of the branch.
+
+```ts tab="TypeScript"
+const results = await index.multi(
+  [
+    { query: { vector: { column: "embedding", value: [0.1, 0.2, 0.3] }, topK: 5 } },
+    { search: { query: "reset password" } },
+    { aggregate: { measures: { total: ["count"] } } },
+  ],
+  { consistency: "eventual" },
+);
+```
+
+```py tab="Python"
+results = index.multi(
+    [
+        {"query": {"vector": {"column": "embedding", "value": [0.1, 0.2, 0.3]}, "topK": 5}},
+        {"search": {"query": "reset password"}},
+        {"aggregate": {"measures": {"total": ["count"]}}},
+    ],
+    consistency="eventual",
+)
+```
+
+Each request is one of `query`, `search`, `hybrid`, `order`, `rank` or `aggregate`, with the same body that route takes. Each result holds its response under the same key, as in `[{query: [..]}, {search: [..]}, {aggregate: [..]}]`. Set `consistency` on the multi request itself, and leave it off the requests inside it. Each request inside counts as one query.
+
+## Performance and billing
+
+Every read returns `performance` and `billing`, so you can see how fast it was and what it cost:
+
+| Field                           | Meaning                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `performance.server_ms`         | Time spent on the server.                                                                   |
+| `performance.cache_temperature` | `hot`: all from memory. `warm`: some from the disk cache. `cold`: some from object storage. |
+| `performance.cache_hit_ratio`   | The share of reads a cache served, 0 to 1.                                                  |
+| `billing`                       | What the request counted: `queries`, `writes`, `deletes`, `embeddings`, `reranks`.          |
+
+Writes return `billing` too. If you want the next queries to be `hot`, [warm](./vector.mdx#warm-the-cache) the branch first, or [pin](./pinning-and-replicas.mdx) the index.
+
+## Limits
+
+| Limit                                | Value                 |
+| ------------------------------------ | --------------------- |
+| Documents per upsert, ids per delete | 1000                  |
+| Upserts, patches, deletes per write  | 1000 each             |
+| Bytes per write request              | 32 MiB                |
+| Numbers per vector (`dims`)          | 4096                  |
+| Vector columns per index             | 8                     |
+| Attributes per index                 | 64                    |
+| Attribute and column name            | 64 characters         |
+| String id                            | 256 characters        |
+| Shards per index                     | 1 to 256              |
+| Replicas of a pinned index           | 1 to 8                |
+| `topK`                               | 1000                  |
+| `offset`                             | 10000                 |
+| Text search `query`                  | 4096 characters       |
+| Searches per hybrid                  | 16                    |
+| Requests per multi                   | 16                    |
+| Measures per aggregation             | 16                    |
+| `groupBy` attributes                 | 8                     |
+| Groups returned                      | 1000                  |
+| `include` or `exclude` attributes    | 64                    |
+| `highlight` attributes               | 8                     |
+| `per.attributes`                     | 8                     |
+| Text to embed                        | 32,768 characters     |
+| Image to embed                       | 8 MiB                 |
+| Documents per page of a listing      | 1000 (100 by default) |
+| Versions per page                    | 100 (20 by default)   |
+| Index name                           | 200 characters        |
+
+## Errors
+
+| Status | When                                                                                                                                                                               |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | A field doesn't fit the schema, or the body has a field the API doesn't know (`top_k` for `topK`). The message names it; `path` names a bad one, such as `filter.and[1].price.lt`. |
+| `403`  | The caller may not do this, or the index is read-only.                                                                                                                             |
+| `404`  | No such index, branch or document.                                                                                                                                                 |
+| `413`  | A write over 32 MiB.                                                                                                                                                               |
+| `429`  | Too many rows are waiting to be stored, or over 2 GiB is waiting for a build, on a branch. Try again soon.                                                                         |
+| `503`  | Unavailable for now, for example when the embedding or rerank provider failed.                                                                                                     |
+
+An error body holds `error`, `code` and `request_id`, plus `path` when a field is wrong. The [SDKs](/reference/sdk) raise errors as `SkywakeError` and retry only the requests that are safe to retry.
+
+## Next
+
+<Cards>
+  <Card href="../agents/mcp.mdx" />
+  <Card href="./write.mdx" />
+  <Card href="/reference/api" />
+</Cards>

@@ -1,0 +1,39 @@
+[package]
+name = "skywake-benchmarks"
+description = "System benchmarks for Skywake: the search index, filesystem scale, the request-counting proxy and the pinned-index load test, on one support library."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "index-bench"
+path = "src/bin/index-bench.rs"
+
+[[bin]]
+name = "s3-proxy"
+path = "src/bin/s3-proxy.rs"
+
+[[bin]]
+name = "scale-bench"
+path = "src/bin/scale-bench.rs"
+
+[[bin]]
+name = "pinning-load"
+path = "src/bin/pinning-load.rs"
+
+[dependencies]
+skywake-core.workspace = true
+skywake-index.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+clap.workspace = true
+futures.workspace = true
+libc.workspace = true
+object_store.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

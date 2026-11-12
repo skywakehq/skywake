@@ -1,0 +1,85 @@
+---
+title: MCP server
+icon: Plug
+description: skywake-mcp gives an MCP-capable agent tools for its own branch of files and for search indexes.
+---
+
+Use the MCP server when your agent speaks MCP and you want it to work on its own branch through tools, without a mount or a local folder. Add it to the agent's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "skywake": {
+      "command": "uvx",
+      "args": ["skywake-mcp"],
+      "env": {
+        "SKYWAKE_URL": "http://localhost:8080",
+        "SKYWAKE_KEY": "sw_...",
+        "SKYWAKE_NAMESPACE": "prod/app",
+        "SKYWAKE_BRANCH": "agents/42",
+        "SKYWAKE_FORK_FROM": "main"
+      }
+    }
+  }
+}
+```
+
+`uvx` downloads and runs the server, so there is nothing to install first. To install it instead, run `pip install skywake-mcp` and use `"command": "skywake-mcp"` with no `args`.
+
+## Settings
+
+| Variable            | Meaning                                                                                                          |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_URL`       | The API. Required.                                                                                               |
+| `SKYWAKE_KEY`       | An [API key](../security/api-keys.mdx). Required.                                                                |
+| `SKYWAKE_NAMESPACE` | The namespace to work in. Without it, the server offers only the index tools.                                    |
+| `SKYWAKE_BRANCH`    | The branch the file tools use when a call doesn't name one. `main` by default.                                   |
+| `SKYWAKE_FORK_FROM` | Fork `SKYWAKE_BRANCH` from this branch when the server starts. If `SKYWAKE_BRANCH` already exists, it is reused. |
+
+When you set a namespace, the server acts as one [session](/reference/api/sessions/startSession). It starts a session named `mcp:BRANCH` when it starts and keeps it alive, and every commit the server makes is recorded under that session.
+
+If the key can only read, the server starts without a session and without the write tools.
+
+If the server can't start, for example because the key is wrong, it keeps running and every tool returns an error with the reason.
+
+## File tools
+
+Each file tool takes an optional `branch`. Without it, the tool uses the working branch (`SKYWAKE_BRANCH`).
+
+| Tool           | What it does                                                                        |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `fork`         | Fork a branch as `name`. No data is copied.                                         |
+| `list_files`   | Describe a path; for a folder, what it holds.                                       |
+| `read_file`    | Read a text file, or part of it.                                                    |
+| `search`       | Find lines that match a regular expression, like `grep -rn`.                        |
+| `write_files`  | Write text files as one commit.                                                     |
+| `delete_files` | Delete files or folders as one commit.                                              |
+| `diff`         | Show what changed from another branch.                                              |
+| `log`          | List the newest commits.                                                            |
+| `merge`        | Merge into another branch. On a conflict nothing is saved and the paths are listed. |
+
+## Index tools
+
+| Tool                  | What it does                                                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `list_indexes`        | List the indexes the key can reach, with their columns.                                                                     |
+| `describe_index`      | Show an index's columns, branches and row counts.                                                                           |
+| `query_index`         | Find the nearest documents to a vector, or to text on an `embed` column, with an optional [filter](../indexes/filters.mdx). |
+| `search_index`        | Full-text search (BM25): `query`, with optional `fields`, `filter`, `highlight` and `top_k`.                                |
+| `hybrid_search_index` | Search by words and by meaning at once, and fuse the two rankings. Embeds `query` unless given a `vector`.                  |
+| `upsert_documents`    | Write up to 1,000 documents.                                                                                                |
+| `delete_documents`    | Delete up to 1,000 documents by id.                                                                                         |
+| `fork_index_branch`   | Fork an index branch. Nothing is copied.                                                                                    |
+
+When the API rejects a call, the agent gets the API's message as the tool's error, such as `filter.price.lt: must be number`. That lets the agent fix its call and try again.
+
+To give each agent its own fork, start one server per agent, each with its own `SKYWAKE_BRANCH` and with `SKYWAKE_FORK_FROM=main`.
+
+## Next
+
+<Cards>
+  <Card href="./cli.mdx" />
+  <Card href="../filesystem/branches.mdx" />
+  <Card href="../indexes/index.mdx" />
+  <Card href="/reference/sdk" />
+</Cards>

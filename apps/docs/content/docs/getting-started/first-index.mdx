@@ -1,0 +1,84 @@
+---
+title: Your first index
+icon: Search
+description: Make a search index, write documents, query it, and fork it.
+---
+
+This page makes a small search index, writes documents to it, queries it, and then forks it so you can write without touching `main`.
+
+```bash
+export SKYWAKE_URL=http://localhost:8080 SKYWAKE_KEY=sw_...
+
+skywake index create prod/products --vector embedding:3 --attr tag:string --attr price:number
+skywake index upsert prod/products products.jsonl
+skywake index query prod/products --vector-file q.json -k 5 -f "tag = billing and price < 10" -i '*'
+```
+
+Indexes are served by the API, so you need an API key. Make one in the console under Settings → API keys, or see [API keys](../security/api-keys.mdx). If you want to run the API yourself, see [Docker Compose](../self-hosting/docker-compose.mdx).
+
+## Create
+
+`prod/products` is the index's name. The part before `/` is its environment, `prod`, so any key for `prod/*` can use the index. You need an `admin` key to create it. See [names and environments](../indexes/index.mdx#names-and-environments).
+
+Each `--vector` is `NAME:DIMS` or `NAME:DIMS:METRIC`, where the metric is `cosine` (the default), `euclidean` or `dot`. Each `--attr` is `NAME:TYPE`, where the type is `string`, `number`, `bool` or `strings`. Choose the [vector columns](../indexes/schemas.mdx#vector-columns) carefully, because you can't change them later.
+
+## Write
+
+Each line of `products.jsonl` is one document: its `id`, then each column by name. Real embeddings have hundreds of numbers. This example uses three to stay short.
+
+```json
+{ "id": 1, "embedding": [0.1, 0.2, 0.3], "tag": "billing", "price": 4 }
+```
+
+CSV and Parquet files work too. The format is chosen by the file's extension. If you don't give a file, [`upsert`](/reference/cli/index/upsert) reads stdin. Each document [replaces any earlier one](../indexes/write.mdx) with the same id, so you can safely run the same upsert again.
+
+## Query
+
+[`query`](/reference/cli/index/query) takes the vector inline as `--vector '[0.1, 0.2, 0.3]'`, or from a file with `--vector-file`. The other flags in the example:
+
+- `-f` sets a [filter](../indexes/filters.mdx#in-the-cli).
+- `-k` sets how many hits you get back (10 by default).
+- `-i` picks which attributes to show (`*` for all).
+
+Add `--json` to any command to print the API's JSON response.
+
+## Fork
+
+```bash
+skywake index fork prod/products agents/try-1
+skywake index upsert prod/products changes.jsonl -b agents/try-1
+skywake index query prod/products --vector-file q.json -b agents/try-1
+```
+
+The fork copies no data. Writes to `agents/try-1` stay on the fork, and `main` never sees them. See [time travel and branches](../indexes/time-travel.mdx).
+
+## From Python
+
+Here is how to create, write and query the same index with the Python SDK:
+
+```py
+from skywake import Skywake
+
+sky = Skywake("http://localhost:8080", "sw_...")
+products = sky.indexes.create(
+    "prod/products",
+    vectors=[{"name": "embedding", "dims": 3}],
+    attributes=[{"name": "tag", "type": "string"}, {"name": "price", "type": "number"}],
+)
+products.upsert([
+    {"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"tag": "billing", "price": 4}},
+])
+hits = products.query(
+    "embedding", [0.1, 0.2, 0.3], top_k=5,
+    filter={"and": [{"tag": {"eq": "billing"}}, {"price": {"lt": 10}}]},
+)
+```
+
+## Next
+
+<Cards>
+  <Card href="../indexes/index.mdx" />
+  <Card href="../indexes/create.mdx" />
+  <Card href="/reference/cli/index" />
+  <Card href="/reference/sdk" />
+</Cards>

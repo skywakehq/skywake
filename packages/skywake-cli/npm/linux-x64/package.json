@@ -1,0 +1,26 @@
+{
+  "name": "@skywake/cli-linux-x64",
+  "version": "0.1.0",
+  "description": "The skywake command, built for Linux on x64. Install `skywake` instead.",
+  "homepage": "https://skywake.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skywakehq/skywake.git",
+    "directory": "packages/skywake-cli/npm/linux-x64"
+  },
+  "bugs": "https://github.com/skywakehq/skywake/issues",
+  "license": "Apache-2.0",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "files": [
+    "bin"
+  ],
+  "preferUnplugged": true
+}

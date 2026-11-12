@@ -1,0 +1,77 @@
+---
+title: Skywake
+icon: House
+description: Versioned filesystems and search indexes for agents, on object storage.
+full: true
+---
+
+<Hero
+  title="Skywake docs"
+  actions={[
+    { label: "Get started", href: "/getting-started" },
+    { label: "Install", href: "/getting-started/install" },
+    { label: "API reference", href: "/reference/api" },
+  ]}
+>
+  Skywake keeps whole filesystems and search indexes in object storage, and gives every agent its
+  own branch. Forking a branch copies only a pointer, so no data is copied.
+</Hero>
+
+```bash title="Three commands"
+skywake new agent-37 --from main          # instant, whatever the size
+skywake mount agent-37 /work              # a live folder, saved every 2 seconds
+skywake merge agent-37 main               # three-way, conflicts per file
+```
+
+<Section title="Start here">
+  <Cards>
+    <Card href="./getting-started/index.mdx" />
+    <Card href="./getting-started/install.mdx" />
+    <Card href="./getting-started/first-branch.mdx" />
+    <Card href="./getting-started/first-index.mdx" />
+  </Cards>
+</Section>
+
+<Section title="Guides">
+  <Cards wide>
+    <Card
+      href="./filesystem/branches.mdx"
+      title="Filesystem"
+      icon="FolderTree"
+      description="Branches, forks, mounts, autosave, merge and protection."
+    />
+    <Card
+      href="./indexes/index.mdx"
+      title="Search indexes"
+      description="Vector, full-text and hybrid search, with branches."
+    />
+    <Card
+      href="./agents/mcp.mdx"
+      title="Agents"
+      icon="Bot"
+      description="The MCP server, and the CLI from agents."
+    />
+    <Card
+      href="./self-hosting/what-to-run.mdx"
+      title="Self-hosting"
+      icon="Server"
+      description="Docker Compose on one machine, or Helm in your own cloud."
+    />
+    <Card
+      href="./security/sso.mdx"
+      title="Security"
+      icon="Shield"
+      description="SSO, API keys, scoped credentials, IP allowlist, audit log, encryption keys."
+    />
+    <Card href="./benchmarks.mdx" />
+  </Cards>
+</Section>
+
+<Section title="Reference">
+  <Cards>
+    <Card href="/reference/api" />
+    <Card href="/reference/cli" title="CLI" description="Every `skywake` command and flag." />
+    <Card href="/reference/sdk" />
+    <Card href="./reference/index.mdx" title="All references" />
+  </Cards>
+</Section>

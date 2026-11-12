@@ -1,0 +1,37 @@
+[project]
+name = "skywake"
+version = "0.1.0"
+description = "Skywake for Python: a filesystem with branches for AI agents, and vector, full-text and hybrid search, on your own S3 bucket."
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.27"]
+keywords = [
+  "ai-agents", "agents", "mcp", "mcp-server", "filesystem", "s3", "object-storage", "copy-on-write",
+  "vector-search", "full-text-search", "hybrid-search", "bm25", "rag",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Database :: Front-Ends",
+  "Topic :: System :: Filesystems",
+]
+
+[project.urls]
+Homepage = "https://skywake.dev"
+Documentation = "https://skywake.dev/docs"
+Repository = "https://github.com/skywakehq/skywake"
+Issues = "https://github.com/skywakehq/skywake/issues"
+
+[project.optional-dependencies]
+mcp = ["mcp>=2.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["mcp"]

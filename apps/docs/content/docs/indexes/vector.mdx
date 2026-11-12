@@ -1,0 +1,152 @@
+---
+title: Vector search
+icon: Orbit
+description: Find the documents closest to a vector, with filters, a recall target and pages of results.
+---
+
+Use a vector query when you have an embedding and want the documents whose vectors are closest to it. You can filter the documents, choose which attributes come back, and trade speed for recall.
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/query"
+{
+  "vector": { "column": "embedding", "value": [0.1, 0.2, 0.3] },
+  "topK": 10,
+  "filter": { "price": { "lt": 10 } },
+  "include": ["tag", "price"]
+}
+```
+
+```ts tab="TypeScript"
+const hits = await sky.index("prod/products").query({
+  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
+  topK: 10,
+  filter: { price: { lt: 10 } },
+  include: ["tag", "price"],
+});
+```
+
+```py tab="Python"
+hits = sky.index("prod/products").query(
+    "embedding", [0.1, 0.2, 0.3], top_k=10, filter={"price": {"lt": 10}}, include=["tag", "price"]
+)
+```
+
+```bash tab="CLI"
+skywake index query prod/products --vector '[0.1, 0.2, 0.3]' -k 10 -f 'price < 10' -i tag,price
+```
+
+The response lists the hits nearest first:
+
+```json
+{
+  "hits": [{ "id": 1, "distance": 0.02, "attributes": { "tag": "billing", "price": 9 } }],
+  "performance": { "server_ms": 3, "cache_temperature": "warm", "cache_hit_ratio": 0.5 },
+  "billing": { "queries": 1 }
+}
+```
+
+For every [metric](./schemas.mdx#metrics), a smaller `distance` means a closer document. In the [SDKs](/reference/sdk/query), the hits come back as a list that also carries `performance` and `billing`.
+
+## Fields
+
+| Field         | Type                          | Default  | Meaning                                                                                             |
+| ------------- | ----------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `vector`      | `{column, value}`             |          | `value` is numbers, or text or an image when the column has [`embed`](./embeddings-and-rerank.mdx). |
+| `topK`        | int, 1 to 1000                | `10`     | Hits to return.                                                                                     |
+| `recall`      | over 0, up to 1               | `0.95`   | The share of the true nearest `topK` to find.                                                       |
+| `probe`       | int, at least 1               |          | Clusters to read, instead of what `recall` needs.                                                   |
+| `filter`      | [filter](./filters.mdx)       |          | Only documents that pass.                                                                           |
+| `include`     | list of attributes            | none     | Attributes to return with each hit.                                                                 |
+| `exclude`     | list of attributes            |          | Return every attribute but these. Not with `include`.                                               |
+| `offset`      | int, 0 to 10000               | `0`      | Hits to skip, for pages.                                                                            |
+| `per`         | `{attributes, limit}`         |          | At most `limit` hits for each set of values of `attributes`.                                        |
+| `consistency` | `strong` or `eventual`        | `strong` | See [consistency](./consistency-and-limits.mdx).                                                    |
+| `rerank`      | `{model, field, query, topN}` |          | Order the hits again with a rerank model. See [rerank](./embeddings-and-rerank.mdx#rerank).         |
+
+## Recall and probe
+
+The index groups vectors into clusters. A query reads the clusters nearest to its vector. How many it reads depends on `recall`: the last [build](#builds) measured how many clusters it takes to reach each recall target.
+
+- `recall: 1` makes the search exact. It reads every cluster and returns exactly the true nearest `topK`, with or without a filter. The cost is that it reads the whole index.
+- `probe` sets the number of clusters to read yourself. A larger number is slower but finds more of the true nearest documents.
+
+Rows written since the last build are always searched exactly, whatever you set.
+
+## Per group
+
+Use `per` when many hits share a value and you want variety in the results. It keeps at most `limit` hits for each set of values, for example 3 chunks per file:
+
+```json
+{
+  "vector": { "column": "embedding", "value": [0.1, 0.2, 0.3] },
+  "topK": 20,
+  "per": { "attributes": ["file"], "limit": 3 }
+}
+```
+
+`attributes` takes 1 to 8 names. Hits that are missing one of these attributes are counted together as one group.
+
+## Builds
+
+A build clusters the rows written so far, so that queries have less to read. Builds start in the background on their own once enough has been written. You can keep writing and querying while a build runs.
+
+To start a build yourself:
+
+```ts tab="TypeScript"
+const op = await index.build();
+const done = await index.operation(op.id);
+```
+
+```py tab="Python"
+op = index.build()
+done = index.operation(op["id"])
+```
+
+```bash tab="CLI"
+skywake index build prod/products
+skywake index stats prod/products     # indexed_rows and unindexed_rows
+```
+
+[`POST .../build`](/reference/api/indexes/buildIndex) returns `202` with an operation. To follow its progress, call [`GET /v1/indexes/{index}/operations/{id}`](/reference/api/indexes/getIndexOperation). Its `status` is `running`, `done` or `failed`.
+
+## Measure recall
+
+To see how close your queries get to the true nearest documents, call [`POST .../recall`](/reference/api/indexes/checkRecall). It picks documents at random and queries with their vectors twice, once with your settings and once exactly, then compares the two results.
+
+```ts tab="TypeScript"
+const { recall, queries, found, exact } = await index.recall({ queries: 10, topK: 10 });
+```
+
+```py tab="Python"
+result = index.recall(queries=10, top_k=10)
+```
+
+| Field     | Default                 | Meaning                            |
+| --------- | ----------------------- | ---------------------------------- |
+| `column`  | the first vector column | The column to check.               |
+| `queries` | `10`, at most 100       | Documents to query with.           |
+| `topK`    | `10`, at most 100       | Hits per query.                    |
+| `recall`  |                         | The recall target the queries use. |
+| `filter`  |                         | A filter for every query.          |
+
+Each pair counts as two queries in your usage.
+
+## Warm the cache
+
+[`POST .../warm`](/reference/api/indexes/warmIndex) starts reading the branch into the cache, so the next queries are fast. Call it as a hint shortly before queries arrive, for example when a user opens your app. It returns `202` with an operation.
+
+```ts tab="TypeScript"
+await index.warm();
+```
+
+```py tab="Python"
+index.warm()
+```
+
+## Next
+
+<Cards>
+  <Card href="./full-text.mdx" />
+  <Card href="./hybrid.mdx" />
+  <Card href="/reference/cli/index/query" />
+  <Card href="/reference/api/indexes/queryIndex" />
+</Cards>

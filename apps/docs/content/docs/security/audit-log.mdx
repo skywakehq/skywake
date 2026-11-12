@@ -1,0 +1,91 @@
+---
+title: Audit log
+icon: ScrollText
+description: See every call made in your organization, newest first, in a tamper-evident log kept a year by default.
+---
+
+The audit log records every call made in your organization, so you can find out who changed what, when and from where. Events come back newest first.
+
+```bash
+curl "$SKYWAKE_URL/v1/audit?limit=50" -H "Authorization: Bearer $SKYWAKE_KEY"
+```
+
+```json
+{
+  "events": [
+    {
+      "id": "8812",
+      "at": "2026-11-09T10:42:07.118Z",
+      "actor": "key:3f9a1c",
+      "actorKind": "key",
+      "action": "updateBranch",
+      "outcome": "ok",
+      "status": 204,
+      "resource": { "namespace": "prod/app", "branch": "main" },
+      "details": { "protected": true },
+      "ip": "203.0.113.7",
+      "userAgent": "skywake-python/0.1.0",
+      "hash": "9c1e…"
+    }
+  ],
+  "next": "8811"
+}
+```
+
+To read the log, you need to be an org admin, for example with an [`admin` key](./api-keys.mdx#roles) for every namespace (`*`).
+
+## What is recorded
+
+- Every API call is recorded: reads, writes and refused calls. Each event is named after the operation that was called, such as `createBranch` or `queryIndex`. The [API reference](/reference/api) lists them all.
+- Console sign-ins are recorded too: sign-ins, sign-outs, two-factor, passkeys and member changes, including refused ones. They appear as `auth.signInEmail` and so on. A sign-in is recorded in every organization the person belongs to.
+- Your data is never recorded. The log holds no request or response bodies, no query strings, and no keys or tokens. `details` holds only what identifies the change, such as a new branch's head.
+
+Recording never slows a request down. Events are written in the background, at most a second later. When you read the log, any events still waiting are written first, so you always see them.
+
+## Filters
+
+| Query     | Meaning                                                              |
+| --------- | -------------------------------------------------------------------- |
+| `limit`   | `100` by default, at most `1000`.                                    |
+| `after`   | The `next` value of the previous page.                               |
+| `since`   | Only events at or after this time.                                   |
+| `until`   | Only events before this time.                                        |
+| `actor`   | One actor, such as `key:3f9a1c`.                                     |
+| `action`  | One operation, such as `deleteBranch`.                               |
+| `outcome` | `ok`, `denied` (401, 403), `rejected` (other 4xx), or `error` (5xx). |
+
+## Events
+
+| Field                               | Meaning                                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `actor`, `actorKind`                | `key:ID` for an API key, the person's id for the console, `admin` for the operator. |
+| `org`, `owner`                      | The caller's organization, and the one that owns what was used, when it differs.    |
+| `action`, `outcome`, `status`       | What was called and how it ended.                                                   |
+| `method`, `route`, `resource`       | The request. `resource` holds the route's namespace, branch, index or path.         |
+| `details`                           | What changed, when the call changed something.                                      |
+| `ip`, `userAgent`                   | Where the call came from. Through the console, this is the person's own browser.    |
+| `requestId`, `clientRequestId`      | Our id for the request, and the `X-Request-Id` the caller sent.                     |
+| `durationMs`, `bytesIn`, `bytesOut` | How long it took and how much data moved.                                           |
+| `chain`, `seq`, `prev`, `hash`      | The tamper seal, described below.                                                   |
+
+When someone from another organization uses one of your public namespaces, you see that call in your log too, with your organization's id as `owner`.
+
+## Tamper evidence
+
+Each API server seals its events into a chain. `hash` is the sha256 of the event together with `prev`, which is the hash of the event before it on the same `chain`. If anyone changes or deletes a stored event, every hash after it stops matching.
+
+To check an event yourself: drop `id` and `hash`, write the rest as JSON with keys sorted at every level and no spaces, and take its sha256. It should equal `hash`.
+
+## How long events are kept
+
+Events are kept for 365 days, then deleted. Set `SKYWAKE_API_AUDIT_DAYS` to keep them longer, or set it to `0` to keep them forever.
+
+For the full request and response, see [`auditLog`](/reference/api/audit/auditLog) in the API reference.
+
+## Next
+
+<Cards>
+  <Card href="./encryption-keys.mdx" />
+  <Card href="./ip-allowlist.mdx" />
+  <Card href="../filesystem/protection.mdx" />
+</Cards>

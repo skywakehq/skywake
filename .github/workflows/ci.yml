@@ -1,0 +1,205 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Actions are pinned by commit, with the version beside it. Dependabot keeps both current.
+jobs:
+  rust:
+    name: Rust (Linux, FUSE)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install FUSE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends fuse3 libfuse3-dev pkg-config
+          sudo modprobe fuse || true
+          ls -l /dev/fuse
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  # Every benchmark compiles, and the Criterion ones run in quick mode. Heavy runs are in benchmarks.yml.
+  benchmarks:
+    name: Benchmarks (compile, Criterion quick)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Install FUSE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse3-dev pkg-config
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo bench --workspace --features skywake-index/bench --no-run
+      - run: cargo clippy -p skywake-index --features bench --benches -- -D warnings
+      - run: scripts/bench.sh micro --quick
+      - run: scripts/bench.sh index --quick
+
+  format:
+    name: Formatting
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: rustfmt
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+      - run: scripts/format.sh --check
+
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+
+  # The API, the SDKs and the end-to-end suites, against the same Postgres and
+  # S3 (RustFS) that local development uses.
+  end-to-end:
+    name: API, SDKs and end-to-end
+    runs-on: ubuntu-24.04
+    env:
+      SKYWAKE_API_DATABASE: postgres://skywake:skywake-dev@localhost:5433/skywake_test
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: Start Postgres and S3
+        run: |
+          docker compose -f docker/dev/compose.yaml up -d
+          until docker compose -f docker/dev/compose.yaml exec -T postgres pg_isready -U skywake; do sleep 1; done
+          until curl -s -o /dev/null http://localhost:9100; do sleep 1; done
+          docker compose -f docker/dev/compose.yaml exec -T postgres \
+            psql -U skywake -c 'CREATE DATABASE skywake_test'
+      - run: pnpm install --frozen-lockfile
+      # Runs every package's tests: the engine, the API (with the database
+      # above; a skipped test fails in CI) and the TypeScript SDK.
+      - run: pnpm test
+      - name: Python SDK
+        run: uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests
+      - name: npm wrapper of the CLI
+        run: node --test packages/skywake-cli/test/wrapper.test.mjs
+      - name: Start the API on S3
+        env:
+          SKYWAKE_STORE: s3://skywake/ci
+          AWS_ENDPOINT: http://localhost:9100
+          AWS_ALLOW_HTTP: "true"
+          AWS_ACCESS_KEY_ID: skywake
+          AWS_SECRET_ACCESS_KEY: skywake-dev
+          AWS_REGION: us-east-1
+          SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
+          SKYWAKE_API_LISTEN: 127.0.0.1:8080
+          SKYWAKE_API_RATE_LIMIT: "0"
+          # RustFS answers STS, so the credentials route is tested too.
+          SKYWAKE_API_STS_ROLE_ARN: arn:aws:iam::000000000000:role/skywake
+          SKYWAKE_API_STS_ENDPOINT: http://localhost:9100
+        run: |
+          node apps/api/src/main.ts > api.log 2>&1 &
+          until curl -sf http://localhost:8080/ready; do sleep 1; done
+      - name: Conformance suite
+        env:
+          SKYWAKE_API: http://localhost:8080/v1
+          SKYWAKE_ADMIN: ci-admin-token-0123456789
+        run: pnpm --filter @skywake/conformance e2e
+      - name: 100-agent swarm
+        env:
+          SKYWAKE_URL: http://localhost:8080
+          SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
+        run: uv run --isolated --with "./sdks/python[mcp]" python e2e/swarm/orchestrator.py
+      - name: CLI and MCP index tools
+        env:
+          SKYWAKE_URL: http://localhost:8080
+          SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
+        run: |
+          cargo test -p skywake-cli --test index
+          uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests/test_mcp.py
+      - name: API log
+        if: always()
+        run: cat api.log || true
+
+  # The one-click installs: the chart, Compose, Terraform and CloudFormation.
+  deploy:
+    name: Deploy files
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: The chart's roles.sh is the same as Compose's
+        run: cmp docker/postgres/roles.sh deploy/helm/skywake/files/roles.sh
+      - name: Helm
+        run: |
+          helm lint deploy/helm/skywake
+          helm lint deploy/helm/skywake --set bootstrap.enabled=true --set docs.enabled=true --set ingress.enabled=true
+      - name: Compose
+        working-directory: deploy/compose
+        run: |
+          sed -E 's/^([A-Z_]+(PASSWORD|TOKEN|SECRET|KEY_ID|ACCESS_KEY))=$/\1=x/' .env.example > .env
+          docker compose config --quiet
+          COMPOSE_PROFILES='' docker compose config --quiet
+      - name: Terraform
+        run: |
+          for dir in deploy/terraform/aws deploy/terraform/aws/examples/eks; do
+            docker run --rm -v "$PWD:/w" -w "/w/$dir" hashicorp/terraform:1.13 fmt -check
+            docker run --rm -v "$PWD:/w" -w "/w/$dir" --entrypoint sh hashicorp/terraform:1.13 \
+              -c 'terraform init -backend=false -input=false > /dev/null && terraform validate'
+          done
+      - name: CloudFormation
+        run: pipx run cfn-lint==1.60.0 deploy/cloudformation/skywake-starter.yaml
+
+  supply-chain:
+    name: Dependencies (cargo deny, cargo audit)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories bans licenses sources
+      - uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2.90.2
+        with:
+          tool: cargo-audit
+      - run: cargo audit

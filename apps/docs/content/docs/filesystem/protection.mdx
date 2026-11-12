@@ -1,0 +1,51 @@
+---
+title: Protection
+icon: ShieldCheck
+description: Lock a branch so it only changes through a merge that an admin makes.
+---
+
+Protect a branch when you want every change to it to be reviewed first. Usually that is `main`. Agents keep working on their own forks, and their work reaches `main` only when an admin merges it.
+
+```py tab="Python"
+sky.namespace("prod/app").branch("main").protect()        # protect(False) undoes it
+```
+
+```ts tab="TypeScript"
+await sky.namespace("prod/app").branch("main").protect(); // protect(false) undoes it
+```
+
+```bash tab="HTTP"
+curl -X PATCH "$SKYWAKE_URL/v1/namespaces/prod%2Fapp/branches/main" \
+  -H "Authorization: Bearer $SKYWAKE_KEY" -H "Content-Type: application/json" \
+  -d '{"protected": true}'
+```
+
+You need a [key](../security/api-keys.mdx#roles) with the `admin` role to protect a branch or to remove protection.
+
+## What changes
+
+Once a branch is protected:
+
+- Nobody can commit files to it directly. Change it with a [merge](./diff-and-merge.mdx#merge) instead.
+- Only an `admin` can merge into it.
+- It can't be deleted.
+- [Scoped store credentials](../security/scoped-credentials.mdx) can't move its head.
+
+The request to protect a branch waits for any commits, deletes and merges that were already running, so none of them lands afterwards. If they are still running after two minutes, you get a `503`, but the branch is protected anyway.
+
+<Callout type="warn">
+  Store credentials handed out before you protected the branch keep working until they expire (900
+  seconds by default). A client that holds the bucket's own keys is not bound by protection at all,
+  so give agents [scoped credentials](../security/scoped-credentials.mdx) or API keys, never the
+  bucket's keys.
+</Callout>
+
+For the full request and response, see [`updateBranch`](/reference/api/branches/updateBranch) in the API reference.
+
+## Next
+
+<Cards>
+  <Card href="../security/scoped-credentials.mdx" />
+  <Card href="../security/audit-log.mdx" />
+  <Card href="../indexes/index.mdx" />
+</Cards>

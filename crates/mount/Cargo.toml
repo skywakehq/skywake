@@ -1,0 +1,33 @@
+[package]
+name = "skywake-mount"
+description = "Mounts a Skywake branch as a local filesystem."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+metrics.workspace = true
+tracing.workspace = true
+skywake-core.workspace = true
+blake3.workspace = true
+futures.workspace = true
+libc.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+tokio.workspace = true
+
+# The transports: the kernel's FUSE device, and virtio-fs for VMs.
+[target.'cfg(target_os = "linux")'.dependencies]
+fuse-backend-rs = { version = "0.14", default-features = false, features = ["virtiofs"] }
+fuser = "0.18.0"
+vhost = { version = "0.15", features = ["vhost-user-backend"] }
+vhost-user-backend = "0.21"
+virtio-queue = "0.17"
+vm-memory = { version = "0.17", features = ["backend-mmap", "backend-atomic"] }
+vmm-sys-util = "0.15"
+
+[dev-dependencies]
+object_store.workspace = true
+tempfile.workspace = true
+async-trait.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

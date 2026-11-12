@@ -1,0 +1,44 @@
+[package]
+name = "skywake-index"
+description = "The Skywake search index: vectors and attributes in object storage, with branches."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+bench = []
+
+[dependencies]
+skywake-core.workspace = true
+async-trait.workspace = true
+blake3.workspace = true
+chrono.workspace = true
+futures.workspace = true
+object_store.workspace = true
+half.workspace = true
+parquet.workspace = true
+postcard.workspace = true
+regex.workspace = true
+serde.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+zstd.workspace = true
+# `quickwit` gives the async reads and the block-based term dictionary.
+# Patched in `vendor/tantivy` for BM25's k1 and b per query.
+tantivy = { version = "0.27.0", features = ["quickwit"] }
+# Tantivy's automaton trait, to match fuzzy words in its term dictionaries.
+tantivy-fst = "0.5.0"
+
+[dev-dependencies]
+bytes.workspace = true
+criterion.workspace = true
+futures.workspace = true
+half.workspace = true
+libc.workspace = true
+
+[[bench]]
+name = "index"
+harness = false
+required-features = ["bench"]

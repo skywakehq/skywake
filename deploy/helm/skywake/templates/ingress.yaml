@@ -1,0 +1,56 @@
+{{- if .Values.ingress.enabled }}
+{{- /* Routes per host, so components that share a host share a rule. */}}
+{{- $hosts := .Values.ingress.hosts }}
+{{- $routes := list (dict "host" $hosts.api "path" "/" "service" "api" "port" 8080) }}
+{{- if .Values.console.enabled }}
+{{- $path := .Values.console.basePath | default "/" }}
+{{- $routes = append $routes (dict "host" $hosts.console "path" $path "service" "console" "port" 3100) }}
+{{- if ne $path "/" }}
+{{- $routes = append $routes (dict "host" $hosts.console "path" (printf "%s-static" $path) "service" "console" "port" 3100) }}
+{{- end }}
+{{- end }}
+{{- if and .Values.console.enabled .Values.zero.enabled }}
+{{- $routes = append $routes (dict "host" $hosts.zero "path" "/" "service" "zero" "port" 4848) }}
+{{- end }}
+{{- if .Values.docs.enabled }}
+{{- $path := .Values.docs.basePath | default "/" }}
+{{- $routes = append $routes (dict "host" $hosts.docs "path" $path "service" "docs" "port" 3200) }}
+{{- if ne $path "/" }}
+{{- /* The docs' own /_next files, kept apart from the site's. */}}
+{{- $routes = append $routes (dict "host" $hosts.docs "path" (printf "%s-static" $path) "service" "docs" "port" 3200) }}
+{{- end }}
+{{- end }}
+{{- $byHost := dict }}
+{{- range $routes }}
+{{- $_ := set $byHost .host (append (get $byHost .host | default list) .) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $host, $paths := $byHost }}
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          {{- range $paths }}
+          - path: {{ .path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Release.Name }}-{{ .service }}
+                port: { number: {{ .port }} }
+          {{- end }}
+    {{- end }}
+{{- end }}

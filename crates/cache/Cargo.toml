@@ -1,0 +1,40 @@
+[package]
+name = "skywake-cache"
+description = "skywake-cache, one machine of the shared chunk cache that Skywake mounts read through."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "skywake-cache"
+path = "src/main.rs"
+
+[dependencies]
+metrics.workspace = true
+tracing.workspace = true
+skywake-core.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+axum = { workspace = true, features = ["query"] }
+clap.workspace = true
+futures.workspace = true
+object_store.workspace = true
+serde.workspace = true
+postcard.workspace = true
+blake3.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+serde_json.workspace = true
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+
+[dev-dependencies]
+chrono.workspace = true
+criterion.workspace = true
+libc.workspace = true
+skywake-index.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "cache"
+harness = false

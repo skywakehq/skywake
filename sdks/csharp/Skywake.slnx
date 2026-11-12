@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Skywake/Skywake.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Skywake.Tests/Skywake.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,5 @@
+{
+  "title": "Security",
+  "icon": "Shield",
+  "pages": ["sso", "api-keys", "scoped-credentials", "ip-allowlist", "audit-log", "encryption-keys"]
+}

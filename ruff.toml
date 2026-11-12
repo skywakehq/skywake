@@ -1,0 +1,12 @@
+# Python (the benchmarks): `scripts/format.sh` formats and lints with ruff.
+line-length = 120
+target-version = "py311"
+
+[lint]
+# Errors, pyflakes, import order, modern syntax, common bugs.
+select = ["E", "F", "I", "UP", "B"]
+ignore = [
+  "E501",  # the formatter wraps what it can; the rest is strings and tables
+  "B023",  # loop variables in lambdas: here every lambda runs straight away, in `timed`
+  "UP038", # `isinstance(x, (A, B))` is clearer than `A | B`, and faster
+]

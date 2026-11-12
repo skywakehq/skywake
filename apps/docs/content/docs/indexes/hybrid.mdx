@@ -1,0 +1,120 @@
+---
+title: Hybrid search
+icon: Blend
+description: Run vector and text searches on one snapshot, then fuse them by reciprocal rank or score them yourself.
+---
+
+Use hybrid search when you want hits that match by meaning and hits that match by exact words in one list. You run vector queries and text searches together, and their hits are merged into one ranking.
+
+```json title="POST /v1/indexes/docs/branches/main/hybrid"
+{
+  "searches": {
+    "meaning": { "vector": { "column": "embedding", "value": [0.1, 0.2, 0.3] }, "topK": 50 },
+    "words": { "query": "reset password", "topK": 50 }
+  },
+  "topK": 10,
+  "fuse": { "k": 60, "weights": { "words": 2 } }
+}
+```
+
+```ts tab="TypeScript"
+const hits = await sky.index("docs").hybrid({
+  searches: {
+    meaning: { vector: { column: "embedding", value: [0.1, 0.2, 0.3] }, topK: 50 },
+    words: { query: "reset password", topK: 50 },
+  },
+  topK: 10,
+  fuse: { k: 60, weights: { words: 2 } },
+});
+```
+
+```py tab="Python"
+hits = sky.index("docs").hybrid(
+    {
+        "meaning": {"vector": {"column": "embedding", "value": [0.1, 0.2, 0.3]}, "topK": 50},
+        "words": {"query": "reset password", "topK": 50},
+    },
+    top_k=10,
+    k=60,
+    weights={"words": 2},
+)
+```
+
+You give each search a name. A search with `vector` is a [vector query](./vector.mdx), and a search with `query` is a [text search](./full-text.mdx). Each can have its own [`filter`](./filters.mdx), and its `topK` sets how deep it looks. All the searches run on one snapshot of the branch, so they see the same documents.
+
+## Fields
+
+| Field                          | Type                          | Default  | Meaning                                                                  |
+| ------------------------------ | ----------------------------- | -------- | ------------------------------------------------------------------------ |
+| `searches`                     | `{name: search}`, 1 to 16     |          | Named vector queries and text searches.                                  |
+| `topK`                         | int, 1 to 1000                | `10`     | Fused hits to return.                                                    |
+| `fuse.k`                       | 0 to 1000                     | `60`     | The reciprocal rank constant.                                            |
+| `fuse.weights`                 | `{name: weight}`              | `1` each | A weight per search, 0 to 1000.                                          |
+| `rank`                         | a score expression            |          | Score the hits with this instead of `fuse`. Below.                       |
+| `rerank`                       | `{model, field, query, topN}` |          | Rerank the fused hits. See [rerank](./embeddings-and-rerank.mdx#rerank). |
+| `offset`, `per`, `consistency` |                               |          | As in [vector search](./vector.mdx#fields).                              |
+
+A search inside `searches` can't set `rerank` or `consistency`. Set them on the hybrid request instead.
+
+## Reciprocal rank fusion
+
+By default, the hits are fused by reciprocal rank. A hit's score is the sum of `weight / (k + rank)` over the searches that found it. Ranks start at 1.
+
+Each hit has these fields:
+
+| Field        | Meaning                                                                 |
+| ------------ | ----------------------------------------------------------------------- |
+| `score`      | The fused score. Larger is better.                                      |
+| `ranks`      | Its rank in each search that found it, from 1.                          |
+| `scores`     | Its distance in each vector search, and BM25 score in each text search. |
+| `attributes` | The attributes asked for.                                               |
+| `highlights` | From text searches that ask for `highlight`.                            |
+
+## Score expressions
+
+If you want to control the score yourself, set `rank` instead of `fuse`. `rank` scores every hit the searches found with an expression, and larger scores rank first. Each search's `topK` still sets how deep it looks.
+
+```json
+{
+  "searches": {
+    "title": { "query": "reset password", "fields": ["title"], "topK": 100 },
+    "body": { "query": "reset password", "fields": ["body"], "topK": 100 }
+  },
+  "rank": {
+    "sum": [
+      { "search": "title" },
+      { "search": "body" },
+      { "saturate": { "of": { "attribute": "stars" }, "k": 3 } }
+    ]
+  }
+}
+```
+
+| Expression                             | Value                                                                                    |
+| -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| a number                               | That number.                                                                             |
+| `{search: name}`                       | That search's score: BM25, or the distance of a vector search. 0 when it missed the hit. |
+| `{attribute: name}`                    | A `number`, `int`, `datetime` (in ms) or `bool` attribute. 0 when missing.               |
+| `{sum \| product \| max \| min: [..]}` | Of a list of expressions.                                                                |
+| `{decay: {of, origin, scale}}`         | 1 at `origin`, halving every `scale` away. `scale` must be over 0.                       |
+| `{saturate: {of, k}}`                  | `x / (x + k)`. `k` must be over 0.                                                       |
+| `{dot: {attribute, indices, values}}`  | The dot product with a `sparse` attribute.                                               |
+| `{max_sim: {attribute, vectors}}`      | Late-interaction MaxSim with a `vectors` attribute.                                      |
+
+The last two are explained in [sparse and late interaction](./sparse-and-late-interaction.mdx).
+
+<Callout type="warn">
+  In `rank`, a vector search's score is its distance, where smaller means closer. The expression
+  still ranks larger scores first, so a larger distance raises a hit's score.
+</Callout>
+
+To run several hybrids, searches and queries on one snapshot, use [multi-queries](./consistency-and-limits.mdx#many-requests-on-one-snapshot).
+
+## Next
+
+<Cards>
+  <Card href="./sparse-and-late-interaction.mdx" />
+  <Card href="./embeddings-and-rerank.mdx" />
+  <Card href="/reference/api/indexes/hybridQuery" />
+  <Card href="/reference/sdk/hybrid" />
+</Cards>

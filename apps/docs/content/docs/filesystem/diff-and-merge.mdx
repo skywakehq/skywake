@@ -1,0 +1,183 @@
+---
+title: Diff, merge and undo
+icon: GitMerge
+description: See what a branch changed, merge it into another, settle conflicts, and undo commits.
+---
+
+Use these tools to review what a branch changed, bring its work into another branch, and take back a change you don't want.
+
+```bash
+skywake diff main agent-37
+# ~ src/auth/login.py
+# - src/auth/old.py
+# + src/auth/session.py
+skywake merge agent-37 main -m "fix login"
+```
+
+## Diff
+
+[`skywake diff FROM TO`](/reference/cli/diff) lists the paths that differ, marked `+` for added, `-` for removed and `~` for modified. Folders that didn't change are skipped without being read, so the cost of a diff depends on how much changed, whatever the size of the tree.
+
+Over the API, [`GET .../branches/{branch}/diff?from=FROM`](/reference/api/history/diffBranches) takes an `against` parameter that sets what the branch is compared with:
+
+| `against`        | Compares the branch with                                                                           |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `head` (default) | `from` as it is now. Changes made on `from` since the fork show up too.                            |
+| `base`           | The newest commit both share. Only what this branch changed shows up, as in `git diff from...branch`. |
+
+## Review a fork
+
+When an agent is done with its fork, you usually want to see only what the agent changed, without what happened on `main` in the meantime. For that, diff against the [base](./branches.mdx#where-a-branch-forked):
+
+```ts tab="TypeScript"
+const fork = sky.namespace("prod/app").branch("agents/42");
+for await (const change of fork.allDiff("main", { against: "base" })) {
+  console.log(change.kind, change.path); // "added src/auth/session.py"
+}
+```
+
+```bash tab="HTTP"
+curl "$SKYWAKE_URL/v1/namespaces/prod%2Fapp/branches/agents%2F42/diff?from=main&against=base" \
+  -H "Authorization: Bearer $SKYWAKE_KEY"
+```
+
+Read a changed file on both sides with `readText`, then [merge](#merge) the fork or delete it.
+
+## Merge
+
+[`skywake merge FROM INTO`](/reference/cli/merge) merges `FROM` into `INTO`. It is a three-way merge against the newest commit both branches came from.
+
+- When both sides changed a text file, the changes are merged line by line.
+- A file's mode is merged on its own, apart from its content.
+- When changes overlap, they are reported and nothing is saved:
+
+```text
+conflict: src/auth/login.py
+Error: nothing was merged
+```
+
+The default commit message is `Merge FROM into INTO`. Merges into the same branch [take turns](./branches.mdx#two-writers-on-one-branch).
+
+## From the SDKs
+
+```py tab="Python"
+result = sky.namespace("prod/app").branch("agents/42").merge_into("main")
+print(result.conflicts or result.head)
+```
+
+```ts tab="TypeScript"
+const result = await sky.namespace("prod/app").branch("agents/42").mergeInto("main");
+console.log(result.conflicts.length ? result.conflicts : result.head);
+```
+
+The API's merge is [`POST /v1/namespaces/{namespace}/merges`](/reference/api/history/mergeBranches). If there is a conflict, it fails with `409` and lists the paths. The SDKs return them in `conflicts`.
+
+Set `dry_run: true` (`dryRun` in TypeScript) to see the conflicts the merge would have right now. A dry run saves nothing.
+
+## Resolve conflicts
+
+To settle conflicts, send the merge again with `resolve`, which has one entry per conflicting path. Once every conflict is covered, the merge lands as one merge commit with both parents.
+
+```json title="POST /v1/namespaces/prod%2Fapp/merges"
+{
+  "from": "agents/42",
+  "into": "main",
+  "resolve": [
+    { "path": "a.txt", "take": "ours" },
+    { "path": "b.txt", "take": "theirs" },
+    { "path": "c.txt", "text": "both changes, combined\n" }
+  ]
+}
+```
+
+Each entry gives `path` and exactly one of:
+
+| Field    | Meaning                                                                   |
+| -------- | ------------------------------------------------------------------------- |
+| `take`   | `ours`: the path as it is on `into`. `theirs`: as it is on `from`.        |
+| `text`   | New content, as text.                                                     |
+| `base64` | New content, as base64.                                                   |
+| `parts`  | New content: [uploaded parts](/reference/api/files/uploadPart), in order. |
+| `delete` | `true` leaves the path out.                                               |
+
+`executable: true` marks new content as executable. Resolving a folder also settles the conflicts inside it.
+
+If some conflicts are not covered, nothing is saved, and the `409` lists only the ones still open. A dry run with `resolve` reports what would still conflict.
+
+## An agent's merge conflicts
+
+An agent can settle its own merge conflicts like this:
+
+1. Try the merge. If it conflicts, nothing is saved.
+2. For each path, read both sides and let the agent write the result.
+3. Check with a dry run, then merge with `resolve`.
+
+```ts
+const ns = sky.namespace("prod/app");
+const first = await ns.merge("agents/42", "main");
+
+if (first.conflicts.length > 0) {
+  const resolve = [];
+  for (const path of first.conflicts) {
+    const ours = await ns.branch("main").readText(path);
+    const theirs = await ns.branch("agents/42").readText(path);
+    resolve.push({ path, text: await agent.combine(path, ours, theirs) });
+  }
+  const check = await ns.merge("agents/42", "main", { resolve, dryRun: true });
+  if (check.conflicts.length === 0) await ns.merge("agents/42", "main", { resolve });
+}
+```
+
+`agent.combine` is your own code. A conflicting path may be a folder, or may be gone on one side. In that case, use `take` or `delete` for it.
+
+## Revert a commit
+
+[`POST .../branches/{branch}/revert`](/reference/api/history/revertCommit) undoes one commit by adding a new commit that puts back what it changed. For a merge commit, it goes back to the first parent.
+
+```json title="POST /v1/namespaces/prod%2Fapp/branches/main/revert"
+{ "commit": "3f9a…", "message": "undo the bad config" }
+```
+
+```ts tab="TypeScript"
+await sky.namespace("prod/app").branch("main").revert(hash);
+```
+
+It returns one of these:
+
+- `201` with `{head, changed}` for the new commit. The default message is `Revert "TITLE"`.
+- `200` with `changed: false` when there was nothing to undo.
+- `409` with `conflicts` when later commits changed the same paths again. Nothing is saved. In TypeScript, the call throws a `SkywakeError` with status `409`.
+
+## Reset a branch
+
+[`POST .../branches/{branch}/reset`](/reference/api/history/resetBranch) sets the branch's files to what they were at a given commit, as one new commit on top. The history is kept. The commit can come from any branch in the namespace.
+
+```json title="POST /v1/namespaces/prod%2Fapp/branches/main/reset"
+{ "to": "3f9a…" }
+```
+
+```ts tab="TypeScript"
+await sky.namespace("prod/app").branch("main").reset(hash);
+```
+
+It returns `201` with the new commit, or `200` with `changed: false` when the files already match. The default message is `Reset to` followed by the first 12 characters of the commit.
+
+Revert and reset both need `write`, and both take an optional `message` and `session`. A [protected branch](./protection.mdx) refuses both, because it changes only through a merge.
+
+## History
+
+To see what happened on a branch, or to one file:
+
+```bash
+skywake log main                 # commits, newest first; autosaves hidden
+skywake history main src/app.py  # each commit that changed the file, and its size after
+```
+
+## Next
+
+<Cards>
+  <Card href="./protection.mdx" />
+  <Card href="../agents/cli.mdx" />
+  <Card href="/reference/cli/log" />
+  <Card href="/reference/api/history/diffBranches" />
+</Cards>

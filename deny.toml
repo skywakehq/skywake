@@ -1,0 +1,52 @@
+# cargo-deny: run `cargo deny check` before adding a dependency. CI runs it too.
+
+[graph]
+all-features = true
+
+# Known vulnerabilities and unmaintained crates, from the RustSec database.
+[advisories]
+version = 2
+yanked = "deny"
+# Unmaintained crates we depend on ourselves fail; deeper ones are for their users to replace.
+unmaintained = "workspace"
+ignore = []
+
+# Licenses we can ship in an Apache-2.0 project.
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "allow"
+# Our crates name each other by path, which cargo-deny counts as a wildcard
+# unless the crate has `publish = false`. Registry crates still need versions.
+wildcards = "allow"
+
+# Crates come from crates.io only.
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

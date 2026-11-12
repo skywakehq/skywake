@@ -1,0 +1,72 @@
+---
+title: Single sign-on
+icon: LogIn
+description: Let people sign in to the console through your own SAML or OIDC identity provider.
+---
+
+Set up single sign-on when you want people at your company to sign in to the console through your identity provider. In the console, open **Settings → Single sign-on** and add a connection. Only organization admins can manage SSO.
+
+<Steps>
+<Step>
+
+### Add a connection
+
+Pick SAML or OIDC, and list the email domains the connection covers. Then give the details for your protocol:
+
+| Protocol | What you give                                |
+| -------- | -------------------------------------------- |
+| SAML     | The IdP metadata URL, or the metadata XML.   |
+| OIDC     | The issuer URL, client ID and client secret. |
+
+The console then shows some values for your identity provider. Copy them over: the ACS URL and entity ID for SAML, or the redirect URI for OIDC.
+
+</Step>
+<Step>
+
+### Prove the domain
+
+Add the DNS TXT record that the console shows (its name starts with `_skywake-sso-…`), then click **Check DNS**.
+
+</Step>
+<Step>
+
+### Test and turn it on
+
+**Test** checks the provider's metadata or discovery document, its signing keys and the domain. It does not sign anyone in. You can only **Turn on** a connection once its domain is verified.
+
+</Step>
+<Step>
+
+### Require it (optional)
+
+**Require SSO** means people at those domains can sign in only through the connection. Their passwords and passkeys stop working, and their other console sessions end. Sign in through SSO once yourself before you require it, so you know it works. Where billing is on, requiring SSO needs a plan that includes it; otherwise the request fails with `402`.
+
+</Step>
+</Steps>
+
+## What is enforced
+
+- SAML assertions must be signed, meant for this console, and still valid. Each one must reply to a request the console sent, and can be used only once, so nobody can replay a response. IdP-initiated sign-in is off.
+- A sign-in with an email outside the connection's domains is refused. So is any sign-in through a connection that is turned off.
+- OIDC uses PKCE and the scopes `openid`, `email` and `profile`.
+- When someone signs in for the first time, they join the organization as a member.
+- While SSO is required, the API refuses console tokens for people at those domains unless the token came from the organization's SSO. [API keys](./api-keys.mdx) are not affected.
+
+## For operators
+
+If you run the console yourself, two settings control which identity providers and domains it accepts:
+
+| Console setting           | Meaning                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `SSO_PRIVATE_IDP_ORIGINS` | Identity providers on a private network, by origin. Public ones must use HTTPS.   |
+| `SSO_VERIFIED_DOMAINS`    | Domains, and their subdomains, that need no DNS record. Only for domains you own. |
+
+The list of required domains is stored in the API. You can read it with [`GET`](/reference/api/orgs/getSsoPolicy) and set it with [`PUT /v1/orgs/{org}/sso`](/reference/api/orgs/setSsoPolicy), using the server's [admin token](../self-hosting/docker-compose.mdx#secrets-in-env).
+
+## Next
+
+<Cards>
+  <Card href="./ip-allowlist.mdx" />
+  <Card href="./audit-log.mdx" />
+  <Card href="/reference/api/orgs/setSsoPolicy" />
+</Cards>

@@ -1,0 +1,23 @@
+/target
+.skywake
+node_modules/
+.DS_Store
+__pycache__/
+.ruff_cache/
+dist/
+
+# Benchmark results, datasets and real bucket keys.
+benchmarks/results/
+benchmarks/datasets/data/
+benchmarks/cloud/r2/r2.env
+.turbo/
+
+# Self-hosting secrets.
+# The one .env, at the root, and any stray ones.
+.env
+.env.*
+!.env.example
+
+# Binaries the release copies into the npm packages.
+packages/skywake-cli/npm/*/bin/
+*.tsbuildinfo

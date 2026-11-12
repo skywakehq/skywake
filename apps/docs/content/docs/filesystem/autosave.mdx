@@ -1,0 +1,48 @@
+---
+title: Autosave and recover
+icon: Save
+description: Mounts save every 2 seconds, fsync waits until your data is saved, and unsaved changes are never deleted.
+---
+
+You don't have to save a mount yourself: `skywaked` saves it every few seconds. These commands show how each mount is doing and let you save right away.
+
+```bash
+skywake status              # each mount's save lag, unsaved bytes and last error
+skywake sync /work          # save now; returns once it is in the bucket
+```
+
+## Autosave
+
+Every 2 seconds, `skywaked` saves what changed in each mount. It uploads the changed files, builds the new trees from memory, and advances the branch. These saves are commits marked as autosaves, and [`skywake log`](/reference/cli/log) hides them. Each mount saves on its own timer. To change the interval, set `--save-every-ms` or `SKYWAKE_SAVE_EVERY_MS`.
+
+- Each save captures one instant. While a file is being uploaded, new writes to it are set aside until the upload is done, so a branch never holds a file that is half old and half new.
+- `fsync` means saved. `fsync` on any file or folder in a mount returns only once everything written so far is in the bucket. [`skywake sync`](/reference/cli/sync) does the same for a whole mount.
+- With a cache tier whose nodes are in three zones (`SKYWAKE_CACHE_ZONE`), `fsync` returns in about a millisecond, once the write is on nodes in three different zones, and the next save puts it in the bucket. After a crash, mount the branch again on any machine and those writes are back. If fewer zones answer, `fsync` waits for the bucket. Set `SKYWAKE_LOG_COPIES=0` to always wait.
+- A crash loses at most one interval of changes, plus the save that was in flight. Data you synced with `fsync` or `skywake sync` is never lost.
+
+## Recover
+
+Sometimes a mount can't save its changes, for example after a crash, a failed save or a [move](./mount.mdx#moving-a-branch). Then `skywaked` keeps them in `unsaved/` in its root folder, with a manifest of paths and content, and logs where the folder is. To get the changes back, commit the folder as a [fork](./branches.mdx#forks) of the mount's branch:
+
+```bash
+skywake recover /var/lib/skywake/unsaved/<folder> agent-37-recovered
+skywake diff agent-37 agent-37-recovered
+```
+
+After that, delete the kept folder. `-m` sets the commit message (the default is `Recover unsaved changes`).
+
+## Disk limits
+
+Each mount may keep at most 20 GiB on the daemon's disk. This covers changes that are not saved yet, and saved files whose local copy is not freed yet. Set the limit with `SKYWAKE_MOUNT_LOCAL_GB` (`0` means no limit). Past the limit, writes fail with "no space left on device" until a save lands or files are deleted.
+
+## Monitor saves
+
+With `SKYWAKE_METRICS_LISTEN=127.0.0.1:9464`, `skywaked` serves Prometheus metrics at `/metrics`. Alert on `skywake_save_lag_seconds`. `skywake_save_failures_total` counts failed saves.
+
+## Next
+
+<Cards>
+  <Card href="./diff-and-merge.mdx" />
+  <Card href="/reference/cli/recover" />
+  <Card href="/reference/cli/status" />
+</Cards>

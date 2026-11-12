@@ -1,0 +1,63 @@
+{{- if and .Values.console.enabled .Values.zero.enabled }}
+{{- $select := include "skywake.select" (dict "root" . "component" "zero") }}
+# zero-cache keeps a copy of the console's rows on its own disk; one copy
+# is enough, and it rebuilds the copy from Postgres when the disk is new.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-zero
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-zero
+  replicas: 1
+  selector:
+    matchLabels: {{- $select | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $select | nindent 8 }}
+    spec:
+      containers:
+        - name: zero
+          image: {{ .Values.zero.image }}
+          ports:
+            - { name: http, containerPort: 4848 }
+          env:
+            - name: ZERO_UPSTREAM_DB
+              {{- include "skywake.secret" (dict "root" . "key" "zero-database-url") | nindent 14 }}
+            - name: ZERO_ADMIN_PASSWORD
+              {{- include "skywake.secret" (dict "root" . "key" "zero-admin-password") | nindent 14 }}
+            - { name: ZERO_APP_PUBLICATIONS, value: console }
+            - { name: ZERO_REPLICA_FILE, value: /data/replica.db }
+            - name: ZERO_QUERY_URL
+              value: http://{{ .Release.Name }}-console:3100{{ .Values.console.basePath }}/api/zero/query
+            - name: ZERO_MUTATE_URL
+              value: http://{{ .Release.Name }}-console:3100{{ .Values.console.basePath }}/api/zero/mutate
+            - { name: ZERO_QUERY_FORWARD_COOKIES, value: "true" }
+            - { name: ZERO_MUTATE_FORWARD_COOKIES, value: "true" }
+            # Read by the console only if zero-cache is in console.trustedProxies.
+            - { name: ZERO_QUERY_ALLOWED_REQUEST_HEADERS, value: x-forwarded-for }
+            - { name: ZERO_MUTATE_ALLOWED_REQUEST_HEADERS, value: x-forwarded-for }
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: data, mountPath: /data }
+          resources: {{- toYaml .Values.zero.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: { storage: {{ .Values.zero.storage }} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-zero
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  selector: {{- $select | nindent 4 }}
+  ports:
+    - { name: http, port: 4848, targetPort: http }
+{{- end }}

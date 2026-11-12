@@ -1,0 +1,86 @@
+---
+title: Pinning and replicas
+icon: Pin
+description: Reserve servers that keep an index open and on disk, so its queries never wait on object storage.
+---
+
+Pin an index when its queries must stay fast all the time and should never wait for data to load from object storage.
+
+```json title="PATCH /v1/indexes/prod%2Fproducts"
+{ "pinned": { "replicas": 2 } }
+```
+
+```ts tab="TypeScript"
+await sky.indexes.update("prod/products", { pinned: { replicas: 2 } });
+const { pinning } = await sky.indexes.get("prod/products");
+```
+
+```py tab="Python"
+sky.indexes.update("prod/products", replicas=2)
+pinning = sky.indexes.get("prod/products")["pinning"]
+```
+
+Any API server can serve any index, and opens it when a request needs it. A pinned index also gets 1 to 8 reserved servers, called its **replicas**. Each replica keeps the index open, never evicts it, and keeps every object of its current version on local disk.
+
+## Pin, repin, unpin
+
+| Do                 | HTTP body                                         | TypeScript                                                      | Python                                      |
+| ------------------ | ------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
+| Pin when making it | `"pinned": {"replicas": 2}` in `POST /v1/indexes` | `sky.indexes.create(name, schema, { pinned: { replicas: 2 } })` | `sky.indexes.create(name, ..., replicas=2)` |
+| Change the count   | `{"pinned": {"replicas": 3}}`                     | `sky.indexes.update(name, { pinned: { replicas: 3 } })`         | `sky.indexes.update(name, replicas=3)`      |
+| Unpin              | `{"pinned": null}`                                | `sky.indexes.update(name, { pinned: null })`                    | `sky.indexes.update(name, replicas=None)`   |
+
+The change takes effect at once, on every branch. A [copy](./create.mdx#copy-an-index) of a pinned index is not pinned.
+
+## Where it is pinned
+
+[`GET /v1/indexes/{index}`](/reference/api/indexes/getIndex) returns `pinned`, which is what you asked for, and `pinning`, which is what is running now:
+
+```json
+{
+  "pinned": { "replicas": 2 },
+  "pinning": {
+    "replicas": [
+      { "server": "api-1", "warm": true, "in_flight": 2 },
+      { "server": "api-2", "warm": false, "in_flight": 0 }
+    ]
+  }
+}
+```
+
+| Field       | Meaning                                                     |
+| ----------- | ----------------------------------------------------------- |
+| `server`    | The API server holding the replica.                         |
+| `warm`      | Whether every object of the current version is on its disk. |
+| `in_flight` | Queries it is serving now.                                  |
+
+If fewer servers are running than the replicas you asked for, you get fewer replicas. `pinning` is `null` when the index is not pinned.
+
+## How queries are routed
+
+- Reads on a pinned index ([`query`](./vector.mdx), [`search`](./full-text.mdx), [`hybrid`](./hybrid.mdx), [`multi`](./consistency-and-limits.mdx#many-requests-on-one-snapshot), `rank`, `order` and `aggregate`) go to the least busy replica. The `x-skywake-server` response header names the server that served the request.
+- If no replica responds, the server that received the request serves it itself.
+- Whenever `main` moves, each replica warms the index again.
+- Writes are not routed. Any server accepts them.
+
+## Billing
+
+A pinned index is billed per GB-hour for each replica, instead of per query. Its queries do not count toward the bill.
+
+## Self-hosting
+
+Servers find each other through the database. Each server writes a heartbeat every 2 seconds, and any server seen in the last 10 seconds counts as live. Every server places each pinned index by rendezvous hashing over the live servers. This way all servers agree on the placement without a coordinator, and when a server joins or leaves, only the indexes placed on it move.
+
+| Variable                 | Meaning                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_PEER_URL`   | How the other servers reach this one. `http://127.0.0.1:<port>` by default.                                           |
+| `SKYWAKE_API_PEER_TOKEN` | Shared by every server, at least 16 characters. Without it, no server passes queries to another or holds read leases. |
+
+## Next
+
+<Cards>
+  <Card href="./consistency-and-limits.mdx" />
+  <Card href="../self-hosting/kubernetes.mdx" />
+  <Card href="../benchmarks.mdx" />
+  <Card href="/reference/api/indexes/updateIndex" />
+</Cards>

@@ -1,0 +1,277 @@
+# Builds and publishes a release when a version tag (v1.2.3) is pushed.
+# Binaries get GitHub artifact attestations (signed with Sigstore); check one
+# with `gh attestation verify <file> --repo <owner>/<repo>`.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  binaries:
+    name: Binaries (${{ matrix.target }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        include:
+          # Ubuntu 22.04's glibc is old enough for most Linux machines in use.
+          - { target: x86_64-unknown-linux-gnu, runner: ubuntu-22.04, npm: linux-x64 }
+          - { target: aarch64-unknown-linux-gnu, runner: ubuntu-22.04-arm, npm: linux-arm64 }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: The tag matches the version in Cargo.toml
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, Cargo.toml $version"; exit 1; }
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfuse3-dev pkg-config
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - run: cargo build --release --locked -p skywake-cli -p skywake-daemon -p skywake-cache
+      - name: Package
+        run: |
+          name=skywake-${GITHUB_REF_NAME}-${{ matrix.target }}
+          mkdir -p "dist/$name"
+          cp target/release/skywake target/release/skywaked target/release/skywake-cache \
+            LICENSE README.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          cp target/release/skywake "dist/skywake-${{ matrix.npm }}"
+      - uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: dist/*.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/skywake-${{ matrix.npm }}
+
+  github:
+    name: GitHub release
+    needs: [binaries, chart]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          merge-multiple: true
+          path: dist
+      # The one-click files: they point at this release's images and at this
+      # repository, wherever it lives.
+      - name: Deploy files
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          version=${GITHUB_REF_NAME#v}
+          cp deploy/compose/compose.yaml dist/compose.yaml
+          cp -L deploy/compose/roles.sh dist/roles.sh
+          cp deploy/compose/.env.example dist/compose.env.example
+          cp deploy/cloudformation/skywake-starter.yaml dist/skywake-starter.yaml
+          sed -i "s|ghcr.io/skywakehq|ghcr.io/$owner|g; s|github.com/skywakehq/skywake|github.com/$GITHUB_REPOSITORY|g; s|SKYWAKE_VERSION:-latest|SKYWAKE_VERSION:-$version|g; s|Default: latest # release|Default: $version # release|" \
+            dist/compose.yaml dist/compose.env.example dist/skywake-starter.yaml
+      - run: cd dist && sha256sum -- *.tar.gz compose.yaml roles.sh skywake-starter.yaml > SHA256SUMS
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/compose.yaml
+            dist/roles.sh
+            dist/compose.env.example
+            dist/skywake-starter.yaml
+            dist/SHA256SUMS
+          generate_release_notes: true
+
+  # Container images for self-hosting, on ghcr.io: skywake-api, -console,
+  # -cache and -docs, each for amd64 and arm64. Each architecture builds on
+  # its own kind of runner (emulating arm64 makes the Rust build hours
+  # long), pushes by digest, and `manifests` joins the two under the version.
+  # Plain buildx commands, so no third-party action sees the registry token.
+  images:
+    name: Image (${{ matrix.image }}, ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [api, console, cache, docs]
+        arch: [amd64, arm64]
+        include:
+          - { image: api, dockerfile: apps/api/Dockerfile }
+          - { image: console, dockerfile: apps/console/Dockerfile }
+          - { image: cache, dockerfile: crates/cache/Dockerfile }
+          - { image: docs, dockerfile: apps/docs/Dockerfile }
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Build and push by digest
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+          DOCKERFILE: ${{ matrix.dockerfile }}
+        run: |
+          repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/skywake-$IMAGE
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --use --driver docker-container
+          docker buildx build . -f "$DOCKERFILE" --platform "linux/$ARCH" \
+            --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label org.opencontainers.image.version="${GITHUB_REF_NAME#v}" \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --cache-from "type=registry,ref=$repo:buildcache-$ARCH" \
+            --cache-to "type=registry,ref=$repo:buildcache-$ARCH,mode=max" \
+            --output "type=image,name=$repo,push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file metadata.json
+          mkdir digests
+          jq -r '."containerimage.digest"' metadata.json > "digests/$IMAGE-$ARCH"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.arch }}
+          path: digests/*
+
+  manifests:
+    name: Image (${{ matrix.image }})
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      matrix:
+        image: [api, console, cache, docs]
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
+          path: digests
+      - name: Tag both architectures as the version
+        id: manifest
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ matrix.image }}
+        run: |
+          repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/skywake-$IMAGE
+          version=${GITHUB_REF_NAME#v}
+          echo "$TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          tags=(-t "$repo:$version")
+          # A pre-release (v1.2.0-rc.1) never moves `latest`.
+          [[ $version == *-* ]] || tags+=(-t "$repo:latest")
+          sources=()
+          for file in digests/*; do sources+=("$repo@$(cat "$file")"); done
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          digest=$(docker buildx imagetools inspect "$repo:$version" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "name=$repo" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-name: ${{ steps.manifest.outputs.name }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+
+  # The Helm chart, as an OCI artifact next to the images:
+  #   helm install skywake oci://ghcr.io/<owner>/charts/skywake --version <version>
+  # Pushed after the images, so the chart never names an image that is missing.
+  chart:
+    name: Helm chart
+    needs: manifests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - name: Package and push
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          owner=${GITHUB_REPOSITORY_OWNER,,}
+          version=${GITHUB_REF_NAME#v}
+          sed -i "s|registry: ghcr.io/skywakehq|registry: ghcr.io/$owner|" deploy/helm/skywake/values.yaml
+          helm lint deploy/helm/skywake
+          helm package deploy/helm/skywake --version "$version" --app-version "$version" -d dist
+          echo "$TOKEN" | helm registry login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          helm push "dist/skywake-$version.tgz" "oci://ghcr.io/$owner/charts"
+
+  npm:
+    name: npm (CLI and SDK)
+    needs: binaries
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    # The npm token is given only to the publish steps, never to install or
+    # build steps, and publishing runs no package scripts.
+    env:
+      NPM_CONFIG_PROVENANCE: "true"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          merge-multiple: true
+          path: dist
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Stage the CLI packages
+        working-directory: packages/skywake-cli
+        run: node scripts/stage.mjs "${GITHUB_REF_NAME#v}" ../../dist/skywake-linux-x64 ../../dist/skywake-linux-arm64
+      - name: Build the TypeScript SDK
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts --filter @skywake/sdk...
+          cd sdks/typescript
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+          pnpm build
+      - name: Publish the CLI, platform packages first
+        working-directory: packages/skywake-cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for package in npm/linux-x64 npm/linux-arm64 .; do
+            (cd "$package" && npm publish --access public --ignore-scripts)
+          done
+      - name: Publish the TypeScript SDK
+        working-directory: sdks/typescript
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --no-git-checks --ignore-scripts
+
+  pypi:
+    name: PyPI (Python SDK)
+    needs: binaries
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      # PyPI trusted publishing: no token is stored.
+      id-token: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - run: |
+          cd sdks/python
+          sed -i "s/^version = .*/version = \"${GITHUB_REF_NAME#v}\"/" pyproject.toml
+          uv build --out-dir ../../dist-python
+          cd mcp
+          sed -i "s/^version = .*/version = \"${GITHUB_REF_NAME#v}\"/; s/skywake\[mcp\]==[^\"]*/skywake[mcp]==${GITHUB_REF_NAME#v}/" pyproject.toml
+          uv build --out-dir ../../../dist-python
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: dist-python

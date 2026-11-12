@@ -1,0 +1,9 @@
+target/
+benchmarks/results/
+Cargo.lock
+.claude/
+pnpm-lock.yaml
+.next/
+apps/api/migrations/meta/
+packages/contract/generated/
+apps/docs/generated/

@@ -1,0 +1,46 @@
+# Keeps a release pull request open with the next version and its changelog,
+# from the commit messages (feat:, fix:, feat!:). Merging it tags the release,
+# and the tag starts release.yml.
+name: Release PR
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          # A token that can start workflows, so the tag runs release.yml.
+          token: ${{ secrets.RELEASE_TOKEN }}
+      # The new version is in Cargo.toml; Cargo.lock must agree, or the
+      # release's `cargo build --locked` fails.
+      - if: steps.release.outputs.pr
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+      - if: steps.release.outputs.pr
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - if: steps.release.outputs.pr
+        run: |
+          cargo update --workspace
+          if ! git diff --quiet Cargo.lock; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore: update Cargo.lock for the release"
+            git push
+          fi

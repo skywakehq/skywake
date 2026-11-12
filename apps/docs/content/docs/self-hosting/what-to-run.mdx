@@ -1,0 +1,95 @@
+---
+title: What to run
+icon: Boxes
+description: Run the console on its own, add the docs, or put everything behind one domain.
+---
+
+Each app runs on its own, so you only run the ones you need.
+
+## The console only
+
+This is the default setup: the API, the console and zero-cache, each on its own [port](./docker-compose.mdx#services) or host.
+
+```bash tab="Compose"
+docker compose up -d
+```
+
+```bash tab="Helm"
+helm install skywake oci://ghcr.io/skywakehq/charts/skywake   # docs.enabled is false by default
+```
+
+## Add the docs
+
+The docs don't need any other app. They are served at the root of their port or host,
+or under a path you choose when you build the image.
+
+```bash tab="Compose"
+docker compose --profile docs up -d        # http://localhost:3200
+docker compose --profile docs up -d docs   # the docs alone
+```
+
+```bash tab="Helm"
+helm upgrade skywake oci://ghcr.io/skywakehq/charts/skywake --reuse-values \
+  --set docs.enabled=true
+```
+
+| Build setting       | Default               | Meaning                                                                        |
+| ------------------- | --------------------- | ------------------------------------------------------------------------------ |
+| `DOCS_BASE_PATH`    | `/docs`               | The path they live under. Empty for the root of a host. Compose sets it empty. |
+| `DOCS_ASSET_PREFIX` | base path + `-static` | Where their `/_next` files live, so they never clash with another app's.       |
+
+Both settings are fixed when the image is built: `docker build -f apps/docs/Dockerfile --build-arg DOCS_BASE_PATH= .`
+
+## Topology
+
+Skywake is fast when everything sits close together. A commit makes several bucket requests one after another, and every API write waits on Postgres. Inside one region each trip takes a few milliseconds; across regions it takes 50 to 150.
+
+- Put the agents, the API, the chunk cache, Postgres and the bucket in **one region**.
+- For data in more than one region, such as the EU and the US, run **one install per region**, each with its own bucket and Postgres. An agent talks to the install in its own region.
+- The console can live anywhere. People don't notice a few extra milliseconds.
+
+The API checks this when it starts. If the bucket or Postgres is in another region than `AWS_REGION`, or a round trip takes more than 5 ms, it logs a warning that says what will be slower. Set `SKYWAKE_API_PLACEMENT_CHECK=false` to turn the check off.
+
+## One domain
+
+To serve everything from one domain, put a proxy in front and route by path. For
+example, the docs go at `/docs` and the console at a path such as `/dashboard`,
+each with its files at the same path plus `-static`. Your own site keeps `/`.
+The [chart](./kubernetes.mdx)'s Ingress does this when you turn it on:
+
+```yaml title="values.yaml"
+docs:
+  enabled: true
+  basePath: /docs # must match the image
+console:
+  url: https://example.com
+  basePath: /dashboard # must match the image
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    docs: example.com # your site's host
+    console: example.com
+    api: api.example.com
+    zero: zero.example.com
+```
+
+Build the console for its path with `docker build -f apps/console/Dockerfile --build-arg CONSOLE_BASE_PATH=/dashboard .`.
+In Compose, set `CONSOLE_BASE_PATH` and point `CONSOLE_URL` at your proxy. The
+API and zero-cache serve from the root of their hosts.
+
+You can leave out any app by turning it off. No app needs another, except the
+console, which needs the API.
+
+<Callout>
+  Links from another app to the docs must be plain `<a>` tags, because moving
+  between apps is a full page load.
+</Callout>
+
+## Next
+
+<Cards>
+  <Card href="../security/sso.mdx" />
+  <Card href="../security/api-keys.mdx" />
+  <Card href="/reference/api" />
+</Cards>

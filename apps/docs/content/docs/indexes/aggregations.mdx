@@ -1,0 +1,81 @@
+---
+title: Aggregations
+icon: ChartColumn
+description: Count, sum, average, minimum and maximum over the documents that pass a filter, overall or by group.
+---
+
+Use an aggregation when you want numbers about your documents instead of the documents themselves, such as how many there are per tag or what their prices add up to. You can measure all matching documents together, or split them into groups.
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/aggregate"
+{
+  "measures": { "total": ["count"], "revenue": ["sum", "price"], "cheapest": ["min", "price"] },
+  "groupBy": ["tag"],
+  "filter": { "price": { "gt": 0 } }
+}
+```
+
+```ts tab="TypeScript"
+const groups = await index.aggregate({
+  measures: { total: ["count"], revenue: ["sum", "price"], cheapest: ["min", "price"] },
+  groupBy: ["tag"],
+  filter: { price: { gt: 0 } },
+});
+```
+
+```py tab="Python"
+groups = index.aggregate(
+    {"total": ["count"], "revenue": ["sum", "price"], "cheapest": ["min", "price"]},
+    group_by=["tag"],
+    filter={"price": {"gt": 0}},
+)
+```
+
+The response has one group for each set of `groupBy` values:
+
+```json
+{
+  "groups": [
+    { "key": { "tag": "billing" }, "values": { "total": 42, "revenue": 380, "cheapest": 2 } },
+    { "key": { "tag": "accounts" }, "values": { "total": 7, "revenue": 63, "cheapest": 9 } }
+  ],
+  "performance": { "server_ms": 4, "cache_temperature": "hot", "cache_hit_ratio": 1 },
+  "billing": { "queries": 1 }
+}
+```
+
+## Fields
+
+| Field         | Type                       | Default   | Meaning                                          |
+| ------------- | -------------------------- | --------- | ------------------------------------------------ |
+| `measures`    | `{name: measure}`, 1 to 16 |           | Each comes back under its name in `values`.      |
+| `groupBy`     | up to 8 attributes         | one group | A group per set of values of these attributes.   |
+| `filter`      | [filter](./filters.mdx)    |           | Only documents that pass are measured.           |
+| `consistency` | `strong` or `eventual`     | `strong`  | See [consistency](./consistency-and-limits.mdx). |
+
+## Measures
+
+Each measure is a list: its name, then the attribute it reads, if it needs one.
+
+| Measure              | What it takes                                                           |
+| -------------------- | ----------------------------------------------------------------------- |
+| `["count"]`          | No attribute. Counts the documents.                                     |
+| `["sum", attribute]` | An `int` or `number` attribute.                                         |
+| `["avg", attribute]` | An `int` or `number` attribute.                                         |
+| `["min", attribute]` | An attribute that is not a list, `text`, `bool`, `sparse` or `vectors`. |
+| `["max", attribute]` | The same as `min`.                                                      |
+
+## Groups
+
+- `groupBy` takes [attributes](./schemas.mdx#attribute-types) that are not lists, `text`, `sparse` or `vectors`.
+- Groups come back sorted by key, and you get at most 1000 of them.
+- A group's `key` holds the `groupBy` values its documents share. If the documents have no value for one of those attributes, it is left out of the key.
+
+To run an aggregation and some queries on the same snapshot, send them together as a [multi-query](./consistency-and-limits.mdx#many-requests-on-one-snapshot).
+
+## Next
+
+<Cards>
+  <Card href="./time-travel.mdx" />
+  <Card href="./filters.mdx" />
+  <Card href="/reference/api/indexes/aggregateDocuments" />
+</Cards>

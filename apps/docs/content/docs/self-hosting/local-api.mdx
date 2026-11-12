@@ -1,0 +1,83 @@
+---
+title: Run the API locally
+icon: Terminal
+description: Run only the API from source on your laptop, for development or to try the SDKs.
+---
+
+Use this setup when you want only the API, built from source, on your own machine. It is meant for development or for trying the SDKs.
+
+```bash
+docker compose -f docker/dev/compose.yaml up -d    # Postgres on :5433, object storage on :9100
+
+export SKYWAKE_API_DATABASE=postgres://skywake:skywake-dev@localhost:5433/skywake
+export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
+       AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
+export SKYWAKE_API_ADMIN_TOKEN=$(openssl rand -hex 32)
+
+pnpm install
+pnpm --filter @skywake/engine build
+node apps/api/src/main.ts                           # http://localhost:8080
+```
+
+Run these commands from the repository's root. You need Node 22.18 or later, and Rust to build the engine. The API creates its tables when it starts. Once it is up, `curl localhost:8080/health` returns a response.
+
+The credentials above belong to the dev compose file and are meant for your machine only. For a server, use [Docker Compose](./docker-compose.mdx).
+
+## Make an organization
+
+The admin token is what creates organizations. The response contains the first `admin` key, which is shown only once.
+
+```bash tab="HTTP"
+curl -X POST localhost:8080/v1/orgs \
+  -H "Authorization: Bearer $SKYWAKE_API_ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "acme"}'
+# {"id": "...", "key": "sw_..."}
+```
+
+```ts tab="TypeScript"
+const operator = new Skywake({
+  url: "http://localhost:8080",
+  key: process.env.SKYWAKE_API_ADMIN_TOKEN!,
+});
+const { key } = await operator.createOrg("acme");
+```
+
+Organization names are unique across the whole server, ignoring case, whether the API or the console created them. Creating a second `acme` (or `ACME`) fails with `409` and ``organization `acme` exists``.
+
+Then use the key as `SKYWAKE_KEY` with the [CLI](../agents/cli.mdx), the [SDKs](/reference/sdk) or the [MCP server](../agents/mcp.mdx).
+
+## Settings
+
+| Variable                  | Meaning                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_DATABASE`    | Postgres URL. Required.                                                               |
+| `SKYWAKE_STORE`           | Where data goes: `s3://bucket` or a local folder. Required.                           |
+| `AWS_*`                   | The bucket's keys, region and endpoint. `AWS_ALLOW_HTTP=true` for a local `http` one. |
+| `SKYWAKE_API_ADMIN_TOKEN` | Creates organizations. At least 16 characters.                                        |
+| `SKYWAKE_API_LISTEN`      | Where to listen. `0.0.0.0:8080` by default.                                           |
+
+For every setting, see the API's README.
+
+## A second API
+
+Postgres records which namespaces and indexes exist and where their data is. So if you run a second, separate API on the same Postgres, such as a test run next to your dev server, give it its own database:
+
+```bash
+docker compose -f docker/dev/compose.yaml exec postgres createdb -U skywake skywake2
+export SKYWAKE_API_DATABASE=postgres://skywake:skywake-dev@localhost:5433/skywake2
+export SKYWAKE_API_LISTEN=127.0.0.1:8081
+```
+
+Copies of one API that use the same store share one database. See [Docker Compose](./docker-compose.mdx#update).
+
+## With the console
+
+To also run zero-cache and the web console on `http://localhost:3100`, use `scripts/dev.sh`. It installs Node.js, Rust and Docker if they are missing, then starts all of the above as well.
+
+## Next
+
+<Cards>
+  <Card href="./docker-compose.mdx" />
+  <Card href="../getting-started/first-index.mdx" />
+  <Card href="../security/api-keys.mdx" />
+</Cards>

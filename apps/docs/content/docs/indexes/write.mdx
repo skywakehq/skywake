@@ -1,0 +1,183 @@
+---
+title: Write documents
+icon: PencilLine
+description: Upsert, patch and delete documents by id or by filter, with optional conditions.
+---
+
+To add or replace documents in an index, upsert them to a branch. Each document carries its id, its vectors and its attributes:
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/documents"
+{
+  "documents": [
+    {
+      "id": 1,
+      "vectors": { "embedding": [0.1, 0.2, 0.3] },
+      "attributes": { "tag": "billing", "price": 9 }
+    }
+  ]
+}
+```
+
+```ts tab="TypeScript"
+const index = sky.index("prod/products");
+const count = await index.upsert([
+  { id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { tag: "billing", price: 9 } },
+]);
+```
+
+```py tab="Python"
+index = sky.index("prod/products")
+count = index.upsert([
+    {"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"tag": "billing", "price": 9}},
+])
+```
+
+```bash tab="CLI"
+skywake index upsert prod/products docs.jsonl     # also .csv and .parquet
+```
+
+A write is [durable by the time the request returns](./consistency-and-limits.mdx#consistency). Each document replaces any earlier document with the same id. One request takes at most 1000 documents and 32 MiB. The [SDKs](/reference/sdk/upsert) and the [CLI](/reference/cli/index/upsert) send documents in requests of 1000.
+
+## Documents
+
+| Field        | Type          | Meaning                                                                                                             |
+| ------------ | ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`         | string or int | A string of 1 to 256 characters, or a whole number from 0. A UUID when the schema's `id` is `uuid`.                 |
+| `vectors`    | object        | A vector for every vector column. A column with [`embed`](./embeddings-and-rerank.mdx) also takes text or an image. |
+| `attributes` | object        | Values by attribute name. A nested object is flattened, so `{author: {name}}` becomes `author.name`.                |
+
+Number ids sort before string ids. In a URL, an id made only of digits is read as a number first.
+
+## New attributes
+
+If a document has an attribute the schema doesn't have yet, the attribute is added when you write it. Its type comes from the value: `string`, `number`, `bool`, `strings`, `numbers`, `sparse` (`{indices, values}`) or `vectors` (a list of number lists). It is added on every branch, and nothing is rebuilt.
+
+Other types (`int`, `datetime`, `text` and so on) can't be guessed from a value, so declare those in the [schema](./schemas.mdx) first.
+
+## Delete
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/documents/delete"
+{ "ids": [1, "a"] }
+```
+
+```ts tab="TypeScript"
+await index.delete([1, "a"]);
+```
+
+```py tab="Python"
+index.delete([1, "a"])
+```
+
+```bash tab="CLI"
+skywake index delete-docs prod/products 1 a
+```
+
+Ids that don't exist are ignored.
+
+## Patch
+
+Use a patch when you want to change some attributes of a document and keep the rest. Set an attribute to `null` to remove it. Patching a document that doesn't exist does nothing.
+
+```ts tab="TypeScript"
+await index.patch([{ id: 1, attributes: { price: 8, sale: null } }]);
+```
+
+```py tab="Python"
+index.patch([{"id": 1, "attributes": {"price": 8, "sale": None}}])
+```
+
+## Many changes at once
+
+When several changes must land together, send them in one request. [`POST .../write`](/reference/api/indexes/writeDocuments) applies upserts, patches and deletes as one change, in this order: `deleteBy`, `patchBy`, `upserts`, `patches`, `deletes`.
+
+```json title="POST /v1/indexes/prod%2Fproducts/branches/main/write"
+{
+  "deleteBy": { "tag": { "glob": "old-*" } },
+  "patchBy": { "filter": { "tag": { "eq": "sale" } }, "attributes": { "price": 5 } },
+  "upserts": [{ "id": 2, "vectors": { "embedding": [0.3, 0.2, 0.1] } }],
+  "returnAffectedIds": true
+}
+```
+
+```ts tab="TypeScript"
+const counts = await index.write({
+  deleteBy: { tag: { glob: "old-*" } },
+  patchBy: { filter: { tag: { eq: "sale" } }, attributes: { price: 5 } },
+  upserts: [{ id: 2, vectors: { embedding: [0.3, 0.2, 0.1] } }],
+  returnAffectedIds: true,
+});
+```
+
+```py tab="Python"
+counts = index.write(
+    delete_by={"tag": {"glob": "old-*"}},
+    patch_by={"filter": {"tag": {"eq": "sale"}}, "attributes": {"price": 5}},
+    upserts=[{"id": 2, "vectors": {"embedding": [0.3, 0.2, 0.1]}}],
+    return_affected_ids=True,
+)
+```
+
+| Field                             | Meaning                                                         |
+| --------------------------------- | --------------------------------------------------------------- |
+| `upserts`                         | Documents to write, at most 1000.                               |
+| `patches`                         | `{id, attributes}` each, at most 1000.                          |
+| `deletes`                         | Ids, at most 1000.                                              |
+| `deleteBy`                        | A [filter](./filters.mdx). Deletes every document that matches. |
+| `patchBy`                         | `{filter, attributes}`. Patches every document that matches.    |
+| `upsertIf`, `patchIf`, `deleteIf` | Conditions. See [conditional writes](#conditional-writes).      |
+| `returnAffectedIds`               | Also return the ids changed. Off by default.                    |
+
+It returns `{upserted, patched, deleted}`. With `returnAffectedIds`, it also returns `upserted_ids`, `patched_ids` and `deleted_ids`. Only ids that were there count as deleted, and only those are billed.
+
+The SDKs also have `deleteBy(filter)` (`delete_by` in Python).
+
+## Conditional writes
+
+Use a condition when a write should only apply if the stored document is in a certain state, for example to avoid overwriting newer data. A condition is a filter, checked against each document as it was before the write. A document that doesn't exist has no attributes. A value in the condition may be `{"$ref_new": "<attribute>"}`, which means that attribute of the document being written.
+
+This upsert applies only when the new version is newer than the stored one:
+
+```ts tab="TypeScript"
+await index.write({
+  upserts: [{ id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { version: 4 } }],
+  upsertIf: { version: { lt: { $ref_new: "version" } } },
+});
+```
+
+```py tab="Python"
+index.write(
+    upserts=[{"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"version": 4}}],
+    upsert_if={"version": {"lt": {"$ref_new": "version"}}},
+)
+```
+
+Conditions see exactly the documents the write replaces. If another write lands first, the write is worked out again.
+
+## Read documents back
+
+| Task           | HTTP                                               | TypeScript                 | Python                    |
+| -------------- | -------------------------------------------------- | -------------------------- | ------------------------- |
+| One by id      | `GET .../branches/{branch}/documents/{id}`         | `index.get(id)`            | `index.get(id)`           |
+| A page by id   | `GET .../branches/{branch}/documents?limit&cursor` | `index.documents({limit})` | `index.documents(limit=)` |
+| Every document | the same, page by page                             | `index.allDocuments()`     | `index.iter_documents()`  |
+| Export         | `GET .../branches/{branch}/export`                 | `index.export()`           | `index.export()`          |
+| Export Parquet | `GET .../export?format=parquet`                    | `index.exportParquet()`    | `index.export_parquet()`  |
+
+Pages hold up to 1000 documents (100 by default). Listing reads every segment of the branch, so use it for browsing and exports and keep it off hot paths. An export is one JSON object per line, in no set order.
+
+## Errors
+
+| Status | When                                                                                         |
+| ------ | -------------------------------------------------------------------------------------------- |
+| `400`  | A field doesn't fit the schema. The body names it in `path`, such as `documents[0].vectors`. |
+| `403`  | The index is read-only, or the caller may not write to it.                                   |
+| `413`  | The body is over 32 MiB.                                                                     |
+| `429`  | Too many rows are waiting to be stored or built on the branch. Try again soon.               |
+
+## Next
+
+<Cards>
+  <Card href="./schemas.mdx" />
+  <Card href="./vector.mdx" />
+  <Card href="/reference/api/indexes/upsertDocuments" />
+</Cards>

@@ -1,0 +1,15 @@
+# Keep images small, and keep secrets out of them.
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/*.tsbuildinfo
+**/.env
+**/.env.local
+target
+.git
+.skywake
+benchmarks/results
+benchmarks/datasets/data
+benchmarks/cloud/r2/r2.env
+bindings/node/engine.node

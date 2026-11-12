@@ -1,0 +1,125 @@
+---
+title: Your own cloud
+icon: Cloud
+description: Run Skywake on Kubernetes with the Helm chart, using your own bucket and Postgres.
+---
+
+Use the Helm chart to run Skywake in your own cloud. It runs on Kubernetes and keeps everything in a bucket and a Postgres database that you own.
+
+```bash
+helm install skywake oci://ghcr.io/skywakehq/charts/skywake \
+  --set store=s3://my-bucket \
+  --set aws.region=eu-central-1 \
+  --set console.url=https://console.example.com \
+  --set console.apiUrl=https://api.example.com \
+  --set console.zeroUrl=https://zero.example.com
+```
+
+The chart and its images are published with every release, on `ghcr.io/skywakehq`. On AWS, the [Terraform module](./deploy-aws.mdx) makes the bucket, Postgres and the IAM role, and installs the chart for you.
+
+Your data never leaves your account. [Branches](../filesystem/branches.mdx) and [indexes](../indexes/index.mdx) stay in your bucket, and the control plane stays in your Postgres.
+
+The chart runs these in the cluster:
+
+- `api`: the API. It is stateless, so it scales with the load.
+- `console`: the web console.
+- `zero`: zero-cache, which keeps the console up to date.
+- `cache`: the shared [chunk cache](../filesystem/mount.mdx#skywaked-settings), so each object is read from the bucket only once.
+
+You bring:
+
+- Postgres 15 or newer, with `wal_level=logical`.
+- A bucket: object storage with [conditional writes](../getting-started/install.mdx#where-data-goes).
+- An ingress with HTTPS for the console, the API and zero-cache.
+
+<Steps>
+<Step>
+
+### Make the database roles
+
+Let the chart do it: set `bootstrap.enabled: true` and make a Secret named `skywake-bootstrap` with the owner's `host`, `port`, `user`, `password` and `database`, and the three roles' `api-password`, `console-password` and `zero-password`. A Job then runs `roles.sh` before each install and upgrade.
+
+Or run `docker/postgres/roles.sh` yourself once as the database's owner, with `PGHOST`, `POSTGRES_USER`, `POSTGRES_DB`, `API_DB_PASSWORD`, `CONSOLE_DB_PASSWORD` and `ZERO_DB_PASSWORD` set. On Amazon RDS it grants the `rds_replication` role instead of `REPLICATION`.
+
+</Step>
+<Step>
+
+### Make the Secret
+
+```bash
+kubectl create secret generic skywake \
+  --from-literal=api-database-url=postgres://skywake_api:…@db/skywake \
+  --from-literal=console-database-url=postgres://skywake_console:…@db/skywake \
+  --from-literal=zero-database-url=postgres://skywake_zero:…@db/skywake \
+  --from-literal=admin-token="$(openssl rand -hex 32)" \
+  --from-literal=better-auth-secret="$(openssl rand -hex 32)" \
+  --from-literal=zero-admin-password="$(openssl rand -hex 16)" \
+  --from-literal=cache-token="$(openssl rand -hex 32)" \
+  --from-literal=peer-token="$(openssl rand -hex 32)"
+```
+
+Every key is required except these: the AWS keys, which are read only when `aws.keysFromSecret: true`, and `peer-token`, which is used by [pinned indexes](../indexes/pinning-and-replicas.mdx#self-hosting) and [read leases](../indexes/consistency-and-limits.mdx#consistency).
+
+</Step>
+<Step>
+
+### Install
+
+Run the `helm install` command at the top of this page, then route your ingress to the `skywake-console` (3100), `skywake-api` (8080) and `skywake-zero` (4848) services.
+
+</Step>
+</Steps>
+
+## Bucket access
+
+On EKS, give the pods an IAM role through IRSA instead of keys:
+
+```yaml
+serviceAccount:
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/skywake
+```
+
+The role needs read, write, list and delete access on the bucket. For a bucket outside AWS, set `aws.endpoint`.
+
+## Values
+
+| Value                                              | Default                       | Meaning                                                                             |
+| -------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------- |
+| `images.registry`                                  | `ghcr.io/skywakehq`           | Where the images come from. Point it at your own mirror if you keep one.            |
+| `images.tag`                                       | the chart's version           | Each component's `image` replaces both with a full reference.                       |
+| `bootstrap.enabled`                                | `false`                       | Make the database roles before each install and upgrade.                            |
+| `store`                                            | `s3://skywake`                | Where branches and indexes live.                                                    |
+| `aws.region`                                       | `us-east-1`                   | The bucket's region. Run the cluster and Postgres there too.                        |
+| `aws.endpoint`                                     | empty                         | Empty for AWS.                                                                      |
+| `aws.keysFromSecret`                               | `false`                       | Read access keys from the Secret instead of the pods' identity.                     |
+| `api.autoscaling`                                  | on, 2 to 20 copies at 70% CPU |                                                                                     |
+| `api.databasePool`                                 | `10`                          | Keep max copies × pool under Postgres's `max_connections`.                          |
+| `api.trustProxy`                                   | `1`                           | Proxies in front of the API. See [IP allowlist](../security/ip-allowlist.mdx).      |
+| `console.trustedProxies`                           | `""`                          | The ingress's addresses or CIDRs. See [IP allowlist](../security/ip-allowlist.mdx). |
+| `api.indexCache.gb`                                | `10`                          | Local disk for the index blobs each copy reads. Misses go to the cache nodes.       |
+| `api.env`                                          |                               | More API settings, as environment variables.                                        |
+| `cache.replicas`                                   | `3`                           | Pick once: changing it moves most chunks.                                           |
+| `cache.storage`                                    | `200Gi`                       | Disk per cache node.                                                                |
+| `console.enabled`, `zero.enabled`, `cache.enabled` | `true`                        |                                                                                     |
+
+## Upgrade
+
+To upgrade, install the new chart version and keep your other values. Each chart version runs the images of the same version:
+
+```bash
+helm upgrade skywake oci://ghcr.io/skywakehq/charts/skywake --version 0.2.0 --reset-then-reuse-values
+```
+
+`--reset-then-reuse-values` (Helm 3.14 or newer) keeps the values you set and takes the new version's defaults for the rest. Plain `--reuse-values` would skip settings that the new version adds.
+
+The API and the console update their tables when they start.
+
+## Next
+
+<Cards>
+  <Card href="./deploy-aws.mdx" />
+  <Card href="./what-to-run.mdx" />
+  <Card href="./docker-compose.mdx" />
+  <Card href="../security/encryption-keys.mdx" />
+</Cards>

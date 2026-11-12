@@ -1,0 +1,99 @@
+---
+title: Search indexes
+icon: Layers
+description: Run vector, full-text and hybrid search over documents kept in object storage, with branches.
+---
+
+Use an index when you want to search your documents by vector, by text, or both. The example below creates an index, writes one document and queries it.
+
+```ts tab="TypeScript"
+import { Skywake } from "@skywake/sdk";
+
+const sky = new Skywake({ url: "http://localhost:8080", key: process.env.SKYWAKE_KEY! });
+
+const products = await sky.indexes.create("prod/products", {
+  vectors: [{ name: "embedding", dims: 3 }],
+  attributes: [{ name: "tag", type: "string" }],
+});
+await products.upsert([
+  { id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { tag: "billing" } },
+]);
+const hits = await products.query({
+  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
+  topK: 5,
+});
+```
+
+```py tab="Python"
+import os
+
+from skywake import Skywake
+
+sky = Skywake("http://localhost:8080", os.environ["SKYWAKE_KEY"])
+
+products = sky.indexes.create(
+    "prod/products",
+    vectors=[{"name": "embedding", "dims": 3}],
+    attributes=[{"name": "tag", "type": "string"}],
+)
+products.upsert([{"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"tag": "billing"}}])
+hits = products.query("embedding", [0.1, 0.2, 0.3], top_k=5)
+```
+
+```bash tab="CLI"
+skywake index create prod/products --vector embedding:3 --attr tag:string
+echo '{"id": 1, "embedding": [0.1, 0.2, 0.3], "tag": "billing"}' | skywake index upsert prod/products
+skywake index query prod/products --vector '[0.1, 0.2, 0.3]' -k 5
+```
+
+## What an index is
+
+An index holds **documents**. Each document has an `id`, one vector for each vector column, and attributes.
+
+- **Vector columns**: An index can have up to 8. Each one has `dims`, a `metric` and an element type, and none of them can change after you create the index.
+- **Attributes**: Up to 64 typed fields. You can filter, order and aggregate by them, search them with BM25 (`text`), or score them (`sparse`, `vectors`).
+- **Branches**: Every index starts with a `main` branch. Fork a branch when you want a copy that sees only its own writes. Forking copies nothing.
+- **Versions**: Every change makes a new version of the branch. You can fork or restore an older version.
+- **Shards**: Documents are split by id over 1 to 256 shards, which are written and searched in parallel. You set the number when you create the index.
+
+An index needs at least one vector column or one `text` attribute.
+
+## How it sits on object storage
+
+Object storage is the source of truth. Each write is stored as a segment, and it is durable by the time the request returns. A **build** groups the rows written so far into clusters, so that a vector query reads a few clusters instead of every row. Builds run in the background, and you can also [start one](./vector.mdx#builds) yourself.
+
+Rows written since the last build are searched exactly, so your queries see them without waiting for a build. Reads go through a memory cache and a disk cache. Each response tells you where its reads came from in `performance.cache_temperature` (`hot`, `warm` or `cold`).
+
+Any API server can serve any index. If you want an index to stay open and on disk on reserved servers, [pin](./pinning-and-replicas.mdx) it.
+
+## Names and environments
+
+The part of an index's name before the first `/` is its environment.
+
+| Name            | Environment |
+| --------------- | ----------- |
+| `prod/products` | `prod`      |
+| `team/code`     | `team`      |
+| `products`      | `default`   |
+
+- An environment has no region. Each index picks its own when it is created, and it can't move later. If the environment does not exist yet, it is made the first time you use it.
+- [API keys](../security/api-keys.mdx) match the whole name. A key for `team/*` reaches `team/code`, and a key for `prod/*` does not.
+- What a key can do with an index depends on its [role](../security/api-keys.mdx#roles). You need `admin` to create one.
+
+In a URL, encode `/` as `%2F`, as in `/v1/indexes/prod%2Fproducts/branches/main/query`. The SDKs do this for you.
+
+<Cards>
+  <Card title="Create an index" href="./create.mdx" />
+  <Card title="Write documents" href="./write.mdx" />
+  <Card title="Schemas and types" href="./schemas.mdx" />
+  <Card title="Vector search" href="./vector.mdx" />
+  <Card title="Full-text search" href="./full-text.mdx" />
+  <Card title="Hybrid search" href="./hybrid.mdx" />
+  <Card title="Sparse and late interaction" href="./sparse-and-late-interaction.mdx" />
+  <Card title="Filters" href="./filters.mdx" />
+  <Card title="Aggregations" href="./aggregations.mdx" />
+  <Card title="Time travel and branches" href="./time-travel.mdx" />
+  <Card title="Embeddings and rerank" href="./embeddings-and-rerank.mdx" />
+  <Card title="Pinning and replicas" href="./pinning-and-replicas.mdx" />
+  <Card title="Consistency and limits" href="./consistency-and-limits.mdx" />
+</Cards>

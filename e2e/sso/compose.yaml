@@ -1,0 +1,15 @@
+# A local identity provider for the single sign-on tests: Keycloak speaks
+# both SAML and OIDC. `docker compose -f e2e/sso/compose.yaml up -d`.
+name: skywake-sso
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: start-dev --import-realm --http-port 8380
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8380
+      KC_HEALTH_ENABLED: "true"
+    ports: ["8380:8380"]
+    volumes: ["./realm.json:/opt/keycloak/data/import/realm.json:ro"]

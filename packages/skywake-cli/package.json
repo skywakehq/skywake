@@ -1,0 +1,42 @@
+{
+  "name": "skywake",
+  "version": "0.1.0",
+  "description": "The skywake command: mount S3 as a fast local disk, give every AI agent its own copy in milliseconds, and merge the changes back.",
+  "keywords": [
+    "skywake",
+    "cli",
+    "ai-agents",
+    "filesystem",
+    "fuse",
+    "s3",
+    "object-storage",
+    "copy-on-write",
+    "branching",
+    "sandbox",
+    "workspace"
+  ],
+  "homepage": "https://skywake.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skywakehq/skywake.git",
+    "directory": "packages/skywake-cli"
+  },
+  "bugs": "https://github.com/skywakehq/skywake/issues",
+  "license": "Apache-2.0",
+  "bin": {
+    "skywake": "bin/skywake.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "optionalDependencies": {
+    "@skywake/cli-linux-arm64": "0.1.0",
+    "@skywake/cli-linux-x64": "0.1.0"
+  }
+}

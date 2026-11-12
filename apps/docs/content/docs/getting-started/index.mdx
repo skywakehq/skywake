@@ -1,0 +1,54 @@
+---
+title: What is Skywake
+icon: Sparkles
+description: Skywake is a versioned filesystem and a set of search indexes, both stored in one bucket.
+---
+
+Skywake keeps all of its data in object storage. Your machines hold only a cache, so you can throw it away at any time and it is rebuilt from the bucket. The bucket looks like this:
+
+```text
+chunks/<blake3>          file content, split at content-defined boundaries
+commits/<blake3>         commits
+objects/<blake3>         packs of trees (directories)
+refs/<branch>            the branch head: its current commit
+```
+
+## The filesystem
+
+A branch is a whole folder tree with its history. Forking a branch writes one small object. So if a hundred agents work from the same 20 GB environment, you store about 20 GB plus whatever they change.
+
+You can work with a branch in several ways:
+
+- With the CLI, [`skywake commit`](/reference/cli/commit) saves a folder as a branch and [`skywake checkout`](/reference/cli/checkout) restores one.
+- On Linux, `skywaked` can [mount](../filesystem/mount.mdx) a branch as a live folder. Files are fetched chunk by chunk as they are read, and changes are saved every 2 seconds.
+- Through the API, you can list, read, search and commit files over HTTP without mounting anything. The [SDKs](/reference/sdk) and the [MCP server](../agents/mcp.mdx) use this.
+
+When a fork is ready, you [merge](../filesystem/diff-and-merge.mdx) it back. The merge is three-way, and text files are merged line by line. If two sides changed the same lines, the merge reports the conflict for each file and saves nothing.
+
+## Search indexes
+
+An index holds documents with vector columns and attributes. Through the API you can run nearest-neighbour, full-text and filtered queries on it. Indexes have branches too: you can fork one and write to the fork, and `main` never sees those writes. See [search indexes](../indexes/index.mdx), or make [your first index](./first-index.mdx).
+
+## How it sits on object storage
+
+- Files are cut into chunks (FastCDC, about 1 MiB on average), compressed with zstd and named by their BLAKE3 hash. Identical data is stored only once, across every file and branch.
+- Folders are stored as trees named by the hash of their contents. A diff can therefore skip every folder that didn't change.
+- Branch heads are the only objects that ever change. Moving a head is a conditional write (`If-Match`), so when two writers race, exactly one of them wins. Skywake needs no other locking.
+- Any object storage with conditional writes works, such as AWS S3, Cloudflare R2 or RustFS. A local folder works too.
+
+## The pieces
+
+| Piece        | What it does                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `skywake`    | The CLI: branches, commits, mounts, and `skywake index` for search indexes.                                       |
+| `skywaked`   | One daemon per Linux machine. It runs every mount and its chunk cache.                                            |
+| API          | Organizations, keys, namespaces, branches, files, merges, sessions and indexes. Postgres holds the control plane. |
+| Console      | The web app: sign-in, the fork tree, merges, API keys.                                                            |
+| SDKs and MCP | Clients for the API, and an MCP server for agents.                                                                |
+
+## Next
+
+<Cards>
+  <Card href="./install.mdx" />
+  <Card href="./first-branch.mdx" />
+</Cards>

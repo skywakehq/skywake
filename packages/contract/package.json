@@ -1,0 +1,26 @@
+{
+  "name": "@skywake/contract",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Every route of the Skywake API, with its inputs and outputs, in Zod. The server implements it; the OpenAPI document and the SDKs come from it.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "openapi": "node emit.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

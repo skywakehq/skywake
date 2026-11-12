@@ -1,0 +1,49 @@
+{
+  "name": "@skywake/sdk",
+  "version": "0.1.0",
+  "description": "Skywake for TypeScript: a filesystem with branches for AI agents, and vector, full-text and hybrid search, on your own S3 bucket.",
+  "keywords": [
+    "skywake",
+    "ai-agents",
+    "agents",
+    "filesystem",
+    "s3",
+    "object-storage",
+    "copy-on-write",
+    "branching",
+    "vector-search",
+    "full-text-search",
+    "hybrid-search",
+    "bm25",
+    "embeddings",
+    "rag",
+    "mcp"
+  ],
+  "homepage": "https://skywake.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skywakehq/skywake.git",
+    "directory": "sdks/typescript"
+  },
+  "bugs": "https://github.com/skywakehq/skywake/issues",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test \"test/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.14.0"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "openapi-typescript": "^7.8.0",
+    "typescript": "^5.8.3"
+  }
+}

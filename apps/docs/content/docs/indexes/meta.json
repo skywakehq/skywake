@@ -1,0 +1,23 @@
+{
+  "title": "Search indexes",
+  "icon": "Search",
+  "pages": [
+    "index",
+    "create",
+    "write",
+    "schemas",
+    "---Query---",
+    "vector",
+    "full-text",
+    "hybrid",
+    "sparse-and-late-interaction",
+    "filters",
+    "aggregations",
+    "---Data---",
+    "time-travel",
+    "sync-with-branch",
+    "embeddings-and-rerank",
+    "pinning-and-replicas",
+    "consistency-and-limits"
+  ]
+}

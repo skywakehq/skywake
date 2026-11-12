@@ -1,0 +1,16 @@
+{
+  "name": "@skywake/config",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Shared TypeScript and ESLint settings.",
+  "exports": {
+    "./node.json": "./node.json",
+    "./nextjs.json": "./nextjs.json",
+    "./eslint.mjs": "./eslint.mjs"
+  },
+  "dependencies": {
+    "eslint": "^9",
+    "eslint-config-next": "16.4.5"
+  }
+}

@@ -1,0 +1,95 @@
+---
+title: The CLI from agents
+icon: Bot
+description: Give each agent a fork and a folder, then merge what worked.
+---
+
+When your agents run shell commands, give each one its own fork of the branch and a folder to work in. When an agent's work is good, merge its fork back.
+
+```bash
+skywake mount main /work/agent-37 --fork agents/37
+# ... the agent works in /work/agent-37 ...
+skywake commit agents/37 /work/agent-37 -m "fix auth"
+skywake unmount /work/agent-37
+skywake merge agents/37 main
+```
+
+## One fork per agent
+
+When each agent has its own fork, no agent ever waits for another. [`mount --fork NAME`](/reference/cli/mount) forks and mounts in one step, through `skywaked`. If you don't use a mount, [check out and commit](../getting-started/first-branch.mdx) instead:
+
+```bash
+skywake new agents/37 --from main
+skywake checkout agents/37 ./agent-37
+skywake commit agents/37 ./agent-37 -m "fix auth"
+```
+
+## A working folder through the API
+
+With an API key, `checkout` and `commit` go through the API. The agent needs no bucket keys, no mount and no `skywaked`. This is how you give an agent a real folder on macOS.
+
+```bash
+export SKYWAKE_URL=https://api.example.com SKYWAKE_KEY=sw_... SKYWAKE_NAMESPACE=prod/app
+
+skywake checkout agents/37 ./agent-37      # the folder must be empty or new
+# ... the agent works in ./agent-37 ...
+skywake commit agents/37 ./agent-37 -m "fix auth"
+```
+
+Make the fork first, with the [SDKs](../filesystem/branches.mdx#forks), the [MCP server](./mcp.mdx) or the API. A [`write` key](../security/api-keys.mdx#roles) for the namespace is enough for all of this.
+
+Here is how the two commands work together:
+
+- `checkout` writes a `.skywake-checkout` file in the folder. It records the namespace, branch and commit, and a hash of each file. This file is never sent to the branch.
+- `commit` compares the folder with that file and sends only what changed. Files you removed from the folder are deleted on the branch.
+- If the branch moved since the checkout, `commit` warns you and puts your changes on top.
+- `commit` refuses a folder that was checked out from another branch. To send every file instead, delete `.skywake-checkout`. Then anything the branch has that the folder lacks is deleted from the branch.
+
+The CLI takes this path when you set `SKYWAKE_URL` and `SKYWAKE_KEY` and don't pass `--store` or set `SKYWAKE_STORE`. You can also use the flags `--url`, `--key` and `--namespace`.
+
+This path has some limits:
+
+| Limit             | What happens                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| Symlinks          | Checked out as symlinks, but a new or changed one is left out of the commit, with a warning.         |
+| Large first sends | One commit holds at most 10,000 changes and 32 MiB inline, so a big import lands as several commits. |
+| Files over 1 MiB  | Uploaded as parts first, then joined in the commit.                                                  |
+
+From TypeScript in Node, `branch.checkout(dir)` and `branch.commitFolder(dir, {message})` do the same job, with one difference: `commitFolder` sends every file each time, deletes nothing, and leaves out `.git`, symlinks and empty folders.
+
+## Output for scripts
+
+If a script reads the output, branch commands are easy to parse because they print one line per item. [`skywake branches`](/reference/cli/branches) prints one name per line, and [`skywake diff`](/reference/cli/diff) prints one path per line after `+`, `-` or `~`. A failed command exits non-zero. That includes a [merge with conflicts](../filesystem/diff-and-merge.mdx#merge), which prints `conflict: PATH` for each conflicting path.
+
+[`skywake index`](/reference/cli/index) commands print a table. Add `--json` to get the API's JSON instead:
+
+```bash
+skywake index query prod/docs --vector-file q.json -k 5 --json
+```
+
+[`skywake index delete`](/reference/cli/index/delete) asks for confirmation first. When it doesn't run at a terminal, pass `--yes`.
+
+## Settings
+
+| Variable                             | Used by                                                                                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `SKYWAKE_STORE`                      | Branch commands: `s3://bucket`, a folder, or `skywake://NAMESPACE`.                                                                                                |
+| `SKYWAKE_ROOT`                       | Where to find `skywaked`'s socket.                                                                                                                                 |
+| `SKYWAKE_URL`, `SKYWAKE_KEY`         | `skywake index`, and `checkout` and `commit` [through the API](#a-working-folder-through-the-api). For `index`, `SKYWAKE_URL` defaults to `http://localhost:8080`. |
+| `SKYWAKE_NAMESPACE`                  | `checkout` and `commit` through the API: the namespace, such as `prod/app`.                                                                                        |
+| `SKYWAKE_API_URL`, `SKYWAKE_API_KEY` | A `skywake://` store: the API that hands out [scoped credentials](../security/scoped-credentials.mdx).                                                             |
+| `SKYWAKE_STORE_ACCESS`               | A `skywake://` store: `write` (the default) or `read` credentials.                                                                                                 |
+
+## Many agents on one machine
+
+To run several agents on one machine, run one `skywaked` and add each agent's user to its group (`--group`). Each agent can then mount over folders it owns, and an access file says which branches each one may read or write. Don't give the agents any store keys, so that every change goes through the daemon. See [sharing a machine](../filesystem/mount.mdx#sharing-a-machine).
+
+Agents that don't mount can use the [MCP server](./mcp.mdx) or the [SDKs](/reference/sdk). To give each agent its own search index as well, fork the index along with the branch. See [keep an index in step with a branch](../indexes/sync-with-branch.mdx).
+
+## Next
+
+<Cards>
+  <Card href="../filesystem/branches.mdx" />
+  <Card href="../self-hosting/docker-compose.mdx" />
+  <Card href="/reference/cli" />
+</Cards>

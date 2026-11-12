@@ -1,0 +1,21 @@
+{
+  "name": "@skywake/sso-e2e",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Single sign-on through the console, end to end: a local Keycloak for SAML and OIDC, and a forged identity provider for the checks on SAML responses.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "e2e": "./run.sh",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@types/node": "^24.10.1",
+    "@xmldom/xmldom": "^0.9.12",
+    "typescript": "^5.9.3",
+    "xml-crypto": "^6.4.0"
+  }
+}

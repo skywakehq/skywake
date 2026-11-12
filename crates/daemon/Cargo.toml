@@ -1,0 +1,30 @@
+[package]
+name = "skywake-daemon"
+description = "skywaked, which serves every Skywake mount on a machine, and the protocol to talk to it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "skywaked"
+path = "src/main.rs"
+
+[dependencies]
+metrics.workspace = true
+tracing.workspace = true
+skywake-cache.workspace = true
+skywake-core.workspace = true
+skywake-mount.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+futures.workspace = true
+libc.workspace = true
+object_store.workspace = true
+postcard.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+tempfile.workspace = true

@@ -1,0 +1,33 @@
+[package]
+name = "skywake-cli"
+description = "The `skywake` command."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "skywake"
+path = "src/main.rs"
+
+[dependencies]
+metrics.workspace = true
+tracing.workspace = true
+skywake-core.workspace = true
+skywake-daemon.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+bytes.workspace = true
+base64 = "0.22.1"
+blake3.workspace = true
+csv.workspace = true
+parquet = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "rustls"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["json", "rustls"] }
+serde_json.workspace = true
+tempfile.workspace = true
+tokio.workspace = true

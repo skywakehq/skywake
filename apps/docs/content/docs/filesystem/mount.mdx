@@ -1,0 +1,101 @@
+---
+title: Mount
+icon: HardDrive
+description: Serve a branch as a live folder on Linux, without downloading it first.
+---
+
+Mount a branch when you want to work on it as an ordinary folder on a Linux machine. Nothing is downloaded before you start.
+
+```bash
+sudo skywaked &                         # once per machine
+skywake mount agent-37 /work
+# ... work in /work; changes reach the bucket every 2 seconds ...
+skywake commit agent-37 /work -m "fix auth"
+skywake unmount /work
+```
+
+Mounts run in [`skywaked`](../getting-started/install.mdx#the-daemon), one daemon per Linux machine. The `skywake` command sends it requests over a Unix socket. The listing of every folder arrives with the mount. File contents are read chunk by chunk through a cache on local disk.
+
+## Flags
+
+| Flag              | What it does                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--fork NAME`     | [Fork](./branches.mdx#forks) the branch as `NAME` first, and mount the fork.                                |
+| `--read-only`     | Mount the current commit read-only, without claiming the branch. Any number of readers can do this at once. |
+| `--owner UID:GID` | Who owns the branch's files in the mount.                                                                   |
+| `--allow-other`   | Let other users use the mount too. Permission bits still apply.                                             |
+| `--vm`            | Serve the branch to a VM over a vhost-user socket instead of a folder.                                      |
+
+## Mount commands
+
+| Command                                                | What it does                                                                 |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| [`skywake mounts`](/reference/cli/mounts)              | List the folders `skywaked` has mounted.                                     |
+| [`skywake status`](/reference/cli/status)              | Show each mount's save lag, unsaved bytes and last error, and the chunk cache. |
+| [`skywake sync /work`](/reference/cli/sync)            | Save now. Returns when the changes are in the bucket.                        |
+| [`skywake commit BRANCH /work`](/reference/cli/commit) | Save the mount as a named commit.                                            |
+| [`skywake unmount /work`](/reference/cli/unmount)      | Save the last changes and unmount. Fails if a process still uses the folder. |
+
+## Moving a branch
+
+Mounting a branch claims it. If the same branch is mounted on another machine, that mount finds out at its next save (or within 5 seconds if it is idle) and turns read-only. Writes to it fail with `EROFS`, and `skywake mounts` shows it as moved. Its unsaved changes are kept so you can [recover](./autosave.mdx) them. If you unmount first, the move loses nothing.
+
+## skywaked settings
+
+Each setting can be given as a flag or as an environment variable.
+
+| Flag               | Env                      | Default                                                   | Meaning                                                                 |
+| ------------------ | ------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `--store`          | `SKYWAKE_STORE`          | `.skywake`                                                | The store, as for the CLI.                                              |
+| `--root`           | `SKYWAKE_ROOT`           | `/var/lib/skywake` as root, else `~/.local/state/skywake` | Socket, chunk cache and local files.                                    |
+| `--save-every-ms`  | `SKYWAKE_SAVE_EVERY_MS`  | `2000`                                                    | How often each mount saves.                                             |
+| `--head-check-ms`  | `SKYWAKE_HEAD_CHECK_MS`  | `5000`                                                    | How often an idle mount checks whether another machine took its branch. |
+| `--cache-gb`       | `SKYWAKE_CACHE_GB`       | `10`                                                      | Disk for the chunk cache.                                               |
+| `--mount-local-gb` | `SKYWAKE_MOUNT_LOCAL_GB` | `20`                                                      | Disk per mount for unsaved and not-yet-freed files. `0` is no limit.    |
+| `--cache-nodes`    | `SKYWAKE_CACHE_NODES`    |                                                           | Shared cache nodes to ask before the bucket. One address that reaches any of them is enough, such as a Kubernetes service: the rest are found from it. |
+| `--cache-token`    | `SKYWAKE_CACHE_TOKEN`    |                                                           | The cache nodes' token.                                                 |
+| `--log-copies`     | `SKYWAKE_LOG_COPIES`     | `3`                                                       | Cache nodes, each in its own zone, that hold a write before `fsync` returns. `0` waits for the bucket.|
+| `--heads`          | `SKYWAKE_HEADS`          | `bucket`                                                  | Where branch heads live. `tier`: the cache nodes own them and copy them to the bucket. Needs cache nodes started with `--url` or `--peers`. |
+| `--group`          | `SKYWAKE_GROUP`          |                                                           | Members of this group may use `skywaked` too.                           |
+| `--access`         | `SKYWAKE_ACCESS`         | `access` in the root                                      | Which members may read or write which branches.                         |
+| `--metrics-listen` | `SKYWAKE_METRICS_LISTEN` |                                                           | Serve Prometheus metrics at `/metrics`.                                 |
+
+Run `skywaked` as root for the best write speed. The root folder must belong to the user who runs `skywaked`.
+
+## Sharing a machine
+
+Several people can share one `skywaked`. With `--group`, members of that group may mount over folders they own and manage their own mounts. An access file says which branches each of them may use:
+
+```text
+# who         how    which branches
+user:ann      write  agents/*
+group:ci      read   *
+```
+
+- `write` includes `read`.
+- `agents/*` matches `agents/x` but not `agentsx`.
+- A read-only mount needs `read`. A writable mount or a commit needs `write`. `new --from` and `merge` need `read` on the source and `write` on the target.
+
+The file must belong to root or to the daemon's user, and no one else may be able to write to it. Without an access file, every member may use every branch.
+
+## Build output
+
+Inside a mount, the folders that [`.skywakeignore`](../getting-started/first-branch.mdx#leave-files-out) names (`/target` and `/node_modules` by default) are symlinks to folders on local disk. That way builds run at disk speed. These folders belong to the mount's owner and are not kept after you unmount.
+
+## VMs
+
+To give a branch to a virtual machine instead of a folder, mount it on a socket with `--vm`:
+
+```bash
+skywake mount agent-37 /run/vm.sock --vm
+```
+
+Point the hypervisor at the socket (QEMU: `-chardev socket,id=fs,path=/run/vm.sock -device vhost-user-fs-pci,chardev=fs,tag=skywake`, with shared guest memory). Then, inside the VM, run `mount -t virtiofs skywake /mnt`.
+
+## Next
+
+<Cards>
+  <Card href="./autosave.mdx" />
+  <Card href="../agents/cli.mdx" />
+  <Card href="/reference/cli/mount" />
+</Cards>

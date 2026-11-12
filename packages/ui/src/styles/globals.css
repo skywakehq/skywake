@@ -1,0 +1,454 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@source "../components";
+@source "../hooks";
+@source "../lib";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Paper and ink, with one signal colour for focus and calls to action.
+   Other colour is kept for meaning: red for a conflict or a rejection,
+   green for "merged", amber for waiting. Corners are softly rounded,
+   the same in every app. */
+:root {
+  --radius: 0.625rem;
+  --background: #f6f5f1;
+  --foreground: #161614;
+  --card: #fbfaf7;
+  --card-foreground: #161614;
+  --popover: #fbfaf7;
+  --popover-foreground: #161614;
+  --primary: #161614;
+  --primary-foreground: #f6f5f1;
+  --secondary: #ecebe5;
+  --secondary-foreground: #161614;
+  --muted: #ecebe5;
+  --muted-foreground: #6e6d66;
+  --accent: #ecebe5;
+  --accent-foreground: #161614;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: rgb(22 22 20 / 0.12);
+  --input: rgb(22 22 20 / 0.16);
+  --ring: #e5482a;
+  --sidebar: #efeee9;
+  --sidebar-foreground: #3a3934;
+  --sidebar-primary: #161614;
+  --sidebar-primary-foreground: #f6f5f1;
+  --sidebar-accent: rgb(22 22 20 / 0.06);
+  --sidebar-accent-foreground: #161614;
+  --sidebar-border: rgb(22 22 20 / 0.09);
+  --sidebar-ring: #e5482a;
+
+  --signal: #e5482a;
+  --focus-ring: var(--signal);
+  --hover: rgb(22 22 20 / 0.04);
+  --active: rgb(22 22 20 / 0.07);
+  --selected: rgb(22 22 20 / 0.07);
+  --tint: rgb(22 22 20 / 0.08);
+  --tint-hover: rgb(22 22 20 / 0.065);
+  --faint: #a3a29b;
+  --line-strong: rgb(22 22 20 / 0.18);
+  --green: #3f7a4f;
+  --amber: #a26a1c;
+
+  /* Fluid Functionalism: popup surfaces, their depth, the type steps and layers. */
+  --fluid-accent: var(--signal);
+  --destructive-light: #fef2f2;
+  --overlay: 22 22 20;
+  --surface-1: #f9f8f4;
+  --surface-2: #fbfaf7;
+  --surface-3: #fdfcfa;
+  --surface-4: #fdfcfa;
+  --surface-5: #fdfcfa;
+  --surface-6: #fdfcfa;
+  --surface-7: #fdfcfa;
+  --surface-8: #fdfcfa;
+  --shadow-color: rgb(22 22 20 / 0.06);
+  --shadow-1: 0 0 0 1px var(--shadow-color);
+  --shadow-2: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color);
+  --shadow-3: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color);
+  --shadow-4: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color);
+  --shadow-5: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color);
+  --shadow-6: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color);
+  --shadow-7: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color);
+  --shadow-8: 0 0 0 1px var(--shadow-color), 0 1px 1px -0.5px var(--shadow-color),
+    0 3px 3px -1.5px var(--shadow-color), 0 6px 6px -3px var(--shadow-color),
+    0 12px 12px -6px var(--shadow-color), 0 24px 24px -12px var(--shadow-color),
+    0 48px 48px -24px var(--shadow-color), 0 96px 96px -48px var(--shadow-color);
+  --fs-display: 28px;
+  --lh-display: 34px;
+  --fs-display-compact: 24px;
+  --lh-display-compact: 30px;
+  --fs-title: 16px;
+  --lh-title: 22px;
+  --fs-title-compact: 15px;
+  --lh-title-compact: 20px;
+  --fs-subtitle: 14px;
+  --lh-subtitle: 20px;
+  --fs-subtitle-compact: 13px;
+  --lh-subtitle-compact: 18px;
+  --fs-body: 13px;
+  --lh-body: 20px;
+  --fs-body-compact: 12px;
+  --lh-body-compact: 18px;
+  --fs-caption: 12px;
+  --lh-caption: 16px;
+  --fs-caption-compact: 11px;
+  --lh-caption-compact: 14px;
+  --fs-micro: 11px;
+  --lh-micro: 14px;
+  --fs-micro-compact: 10px;
+  --lh-micro-compact: 12px;
+  --z-sticky: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-tooltip: 70;
+}
+
+/* Dark is true black, with neutral greys on top. */
+.dark {
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #0e0e0e;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #000000;
+  --secondary: #141414;
+  --secondary-foreground: #ededed;
+  --muted: #141414;
+  --muted-foreground: #8a8a8a;
+  --accent: #171717;
+  --accent-foreground: #ededed;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: rgb(255 255 255 / 0.1);
+  --input: rgb(255 255 255 / 0.14);
+  --ring: #ff6a45;
+  --sidebar: #0a0a0a;
+  --sidebar-foreground: #b5b5b5;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: rgb(255 255 255 / 0.07);
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: rgb(255 255 255 / 0.08);
+  --sidebar-ring: #ff6a45;
+
+  --signal: #ff6a45;
+  --hover: rgb(255 255 255 / 0.06);
+  --active: rgb(255 255 255 / 0.1);
+  --selected: rgb(255 255 255 / 0.09);
+  --tint: rgb(255 255 255 / 0.16);
+  --tint-hover: rgb(255 255 255 / 0.12);
+  --faint: #5c5c5c;
+  --line-strong: rgb(255 255 255 / 0.16);
+  --green: #79b88a;
+  --amber: #d9a55a;
+
+  --destructive-light: #2a0b0b;
+  --overlay: 255 255 255;
+  --surface-1: #0a0a0a;
+  --surface-2: #0e0e0e;
+  --surface-3: #121212;
+  --surface-4: #161616;
+  --surface-5: #1a1a1a;
+  --surface-6: #1e1e1e;
+  --surface-7: #222222;
+  --surface-8: #262626;
+  --shadow-1: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  --shadow-2: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4);
+  --shadow-3: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4);
+  --shadow-4: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4),
+    0 6px 6px -3px rgb(0 0 0 / 0.4);
+  --shadow-5: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4),
+    0 6px 6px -3px rgb(0 0 0 / 0.4), 0 12px 12px -6px rgb(0 0 0 / 0.4);
+  --shadow-6: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4),
+    0 6px 6px -3px rgb(0 0 0 / 0.4), 0 12px 12px -6px rgb(0 0 0 / 0.4),
+    0 24px 24px -12px rgb(0 0 0 / 0.4);
+  --shadow-7: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4),
+    0 6px 6px -3px rgb(0 0 0 / 0.4), 0 12px 12px -6px rgb(0 0 0 / 0.4),
+    0 24px 24px -12px rgb(0 0 0 / 0.4), 0 48px 48px -24px rgb(0 0 0 / 0.4);
+  --shadow-8: inset 0 1px 0 0 rgb(255 255 255 / 0.04), inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    0 1px 1px -0.5px rgb(0 0 0 / 0.4), 0 3px 3px -1.5px rgb(0 0 0 / 0.4),
+    0 6px 6px -3px rgb(0 0 0 / 0.4), 0 12px 12px -6px rgb(0 0 0 / 0.4),
+    0 24px 24px -12px rgb(0 0 0 / 0.4), 0 48px 48px -24px rgb(0 0 0 / 0.4),
+    0 96px 96px -48px rgb(0 0 0 / 0.4);
+}
+
+/* One scale for the console, the docs and the site: a 13.5px root, so text
+   and spacing (both in rem) are as dense everywhere as in the console. */
+@theme inline {
+  --text-xs: 11.5px;
+  --text-xs--line-height: 16px;
+  --text-sm: 12.5px;
+  --text-sm--line-height: 18px;
+  --text-base: 13.5px;
+  --text-base--line-height: 20px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-signal: var(--signal);
+  --color-hover: var(--hover);
+  --color-active: var(--active);
+  --color-selected: var(--selected);
+  --color-tint: var(--tint);
+  --color-tint-hover: var(--tint-hover);
+  --color-faint: var(--faint);
+  --color-line: var(--border);
+  --color-line-strong: var(--line-strong);
+  --color-red: var(--destructive);
+  --color-green: var(--green);
+  --color-amber: var(--amber);
+  --color-bg: var(--background);
+  --color-fg: var(--foreground);
+  --color-panel: var(--sidebar);
+  --color-raised: var(--card);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 1.8);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* The type scale for interface text. */
+  --text-display: var(--fs-display);
+  --text-display--line-height: var(--lh-display);
+  --text-title: var(--fs-title);
+  --text-title--line-height: var(--lh-title);
+  --text-subtitle: var(--fs-subtitle);
+  --text-subtitle--line-height: var(--lh-subtitle);
+  --text-body: var(--fs-body);
+  --text-body--line-height: var(--lh-body);
+  --text-caption: var(--fs-caption);
+  --text-caption--line-height: var(--lh-caption);
+  --text-micro: var(--fs-micro);
+  --text-micro--line-height: var(--lh-micro);
+
+  --color-destructive-light: var(--destructive-light);
+  --color-fluid-accent: var(--fluid-accent);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-4: var(--surface-4);
+  --color-surface-5: var(--surface-5);
+  --color-surface-6: var(--surface-6);
+  --color-surface-7: var(--surface-7);
+  --color-surface-8: var(--surface-8);
+  --shadow-surface-1: var(--shadow-1);
+  --shadow-surface-2: var(--shadow-2);
+  --shadow-surface-3: var(--shadow-3);
+  --shadow-surface-4: var(--shadow-4);
+  --shadow-surface-5: var(--shadow-5);
+  --shadow-surface-6: var(--shadow-6);
+  --shadow-surface-7: var(--shadow-7);
+  --shadow-surface-8: var(--shadow-8);
+
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+
+  @keyframes spinner-move {
+    to {
+      stroke-dashoffset: -100;
+    }
+  }
+  @keyframes spinner-dash {
+    0%,
+    100% {
+      stroke-dasharray: 15 85;
+    }
+    50% {
+      stroke-dasharray: 40 60;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+    font-size: 13.5px;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--signal) 25%, transparent);
+  }
+  .dark ::selection {
+    background-color: color-mix(in oklab, var(--signal) 40%, transparent);
+  }
+  :focus-visible {
+    outline: 1px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Lets a theme or size switch ease instead of jump. */
+html.transitioning *,
+html.transitioning *::before,
+html.transitioning *::after {
+  transition:
+    border-radius 180ms ease-in-out,
+    background-color 180ms ease-in-out,
+    color 180ms ease-in-out,
+    border-color 180ms ease-in-out !important;
+}
+
+/* Scroll areas fade their edges while there is more to scroll. */
+@property --sf-start {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+@property --sf-end {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+@keyframes sf-reveal-start {
+  from {
+    --sf-start: 1;
+  }
+  to {
+    --sf-start: 0;
+  }
+}
+@keyframes sf-reveal-end {
+  from {
+    --sf-end: 0;
+  }
+  to {
+    --sf-end: 1;
+  }
+}
+@keyframes sf-divider-start {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sf-divider-end {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.scroll-fade {
+  --scroll-fade-size: 48px;
+}
+@supports (animation-timeline: scroll()) {
+  .scroll-fade {
+    mask-image: linear-gradient(
+      to bottom,
+      rgb(0 0 0 / var(--sf-start)) 0,
+      #000 var(--scroll-fade-size),
+      #000 calc(100% - var(--scroll-fade-size)),
+      rgb(0 0 0 / var(--sf-end)) 100%
+    );
+    animation:
+      sf-reveal-start both linear,
+      sf-reveal-end both linear;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range-start: 0, calc(100% - var(--scroll-fade-size));
+    animation-range-end: var(--scroll-fade-size), 100%;
+  }
+}
+@supports (timeline-scope: --sf) {
+  .scroll-divider {
+    position: relative;
+    timeline-scope: --sf-scroller;
+    --scroll-divider-size: 48px;
+  }
+  .scroll-divider .scroll-fade {
+    scroll-timeline-name: --sf-scroller;
+  }
+  .scroll-divider::before,
+  .scroll-divider::after {
+    content: "";
+    position: absolute;
+    left: var(--scroll-divider-inset, 0px);
+    right: var(--scroll-divider-inset, 0px);
+    height: 1px;
+    background-color: var(--border);
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+  }
+  .scroll-divider::before {
+    top: 0;
+    animation: sf-divider-start both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: 0 var(--scroll-divider-size);
+  }
+  .scroll-divider:first-child::before {
+    content: none;
+  }
+  .scroll-divider::after {
+    bottom: 0;
+    animation: sf-divider-end both linear;
+    animation-timeline: --sf-scroller;
+    animation-range: calc(100% - var(--scroll-divider-size)) 100%;
+  }
+  .scroll-divider:last-child::after {
+    content: none;
+  }
+}
+.scrollbar-hide {
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

@@ -1,0 +1,157 @@
+---
+title: Create an index
+icon: SquarePlus
+description: Create an index with its columns, shards, encryption key and replicas, and change it later.
+---
+
+Create an index before you write to it when you want to choose its columns, types and shards yourself. You send a name and a schema:
+
+```json title="POST /v1/indexes"
+{
+  "name": "prod/products",
+  "schema": {
+    "vectors": [{ "name": "embedding", "dims": 768, "metric": "cosine" }],
+    "attributes": [
+      { "name": "tag", "type": "string" },
+      { "name": "price", "type": "number" },
+      { "name": "body", "type": "text" }
+    ]
+  },
+  "shards": 1
+}
+```
+
+```ts tab="TypeScript"
+const products = await sky.indexes.create(
+  "prod/products",
+  {
+    vectors: [{ name: "embedding", dims: 768, metric: "cosine" }],
+    attributes: [
+      { name: "tag", type: "string" },
+      { name: "price", type: "number" },
+      { name: "body", type: "text" },
+    ],
+  },
+  { shards: 1 },
+);
+```
+
+```py tab="Python"
+products = sky.indexes.create(
+    "prod/products",
+    vectors=[{"name": "embedding", "dims": 768, "metric": "cosine"}],
+    attributes=[
+        {"name": "tag", "type": "string"},
+        {"name": "price", "type": "number"},
+        {"name": "body", "type": "text"},
+    ],
+    shards=1,
+)
+```
+
+```bash tab="CLI"
+skywake index create prod/products --vector embedding:768:cosine --attr tag:string --attr price:number
+skywake index create prod/products --schema schema.json
+```
+
+The new index starts with an empty `main` branch. The [API](/reference/api/indexes/createIndex) responds with `201` and the index. If the name is already taken, you get a `409`.
+
+## Where it lives
+
+The name decides the environment. `prod/products` goes in `prod`, `team/code` goes in `team`, and a name without a `/` goes in `default`. A key reaches the index when its namespaces match the whole name, so a key for `team/*` reaches `team/code`. See [names and environments](./index.mdx#names-and-environments).
+
+To create an index you need an `admin` key for its name. To write to it you need `write`, and to query it you need `read`. See [roles](../security/api-keys.mdx#roles).
+
+## Create if missing
+
+If your code may run more than once, use `ifMissing: true` in TypeScript. When an index with the name already exists, you get that index back instead of a `409`. The existing schema is not checked against the one you sent.
+
+```ts
+const notes = await sky.indexes.create(
+  "team/notes",
+  { attributes: [{ name: "text", type: "text" }] },
+  { ifMissing: true },
+);
+```
+
+## Fields
+
+| Field        | Type                   | Default | Meaning                                                                                                                                            |
+| ------------ | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`       | string                 |         | Such as `prod/products`. Parts made of letters, digits, `.`, `_` and `-`, split by `/`. At most 200 characters. The first part is the environment. |
+| `schema`     | object                 |         | `vectors`, `attributes` and `id`. See [schemas and types](./schemas.mdx).                                                                          |
+| `shards`     | int, 1 to 256          | `1`     | How many parts the documents are split over by id. Each part is written and searched in parallel. Can't change later.                              |
+| `region`     | string                 |         | Where the index keeps its data, from `GET /regions`; the default region if not given. Can't change later.                                          |
+| `encryption` | `{kms_key_id}`         |         | A key id or ARN in your cloud's [key service](../security/encryption-keys.mdx). Every object of the index is encrypted with it.                    |
+| `pinned`     | `{replicas}` or `null` |         | Reserve 1 to 8 servers for the index. See [pinning and replicas](./pinning-and-replicas.mdx).                                                      |
+
+<Callout type="info">
+  Vector columns, `shards` and the `id` type can't change after you create the index. You can add attributes later.
+</Callout>
+
+## Create on first write
+
+You can also skip the create step. If you upsert to `main` of an index that does not exist, and your key is allowed to create indexes, the index is created for you. Each vector in the documents becomes a `cosine` column, and each attribute gets the type of its value. See [write documents](./write.mdx#new-attributes).
+
+## Change an index
+
+Use [`PATCH /v1/indexes/{index}`](/reference/api/indexes/updateIndex) to add attributes, make the index read-only, set retention or change pinning. The change takes effect at once on every branch, and nothing is rebuilt.
+
+```json title="PATCH /v1/indexes/prod%2Fproducts"
+{
+  "attributes": [{ "name": "lang", "type": "string" }],
+  "read_only": false,
+  "retention_days": 30
+}
+```
+
+```ts tab="TypeScript"
+await sky.indexes.update("prod/products", {
+  attributes: [{ name: "lang", type: "string" }],
+  retention_days: 30,
+});
+```
+
+```py tab="Python"
+sky.indexes.update("prod/products", attributes=[{"name": "lang", "type": "string"}], retention_days=30)
+```
+
+| Field            | Type                       | Meaning                                                                                                                                                         |
+| ---------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `attributes`     | list                       | Attributes to add. An attribute the index already has keeps its type, but you can turn on `filter_index` for it. Older documents don't have the new attributes. |
+| `read_only`      | bool                       | While this is true, writes are refused.                                                                                                                         |
+| `retention_days` | int, 0 to 36500, or `null` | How long replaced versions are kept. `null` keeps all of them. See [time travel](./time-travel.mdx).                                                            |
+| `pinned`         | `{replicas}` or `null`     | Pin, repin or unpin (`null`).                                                                                                                                   |
+
+## Read, list and delete
+
+| Task                        | HTTP                         | TypeScript                 | Python                     | CLI                         |
+| --------------------------- | ---------------------------- | -------------------------- | -------------------------- | --------------------------- |
+| Schema and counts of `main` | `GET /v1/indexes/{index}`    | `sky.indexes.get(name)`    | `sky.indexes.get(name)`    | `skywake index get NAME`    |
+| Every index                 | `GET /v1/indexes`            | `sky.indexes.all()`        | `for i in sky.indexes`     | `skywake index list`        |
+| Delete, with every branch   | `DELETE /v1/indexes/{index}` | `sky.indexes.delete(name)` | `sky.indexes.delete(name)` | `skywake index delete NAME` |
+
+[`GET`](/reference/api/indexes/getIndex) also returns `stats` for `main`: `rows`, `deleted_rows`, `segments`, `indexed_rows`, `unindexed_rows`, `clusters` and `bytes`.
+
+## Copy an index
+
+Copy an index when you want a separate index that starts from one of its branches. [`POST /v1/indexes/{index}/copy`](/reference/api/indexes/copyIndex) makes a new index whose `main` is that branch, with the same schema and shards. After that, writes to one never reach the other. The copy is not pinned.
+
+```ts tab="TypeScript"
+const copy = await sky.index("prod/products").at("staging").copy("prod/products-copy");
+```
+
+```py tab="Python"
+copy = sky.index("prod/products").at("staging").copy("prod/products-copy")
+```
+
+Set `target_org` to make the copy in another organization. That needs a console token from someone with write access in both organizations, because an API key belongs to only one organization.
+
+## Next
+
+<Cards>
+  <Card href="./write.mdx" />
+  <Card href="./schemas.mdx" />
+  <Card href="/reference/cli/index/create" />
+  <Card href="/reference/sdk/create-index" />
+</Cards>

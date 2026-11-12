@@ -1,0 +1,7 @@
+{
+  "extends": "@skywake/config/nextjs.json",
+  "compilerOptions": {
+    "paths": { "@skywake/ui/*": ["./src/*"] }
+  },
+  "include": ["src"]
+}

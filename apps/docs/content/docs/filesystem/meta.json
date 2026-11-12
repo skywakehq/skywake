@@ -1,0 +1,5 @@
+{
+  "title": "Filesystem",
+  "icon": "FolderTree",
+  "pages": ["branches", "mount", "autosave", "diff-and-merge", "protection"]
+}

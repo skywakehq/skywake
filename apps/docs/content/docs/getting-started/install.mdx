@@ -1,0 +1,82 @@
+---
+title: Install
+icon: Download
+description: Install the skywake CLI, the skywaked daemon and the SDKs, and choose where your data goes.
+---
+
+Most people start with the CLI from npm:
+
+```bash
+npm install -g skywake
+skywake --help
+```
+
+## The CLI
+
+The npm package ships prebuilt binaries for Linux on x86_64 and arm64 (glibc). npm installs only the one for your machine, from `@skywake/cli-linux-x64` or `@skywake/cli-linux-arm64`. You need Node 18 or later.
+
+To run it without installing:
+
+```bash
+npx skywake --help          # without installing
+```
+
+On any other platform, build the `skywake-cli` crate from source:
+
+```bash
+cargo build --release -p skywake-cli    # target/release/skywake
+```
+
+Mounts don't run on macOS. There, you can give an agent a working folder with [`checkout` and `commit` through the API](../agents/cli.mdx#a-working-folder-through-the-api).
+
+## The daemon
+
+You need `skywaked` only for mounts. It uses FUSE, so it runs on Linux only. Build it from source:
+
+```bash
+cargo build --release -p skywake-daemon    # target/release/skywaked
+```
+
+Run it with the same store settings as the CLI. See [mount](../filesystem/mount.mdx) for how to start it.
+
+## The SDKs
+
+```bash tab="Python"
+pip install skywake
+pip install skywake-mcp        # the MCP server
+```
+
+```bash tab="TypeScript"
+npm install @skywake/sdk
+```
+
+## Where data goes
+
+[Branch commands](../filesystem/branches.mdx) and `skywaked` need to know where to keep data. Pass `--store`, or set `SKYWAKE_STORE`:
+
+| Store                          | Example                                                     |
+| ------------------------------ | ----------------------------------------------------------- |
+| A local folder                 | `.skywake` (the default)                                    |
+| A bucket                       | `s3://bucket`, or `s3://bucket/folder` for one folder of it |
+| One namespace, through the API | `skywake://prod/app`                                        |
+
+For a bucket, set the usual `AWS_*` variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ENDPOINT` if the bucket is not on AWS. To try a bucket locally, start the bundled object storage server:
+
+```bash
+docker compose -f docker/dev/compose.yaml up -d
+export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
+       AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
+```
+
+The bucket must support conditional writes (`If-None-Match` and `If-Match`), because that is how Skywake keeps two writers from overwriting each other. It checks once, before its first conditional write, and refuses a store that ignores them.
+
+To use a `skywake://` store, see [scoped credentials](../security/scoped-credentials.mdx).
+
+## Next
+
+<Cards>
+  <Card href="./first-branch.mdx" />
+  <Card href="./first-index.mdx" />
+  <Card href="/reference/cli" />
+  <Card href="/reference/sdk" />
+</Cards>

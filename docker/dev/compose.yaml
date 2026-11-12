@@ -1,0 +1,44 @@
+# Local S3 and Postgres for development: `docker compose -f docker/dev/compose.yaml up -d`, then
+#   export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
+#          AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
+# Keeps the project name, network and volumes from when this lived at the root.
+name: skywake
+
+services:
+  s3:
+    image: rustfs/rustfs:1.0.3
+    environment:
+      RUSTFS_ACCESS_KEY: skywake
+      RUSTFS_SECRET_KEY: skywake-dev
+    ports: ["9100:9000"]
+    volumes: [s3:/data]
+
+  # Two buckets: `skywake`, and `skywake-eu`, which stands in for a second
+  # region when the console runs locally (scripts/console.sh).
+  bucket:
+    image: curlimages/curl:8.11.1
+    depends_on: [s3]
+    entrypoint: sh -c
+    command:
+      - |
+        for bucket in skywake skywake-eu; do
+          curl --retry 30 --retry-connrefused --retry-delay 1 -s \
+            --aws-sigv4 aws:amz:us-east-1:s3 --user skywake:skywake-dev \
+            -X PUT http://s3:9000/$$bucket > /dev/null
+        done
+
+  # Database for the control plane (the API). Branch data stays in the bucket.
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: skywake
+      POSTGRES_PASSWORD: skywake-dev
+      POSTGRES_DB: skywake
+    # The console's sync engine follows changes through logical replication.
+    command: postgres -c wal_level=logical
+    ports: ["5433:5432"]
+    volumes: [postgres:/var/lib/postgresql/data]
+
+volumes:
+  s3:
+  postgres:

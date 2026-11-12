@@ -1,0 +1,33 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "all",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dev:all"
+      ],
+      "port": 3000
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@skywake/docs",
+        "dev"
+      ],
+      "port": 3200
+    },
+    {
+      "name": "www",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@skywake/www",
+        "dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

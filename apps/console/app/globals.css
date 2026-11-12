@@ -1,0 +1,40 @@
+@import "@skywake/ui/globals.css";
+
+@layer base {
+  html {
+    font-feature-settings: "cv11", "ss01";
+  }
+  ::selection {
+    background: var(--selected);
+  }
+}
+
+/* A live agent: a dot that breathes, not one that blinks. */
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-breathe {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+/* A sign-in grid cell filling in and fading, like a file being written. */
+@keyframes cell-pulse {
+  30%,
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

@@ -1,0 +1,1 @@
+ALTER TABLE "api"."index_operations" ADD COLUMN "requested_by" text;

@@ -1,0 +1,24 @@
+{
+  "name": "skywake",
+  "private": true,
+  "description": "Skywake: a copy-on-write, versioned filesystem for agents, over S3.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "scripts/dev.sh",
+    "dev:www": "pnpm --filter @skywake/www dev",
+    "dev:docs": "pnpm --filter @skywake/docs dev",
+    "dev:all": "scripts/dev.sh all",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "e2e": "turbo e2e"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "pnpm@10.20.0",
+  "devDependencies": {
+    "turbo": "^2.11.10"
+  }
+}

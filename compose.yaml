@@ -1,0 +1,171 @@
+# Skywake, self-hosted: the API, the web console and everything they need.
+# See docker/README.md. In short, at the repository's root:
+#   scripts/setup.sh && docker compose up -d
+name: skywake-hosted
+
+services:
+  # The control plane's database. Branch data stays in the bucket.
+  postgres:
+    image: postgres:17.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: skywake
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: skywake
+      # Each service connects as its own role; postgres/roles.sh makes them.
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?set API_DB_PASSWORD in .env}
+      CONSOLE_DB_PASSWORD: ${CONSOLE_DB_PASSWORD:?set CONSOLE_DB_PASSWORD in .env}
+      ZERO_DB_PASSWORD: ${ZERO_DB_PASSWORD:?set ZERO_DB_PASSWORD in .env}
+    # The console's sync engine follows changes through logical replication.
+    command: postgres -c wal_level=logical
+    volumes:
+      - postgres:/var/lib/postgresql/data
+      - ./docker/postgres/roles.sh:/docker-entrypoint-initdb.d/roles.sh:ro
+    healthcheck:
+      test: pg_isready -U skywake
+      interval: 2s
+      retries: 30
+
+  # S3 for the branches. Point SKYWAKE_STORE at your own bucket to skip it.
+  s3:
+    image: rustfs/rustfs:1.0.3
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID in .env}
+      RUSTFS_SECRET_KEY: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+    volumes: [s3:/data]
+
+  # Makes the bucket on the bundled S3, once.
+  bucket:
+    image: curlimages/curl:8.11.1
+    depends_on: [s3]
+    entrypoint: sh -c
+    command:
+      - curl --retry 30 --retry-connrefused --retry-delay 1 -s
+        --aws-sigv4 aws:amz:${AWS_REGION:-us-east-1}:s3
+        --user "$$AWS_ACCESS_KEY_ID:$$AWS_SECRET_ACCESS_KEY" -X PUT http://s3:9000/skywake > /dev/null
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+  api:
+    image: skywake-api
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      bucket: { condition: service_completed_successfully }
+    environment:
+      SKYWAKE_API_DATABASE: postgres://skywake_api:${API_DB_PASSWORD}@postgres/skywake
+      SKYWAKE_API_ADMIN_TOKEN: ${SKYWAKE_API_ADMIN_TOKEN:?set SKYWAKE_API_ADMIN_TOKEN in .env}
+      SKYWAKE_STORE: ${SKYWAKE_STORE:-s3://skywake}
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-http://s3:9000}
+      AWS_ALLOW_HTTP: ${AWS_ALLOW_HTTP:-true}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      # Accept the console's sign-in tokens.
+      SKYWAKE_API_JWKS_URL: http://console:3100/api/auth/jwks
+      SKYWAKE_API_JWT_ISSUER: skywake-console
+      SKYWAKE_API_JWT_AUDIENCE: skywake-console
+      # Prometheus metrics, on the compose network only.
+      SKYWAKE_API_METRICS_LISTEN: 0.0.0.0:9464
+      # Set an IAM role (and SKYWAKE_API_STS_ENDPOINT for an S3-compatible
+      # store) to hand out credentials limited to one namespace.
+      SKYWAKE_API_STS_ROLE_ARN: ${SKYWAKE_API_STS_ROLE_ARN:-}
+      SKYWAKE_API_STS_ENDPOINT: ${SKYWAKE_API_STS_ENDPOINT:-}
+      # An OpenAI-compatible embeddings API and a Cohere-style rerank API,
+      # to give vectors as text and to rerank hits.
+      SKYWAKE_API_EMBED_URL: ${SKYWAKE_API_EMBED_URL:-}
+      SKYWAKE_API_EMBED_KEY: ${SKYWAKE_API_EMBED_KEY:-}
+      SKYWAKE_API_RERANK_URL: ${SKYWAKE_API_RERANK_URL:-}
+      SKYWAKE_API_RERANK_KEY: ${SKYWAKE_API_RERANK_KEY:-}
+    ports: ["${API_PORT:-8080}:8080"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:8080/ready').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      retries: 30
+
+  console:
+    image: skywake-console
+    build:
+      context: .
+      dockerfile: apps/console/Dockerfile
+      # The root of its port by default; set CONSOLE_BASE_PATH=/dashboard to
+      # put it behind a proxy at that path, with CONSOLE_URL the proxy's address.
+      args:
+        CONSOLE_BASE_PATH: ${CONSOLE_BASE_PATH:-}
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://skywake_console:${CONSOLE_DB_PASSWORD}@postgres/skywake
+      BETTER_AUTH_URL: ${CONSOLE_URL:-http://localhost:3100}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      SKYWAKE_API_URL: http://api:8080/v1
+      SKYWAKE_API_ADMIN_TOKEN: ${SKYWAKE_API_ADMIN_TOKEN}
+      PUBLIC_ZERO_URL: ${ZERO_URL:-http://localhost:4848}
+      PUBLIC_API_URL: ${API_URL:-http://localhost:8080}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      # The hosted service's email and social sign-in; empty when self-hosting.
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      SMTP_URL: ${SMTP_URL:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+    ports: ["${CONSOLE_PORT:-3100}:3100"]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://localhost:3100${CONSOLE_BASE_PATH:-}/sign-in').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 2s
+      retries: 60
+
+  # Copies each organization's rows into the browser and keeps them current.
+  zero:
+    image: rocicorp/zero:1.11.4
+    restart: unless-stopped
+    depends_on:
+      console: { condition: service_healthy }
+    environment:
+      ZERO_UPSTREAM_DB: postgres://skywake_zero:${ZERO_DB_PASSWORD}@postgres/skywake
+      ZERO_APP_PUBLICATIONS: console
+      ZERO_REPLICA_FILE: /data/replica.db
+      ZERO_ADMIN_PASSWORD: ${ZERO_ADMIN_PASSWORD:?set ZERO_ADMIN_PASSWORD in .env}
+      ZERO_QUERY_URL: http://console:3100${CONSOLE_BASE_PATH:-}/api/zero/query
+      ZERO_MUTATE_URL: http://console:3100${CONSOLE_BASE_PATH:-}/api/zero/mutate
+      ZERO_QUERY_FORWARD_COOKIES: "true"
+      ZERO_MUTATE_FORWARD_COOKIES: "true"
+      # Passed on to the console, which reads it only if zero-cache is in
+      # TRUSTED_PROXIES. See the IP allowlist docs.
+      ZERO_QUERY_ALLOWED_REQUEST_HEADERS: x-forwarded-for
+      ZERO_MUTATE_ALLOWED_REQUEST_HEADERS: x-forwarded-for
+    volumes: [zero:/data]
+    ports: ["${ZERO_PORT:-4848}:4848"]
+
+  # The docs, optional: `docker compose --profile docs up -d`. They need
+  # nothing else here. Served at the root of their port by default; set
+  # DOCS_BASE_PATH=/docs to put them behind a proxy at /docs.
+  docs:
+    profiles: [docs]
+    image: skywake-docs
+    build:
+      context: .
+      dockerfile: apps/docs/Dockerfile
+      args:
+        DOCS_BASE_PATH: ${DOCS_BASE_PATH:-}
+    restart: unless-stopped
+    ports: ["${DOCS_PORT:-3200}:3200"]
+
+volumes:
+  postgres:
+  s3:
+  zero:

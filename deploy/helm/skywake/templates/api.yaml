@@ -1,0 +1,135 @@
+{{- $select := include "skywake.select" (dict "root" . "component" "api") }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Release.Name }}
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {{- $select | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $select | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}
+      containers:
+        - name: api
+          image: {{ include "skywake.image" (dict "root" . "component" "api") }}
+          ports:
+            - { name: http, containerPort: 8080 }
+            - { name: metrics, containerPort: 9464 }
+          env:
+            - name: SKYWAKE_API_DATABASE
+              {{- include "skywake.secret" (dict "root" . "key" "api-database-url") | nindent 14 }}
+            - name: SKYWAKE_API_ADMIN_TOKEN
+              {{- include "skywake.secret" (dict "root" . "key" "admin-token") | nindent 14 }}
+            - name: SKYWAKE_API_DATABASE_POOL
+              value: {{ .Values.api.databasePool | quote }}
+            - name: SKYWAKE_API_TRUST_PROXY
+              value: {{ .Values.api.trustProxy | quote }}
+            - name: SKYWAKE_API_METRICS_LISTEN
+              value: 0.0.0.0:9464
+            # Each copy is reached by its pod IP, so pinned indexes' queries
+            # go to the copies that hold them.
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+            - name: SKYWAKE_API_PEER_URL
+              value: http://$(POD_IP):8080
+            - name: SKYWAKE_API_PEER_TOKEN
+              valueFrom:
+                secretKeyRef: { name: {{ .Values.secret }}, key: peer-token, optional: true }
+            {{- if .Values.console.enabled }}
+            - name: SKYWAKE_API_JWKS_URL
+              value: http://{{ .Release.Name }}-console:3100/api/auth/jwks
+            - name: SKYWAKE_API_JWT_ISSUER
+              value: skywake-console
+            - name: SKYWAKE_API_JWT_AUDIENCE
+              value: skywake-console
+            {{- end }}
+            {{- if .Values.cache.enabled }}
+            - name: SKYWAKE_CACHE_NODES
+              value: {{ include "skywake.cacheNodes" . | quote }}
+            - name: SKYWAKE_CACHE_TOKEN
+              {{- include "skywake.secret" (dict "root" . "key" "cache-token") | nindent 14 }}
+            {{- end }}
+            {{- with .Values.api.indexCache }}
+            # Blobs search indexes read, on local disk. A blob not here is
+            # asked of the cache nodes, then of the bucket.
+            - { name: SKYWAKE_INDEX_CACHE_DIR, value: /index-cache }
+            - { name: SKYWAKE_INDEX_CACHE_GB, value: {{ .gb | quote }} }
+            {{- end }}
+            {{- include "skywake.store" . | nindent 12 }}
+            {{- range $name, $value := .Values.api.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 10
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          {{- with .Values.api.indexCache }}
+          volumeMounts:
+            - { name: index-cache, mountPath: /index-cache }
+      volumes:
+        - name: index-cache
+          emptyDir: { sizeLimit: {{ add (int .gb) 1 }}Gi }
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  selector: {{- $select | nindent 4 }}
+  ports:
+    - { name: http, port: 8080, targetPort: http }
+    - { name: metrics, port: 9464, targetPort: metrics }
+---
+# Writes in flight finish on another copy, so a node drain never takes
+# every copy at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {{- $select | nindent 6 }}
+{{- if .Values.api.autoscaling.enabled }}
+---
+# The API keeps no state, so copies come and go with the load.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-api
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-api
+  minReplicas: {{ .Values.api.autoscaling.min }}
+  maxReplicas: {{ .Values.api.autoscaling.max }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: {{ .Values.api.autoscaling.cpu }} }
+{{- end }}

@@ -1,0 +1,46 @@
+{
+  "realm": "skywake",
+  "enabled": true,
+  "sslRequired": "none",
+  "users": [
+    {
+      "username": "ada",
+      "email": "ada@example.com",
+      "emailVerified": true,
+      "firstName": "Ada",
+      "lastName": "Lovelace",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "ada-password", "temporary": false }]
+    },
+    {
+      "username": "owner",
+      "email": "owner@example.com",
+      "emailVerified": true,
+      "firstName": "Olive",
+      "lastName": "Owner",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "owner-password", "temporary": false }]
+    },
+    {
+      "username": "mallory",
+      "email": "mallory@elsewhere.dev",
+      "emailVerified": true,
+      "firstName": "Mallory",
+      "lastName": "Elsewhere",
+      "enabled": true,
+      "credentials": [{ "type": "password", "value": "mallory-password", "temporary": false }]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "skywake-oidc",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "skywake-oidc-dev-secret",
+      "standardFlowEnabled": true,
+      "redirectUris": ["http://localhost:3200/api/auth/sso/callback/*"],
+      "webOrigins": ["http://localhost:3200"]
+    }
+  ]
+}

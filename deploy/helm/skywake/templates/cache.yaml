@@ -1,0 +1,61 @@
+{{- if .Values.cache.enabled }}
+{{- $select := include "skywake.select" (dict "root" . "component" "cache") }}
+# Each node has a fixed name (cache-0, cache-1…), so the API always asks
+# a chunk from the same node.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-cache
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- $select | nindent 4 }}
+  ports:
+    - { name: http, port: 7070, targetPort: http }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-cache
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-cache
+  replicas: {{ .Values.cache.replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {{- $select | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $select | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}
+      securityContext: { fsGroup: 65534 }
+      containers:
+        - name: cache
+          image: {{ include "skywake.image" (dict "root" . "component" "cache") }}
+          ports:
+            - { name: http, containerPort: 7070 }
+          env:
+            - name: SKYWAKE_CACHE_TOKEN
+              {{- include "skywake.secret" (dict "root" . "key" "cache-token") | nindent 14 }}
+            # 90% of the disk, so the file system never fills.
+            - name: SKYWAKE_CACHE_GB
+              value: {{ div (mul (trimSuffix "Gi" .Values.cache.storage | int) 9) 10 | quote }}
+            {{- include "skywake.store" . | nindent 12 }}
+          readinessProbe:
+            tcpSocket: { port: http }
+            periodSeconds: 5
+          volumeMounts:
+            - { name: chunks, mountPath: /cache }
+          resources: {{- toYaml .Values.cache.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: chunks
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.cache.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests: { storage: {{ .Values.cache.storage }} }
+{{- end }}

@@ -1,0 +1,52 @@
+{{- if .Values.console.enabled }}
+{{- $select := include "skywake.select" (dict "root" . "component" "console") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-console
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.console.replicas }}
+  selector:
+    matchLabels: {{- $select | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- $select | nindent 8 }}
+    spec:
+      containers:
+        - name: console
+          image: {{ include "skywake.image" (dict "root" . "component" "console") }}
+          ports:
+            - { name: http, containerPort: 3100 }
+          env:
+            - name: DATABASE_URL
+              {{- include "skywake.secret" (dict "root" . "key" "console-database-url") | nindent 14 }}
+            - name: BETTER_AUTH_SECRET
+              {{- include "skywake.secret" (dict "root" . "key" "better-auth-secret") | nindent 14 }}
+            - name: SKYWAKE_API_ADMIN_TOKEN
+              {{- include "skywake.secret" (dict "root" . "key" "admin-token") | nindent 14 }}
+            - name: BETTER_AUTH_URL
+              value: {{ .Values.console.url | quote }}
+            - name: SKYWAKE_API_URL
+              value: http://{{ .Release.Name }}-api:8080/v1
+            - name: PUBLIC_API_URL
+              value: {{ .Values.console.apiUrl | quote }}
+            - name: PUBLIC_ZERO_URL
+              value: {{ .Values.console.zeroUrl | quote }}
+            - name: TRUSTED_PROXIES
+              value: {{ .Values.console.trustedProxies | quote }}
+          readinessProbe:
+            httpGet: { path: {{ printf "%s/sign-in" .Values.console.basePath }}, port: http }
+            periodSeconds: 5
+          resources: {{- toYaml .Values.console.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-console
+  labels: {{- include "skywake.labels" . | nindent 4 }}
+spec:
+  selector: {{- $select | nindent 4 }}
+  ports:
+    - { name: http, port: 3100, targetPort: http }
+{{- end }}

@@ -1,0 +1,9 @@
+packages:
+  - apps/*
+  - bindings/node
+  - packages/*
+  # Published on its own: its optional dependencies exist only once released.
+  - "!packages/skywake-cli"
+  - sdks/typescript
+  - e2e/conformance
+  - e2e/sso

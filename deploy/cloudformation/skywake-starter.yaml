@@ -1,0 +1,414 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Skywake on one machine in this region: an EC2 instance running the
+  published images with Docker Compose, a bucket for branches and indexes,
+  and Postgres on the instance or on RDS. Everything is made in the stack's
+  region, so commits and writes never cross regions.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Skywake }
+        Parameters: [Version, Database]
+      - Label: { default: Machines }
+        Parameters: [InstanceType, DatabaseInstanceClass]
+      - Label: { default: Access }
+        Parameters: [AllowedCidr]
+
+Parameters:
+  Version:
+    Type: String
+    Default: latest # release
+    Description: The Skywake release to run, such as 0.2.0.
+    AllowedPattern: "latest|[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.]+)?"
+  Database:
+    Type: String
+    Default: local
+    AllowedValues: [local, rds]
+    Description: >-
+      local runs Postgres on the instance (cheapest, to try Skywake). rds
+      makes an RDS Postgres in this region, with backups.
+  InstanceType:
+    Type: String
+    Default: t4g.large
+    AllowedValues:
+      [t4g.medium, t4g.large, t4g.xlarge, m7g.large, m7g.xlarge, m7g.2xlarge, c7g.xlarge]
+    Description: An ARM (Graviton) instance; the images are built for it.
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t4g.medium
+    AllowedValues:
+      [db.t4g.micro, db.t4g.small, db.t4g.medium, db.t4g.large, db.m7g.large, db.m7g.xlarge]
+    Description: Used only when Database is rds.
+  AllowedCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    AllowedPattern: "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+/[0-9]+"
+    Description: Who may reach the console and the API. Narrow it to your own network.
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: Amazon Linux 2023 for ARM, the newest by default.
+
+Conditions:
+  UseRds: !Equals [!Ref Database, rds]
+  LatestRelease: !Equals [!Ref Version, latest]
+
+Resources:
+  # ── Network: one VPC with two public subnets (RDS needs two zones). ─────
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.80.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags: [{ Key: Name, Value: !Ref AWS::StackName }]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.80.0.0/20
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.80.16.0/20
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetARoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetA
+      RouteTableId: !Ref RouteTable
+
+  SubnetBRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetB
+      RouteTableId: !Ref RouteTable
+
+  # Gateway endpoint: the instance reaches S3 inside the region, for free.
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref RouteTable]
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Skywake console (3100), API (8080) and zero-cache (4848)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - {
+            IpProtocol: tcp,
+            FromPort: 3100,
+            ToPort: 3100,
+            CidrIp: !Ref AllowedCidr,
+            Description: Console,
+          }
+        - {
+            IpProtocol: tcp,
+            FromPort: 8080,
+            ToPort: 8080,
+            CidrIp: !Ref AllowedCidr,
+            Description: API,
+          }
+        - {
+            IpProtocol: tcp,
+            FromPort: 4848,
+            ToPort: 4848,
+            CidrIp: !Ref AllowedCidr,
+            Description: zero-cache,
+          }
+      SecurityGroupEgress:
+        - {
+            IpProtocol: "-1",
+            CidrIp: 0.0.0.0/0,
+            Description: "Images, the bucket and the database",
+          }
+
+  # ── The bucket ──────────────────────────────────────────────────────────
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }
+
+  # ── Postgres on RDS, when Database is rds ───────────────────────────────
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Condition: UseRds
+    Properties:
+      Description: !Sub The owner of ${AWS::StackName}'s Postgres
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"skywake"}'
+        GenerateStringKey: password
+        PasswordLength: 32
+        ExcludePunctuation: true
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: UseRds
+    Properties:
+      GroupDescription: Postgres, from the Skywake instance only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref InstanceSecurityGroup
+
+  DatabaseSubnets:
+    Type: AWS::RDS::DBSubnetGroup
+    Condition: UseRds
+    Properties:
+      DBSubnetGroupDescription: !Sub ${AWS::StackName} Postgres
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+
+  # zero-cache follows the console's tables through logical replication.
+  DatabaseParameters:
+    Type: AWS::RDS::DBParameterGroup
+    Condition: UseRds
+    Properties:
+      Description: Skywake (logical replication for zero-cache)
+      Family: postgres17
+      Parameters:
+        rds.logical_replication: "1"
+
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Condition: UseRds
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: postgres
+      EngineVersion: "17.6"
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      AllocatedStorage: "20"
+      MaxAllocatedStorage: 200
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: skywake
+      MasterUsername: skywake
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}"
+      DBSubnetGroupName: !Ref DatabaseSubnets
+      DBParameterGroupName: !Ref DatabaseParameters
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: 7
+
+  # ── The instance ────────────────────────────────────────────────────────
+  # Its own identity reaches the bucket: no access keys are made.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        # Session Manager, to open a shell without SSH.
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: bucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:ListBucket, s3:GetBucketLocation, s3:ListBucketMultipartUploads]
+                Resource: !GetAtt Bucket.Arn
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:AbortMultipartUpload
+                  - s3:ListMultipartUploadParts
+                Resource: !Sub ${Bucket.Arn}/*
+        - !If
+          - UseRds
+          - PolicyName: database-secret
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: secretsmanager:GetSecretValue
+                  Resource: !Ref DatabaseSecret
+          - !Ref AWS::NoValue
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  Address:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties:
+      Domain: vpc
+
+  AddressAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt Address.AllocationId
+      InstanceId: !Ref Instance
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        # Containers reach the instance's identity one network hop further.
+        MetadataOptions:
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+
+  Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: DefaultRoute
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT30M
+    Properties:
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds: [!Ref InstanceSecurityGroup]
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 100, VolumeType: gp3, Encrypted: true }
+      Tags: [{ Key: Name, Value: !Ref AWS::StackName }]
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #!/bin/bash
+            set -euo pipefail
+            trap '/opt/aws/bin/cfn-signal -e 1 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}' ERR
+
+            dnf install -y docker jq aws-cfn-bootstrap
+            systemctl enable --now docker
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+              "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)"
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+            mkdir -p /opt/skywake && cd /opt/skywake
+            for file in compose.yaml roles.sh; do
+              curl -fsSL -o "$file" "${Release}/$file"
+            done
+
+            secret() { openssl rand -hex 32; }
+            api=$(secret) console=$(secret) zero=$(secret)
+            umask 077
+            cat > .env <<EOF
+            SKYWAKE_API_ADMIN_TOKEN=$(secret)
+            BETTER_AUTH_SECRET=$(secret)
+            ZERO_ADMIN_PASSWORD=$(secret)
+            API_DB_PASSWORD=$api
+            CONSOLE_DB_PASSWORD=$console
+            ZERO_DB_PASSWORD=$zero
+            SKYWAKE_STORE=s3://${Bucket}
+            AWS_REGION=${AWS::Region}
+            AWS_ENDPOINT=https://s3.${AWS::Region}.amazonaws.com
+            AWS_ALLOW_HTTP=false
+            CONSOLE_URL=http://${Address}:3100
+            API_URL=http://${Address}:8080
+            ZERO_URL=http://${Address}:4848
+            EOF
+            if [ "${Version}" != latest ]; then echo "SKYWAKE_VERSION=${Version}" >> .env; fi
+
+            if [ "${Database}" = rds ]; then
+              owner=$(aws secretsmanager get-secret-value --region ${AWS::Region} \
+                --secret-id "${DatabaseSecretArn}" --query SecretString --output text | jq -r .password)
+              host="${DatabaseHost}"
+              cat >> .env <<EOF
+            COMPOSE_PROFILES=
+            DATABASE_HOST=$host
+            POSTGRES_USER=skywake
+            POSTGRES_PASSWORD=$owner
+            API_DATABASE_URL=postgres://skywake_api:$api@$host/skywake?sslmode=no-verify
+            CONSOLE_DATABASE_URL=postgres://skywake_console:$console@$host/skywake?sslmode=no-verify
+            ZERO_DATABASE_URL=postgres://skywake_zero:$zero@$host/skywake?sslmode=require
+            EOF
+            else
+              cat >> .env <<EOF
+            COMPOSE_PROFILES=postgres
+            POSTGRES_PASSWORD=$(secret)
+            EOF
+            fi
+
+            docker compose up -d --wait --wait-timeout 1200
+            /opt/aws/bin/cfn-signal -e 0 --stack ${AWS::StackName} --resource Instance --region ${AWS::Region}
+          - Release: !If
+              - LatestRelease
+              - https://github.com/skywakehq/skywake/releases/latest/download
+              - !Sub https://github.com/skywakehq/skywake/releases/download/v${Version}
+            DatabaseSecretArn: !If [UseRds, !Ref DatabaseSecret, ""]
+            DatabaseHost: !If [UseRds, !GetAtt DatabaseInstance.Endpoint.Address, ""]
+            Address: !Ref Address
+
+Outputs:
+  ConsoleUrl:
+    Description: Open this, sign up, and make an organization.
+    Value: !Sub http://${Address}:3100
+  ApiUrl:
+    Description: Where agents and the SDKs connect. Run them in this region.
+    Value: !Sub http://${Address}:8080
+  Region:
+    Description: Where the instance, the bucket and the database are.
+    Value: !Ref AWS::Region
+  Bucket:
+    Value: !Ref Bucket
+  Shell:
+    Description: A shell on the instance, through Session Manager. Settings are in /opt/skywake/.env.
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/systems-manager/session-manager/${Instance}
