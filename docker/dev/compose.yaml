@@ -16,7 +16,7 @@ services:
   # Two buckets: `skywake`, and `skywake-eu`, which stands in for a second
   # region when the console runs locally (scripts/console.sh).
   bucket:
-    image: curlimages/curl:8.11.1
+    image: curlimages/curl:8.23.0
     depends_on: [s3]
     entrypoint: sh -c
     command:
