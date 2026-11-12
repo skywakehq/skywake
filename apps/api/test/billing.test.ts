@@ -92,7 +92,7 @@ test("prices in the catalog become exact Stripe unit prices", () => {
     reranks: "0.002",
     pinned: "0.00009765625",
     files_storage: "0.000013377568",
-    files_egress: "0.0078125",
+    files_egress: "0.01171875",
   });
   assert.equal(rawCents("writes", BigInt(GiB)), 150);
   assert.equal(rawCents("queries", 1n << 50n), 75);
@@ -102,7 +102,7 @@ test("prices in the catalog become exact Stripe unit prices", () => {
   assert.equal(rawCents("pinned", BigInt(GiB) * 3600n * 1000n), 100);
   assert.equal(rawCents("writes", 2_000_000_000n, "2.00"), 373);
   assert.equal(rawCents("files_storage", BigInt(GiB) * 730n), 10);
-  assert.equal(rawCents("files_egress", BigInt(GiB) * 10n), 80);
+  assert.equal(rawCents("files_egress", BigInt(GiB) * 10n), 120);
 });
 
 const account = (values: Partial<Account> = {}): Account => ({

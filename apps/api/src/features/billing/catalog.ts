@@ -112,7 +112,7 @@ export const METER: Record<Meter, MeterSpec> = {
   },
   files_egress: {
     name: "File downloads",
-    dollars: "0.08",
+    dollars: "0.12",
     per: "GB downloaded",
     perRaw: GiB,
     unit: "MB",

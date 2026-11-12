@@ -77,7 +77,7 @@ export const usage = [
   { name: "Reranks", price: "$0.02", per: "1,000 documents" },
   { name: "Pinned", price: "$0.001", per: "GB-hour" },
   { name: "Files storage", price: "$0.10", per: "GB-month" },
-  { name: "File downloads", price: "$0.08", per: "GB downloaded" },
+  { name: "File downloads", price: "$0.12", per: "GB downloaded" },
 ];
 
 export const costExample = {
