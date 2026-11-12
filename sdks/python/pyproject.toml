@@ -5,7 +5,7 @@ description = "Skywake for Python: a filesystem with branches for AI agents, and
 license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["httpx>=0.27"]
+dependencies = ["httpx>=0.28.1"]
 keywords = [
   "ai-agents", "agents", "mcp", "mcp-server", "filesystem", "s3", "object-storage", "copy-on-write",
   "vector-search", "full-text-search", "hybrid-search", "bm25", "rag",
