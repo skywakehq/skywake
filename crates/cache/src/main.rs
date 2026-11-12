@@ -17,7 +17,7 @@ use tracing::{info, warn};
 #[derive(Parser)]
 #[command(version)]
 struct Args {
-    /// `s3://bucket` or a local directory.
+    /// `s3://bucket`, `gs://bucket`, `az://container` or a local directory.
     #[arg(long, env = "SKYWAKE_STORE", default_value = ".skywake")]
     store: String,
     /// Where to listen. Use the machine's private address, such as

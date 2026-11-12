@@ -34,7 +34,7 @@ pub struct EngineOpenOptions {
 
 fn head_nodes(location: &str) -> Result<HeadNodes> {
     let folder = bucket_folder(location)
-        .ok_or_else(|| invalid("branch heads on the cache tier need an s3:// store"))?;
+        .ok_or_else(|| invalid("branch heads on the cache tier need a bucket store"))?;
     let nodes: Vec<String> = std::env::var("SKYWAKE_CACHE_NODES")
         .unwrap_or_default()
         .split(',')

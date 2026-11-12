@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use object_store::aws::{AmazonS3Builder, S3ConditionalPut};
+use object_store::azure::MicrosoftAzureBuilder;
+use object_store::gcp::GoogleCloudStorageBuilder;
 use object_store::limit::LimitStore;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
@@ -43,11 +45,30 @@ fn checked_mark(location: &str) -> Option<PathBuf> {
     Some(CHECKED.get()?.join(name))
 }
 
+/// The URL schemes of the buckets Skywake can open: AWS S3 and other S3
+/// compatible stores, Google Cloud Storage, and Azure Blob Storage.
+const BUCKETS: [&str; 3] = ["s3://", "gs://", "az://"];
+
 pub fn bucket_folder(location: &str) -> Option<String> {
-    let rest = location.strip_prefix("s3://")?;
+    let rest = BUCKETS
+        .iter()
+        .find_map(|scheme| location.strip_prefix(scheme))?;
     let path = rest.split('?').next().unwrap_or_default();
-    let folder = path.split_once('/').map_or("", |(_, folder)| folder);
-    Some(folder.trim_matches('/').to_string())
+    Some(split_bucket(path).1.to_string())
+}
+
+/// Splits `bucket/folder/inside` into the bucket and the folder.
+fn split_bucket(location: &str) -> (&str, &str) {
+    let (bucket, folder) = location.split_once('/').unwrap_or((location, ""));
+    (bucket, folder.trim_matches('/'))
+}
+
+/// Opens only one folder of a bucket when the location names one.
+fn in_folder(store: impl ObjectStore, folder: &str) -> Arc<dyn ObjectStore> {
+    if folder.is_empty() {
+        return Arc::new(store);
+    }
+    Arc::new(PrefixStore::new(store, folder))
 }
 
 pub async fn granted_heads(location: &str) -> crate::Result<Option<crate::HeadNodes>> {
@@ -90,6 +111,22 @@ pub fn open_store_with(
             None => s3,
         };
         Arc::new(Checked::new(location, s3_store(rest, s3)?))
+    } else if let Some(rest) = location.strip_prefix("gs://") {
+        // Credentials come from the usual GOOGLE_* variables, or from the
+        // machine's service account on Google Cloud.
+        let (bucket, folder) = split_bucket(rest);
+        let gcs = GoogleCloudStorageBuilder::from_env()
+            .with_bucket_name(bucket)
+            .build()?;
+        Arc::new(Checked::new(location, in_folder(gcs, folder)))
+    } else if let Some(rest) = location.strip_prefix("az://") {
+        // The bucket is a container. The account and its key come from the
+        // usual AZURE_* variables.
+        let (container, folder) = split_bucket(rest);
+        let azure = MicrosoftAzureBuilder::from_env()
+            .with_container_name(container)
+            .build()?;
+        Arc::new(Checked::new(location, in_folder(azure, folder)))
     } else if let Some(namespace) = location.strip_prefix("skywake://") {
         Arc::new(Checked::new(location, scoped::open(namespace)?))
     } else {
@@ -107,16 +144,12 @@ pub fn open_store_with(
 }
 
 pub(crate) fn s3_store(location: &str, s3: AmazonS3Builder) -> crate::Result<Arc<dyn ObjectStore>> {
-    let (bucket, folder) = location.split_once('/').unwrap_or((location, ""));
+    let (bucket, folder) = split_bucket(location);
     let s3 = s3
         .with_bucket_name(bucket)
         .with_conditional_put(S3ConditionalPut::ETagMatch)
         .build()?;
-    let folder = folder.trim_matches('/');
-    if folder.is_empty() {
-        return Ok(Arc::new(s3));
-    }
-    Ok(Arc::new(PrefixStore::new(s3, folder)))
+    Ok(in_folder(s3, folder))
 }
 
 type Check = Arc<OnceCell<Result<(), String>>>;
@@ -172,17 +205,19 @@ async fn probe(store: &dyn ObjectStore) -> Result<Result<(), String>> {
     let put = |mode: PutMode| store.put_opts(&path, PutPayload::from("probe"), mode.into());
     put(PutMode::Create).await?;
     let again = put(PutMode::Create).await;
+    // S3 and Azure check the ETag; Google Cloud Storage checks the version
+    // (its "generation"). Neither of these matches the probe just written.
     let stale = put(PutMode::Update(UpdateVersion {
         e_tag: Some("\"0\"".to_string()),
-        version: None,
+        version: Some("1".to_string()),
     }))
     .await;
     let _ = store.delete(&path).await;
     if again.is_ok() || stale.is_ok() {
         return Ok(Err(format!(
             "{store} ignores conditional writes (If-None-Match and If-Match). Skywake needs \
-             them to keep branch heads safe: use AWS S3, Cloudflare R2, MinIO, RustFS or \
-             another store that supports them"
+             them to keep branch heads safe: use AWS S3, Google Cloud Storage, Azure Blob \
+             Storage, Cloudflare R2, MinIO, RustFS or another store that supports them"
         )));
     }
     for result in [again, stale] {
@@ -304,6 +339,19 @@ mod tests {
         async fn copy_opts(&self, from: &Path, to: &Path, options: CopyOptions) -> Result<()> {
             self.0.copy_opts(from, to, options).await
         }
+    }
+
+    #[test]
+    fn every_bucket_scheme_names_its_folder() {
+        for scheme in BUCKETS {
+            assert_eq!(bucket_folder(&format!("{scheme}b")).unwrap(), "");
+            assert_eq!(
+                bucket_folder(&format!("{scheme}b/team/app/")).unwrap(),
+                "team/app"
+            );
+        }
+        assert_eq!(bucket_folder("s3://b/app?region=eu-west-1").unwrap(), "app");
+        assert_eq!(bucket_folder(".skywake"), None);
     }
 
     #[tokio::test]

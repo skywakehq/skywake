@@ -18,9 +18,10 @@ use skywake_daemon::{Request, Response, call, client_root, socket_path};
 #[derive(Parser)]
 #[command(name = "skywake", version)]
 struct Cli {
-    /// `s3://bucket` or a local directory (default `.skywake`). Without
-    /// it, `new`, `merge`, `delete` and `recover` go through skywaked if it
-    /// runs, to its store, as its access file allows.
+    /// `s3://bucket`, `gs://bucket`, `az://container` or a local directory
+    /// (default `.skywake`). Without it, `new`, `merge`, `delete` and
+    /// `recover` go through skywaked if it runs, to its store, as its access
+    /// file allows.
     #[arg(long, env = "SKYWAKE_STORE")]
     store: Option<String>,
 
