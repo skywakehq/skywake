@@ -3,20 +3,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { defaultLocale, isLocale } from "@/lib/i18n";
 
 function detectLocale(request: NextRequest) {
+  // English is the default. Other locales only after an explicit choice
+  // (language switcher sets NEXT_LOCALE).
   const cookie = request.cookies.get("NEXT_LOCALE")?.value;
   if (cookie && isLocale(cookie)) return cookie;
-
-  const header = request.headers.get("accept-language") ?? "";
-  const preferred = header
-    .split(",")
-    .map((part) => part.trim().split(";")[0]?.toLowerCase())
-    .filter(Boolean);
-
-  for (const tag of preferred) {
-    const base = tag!.slice(0, 2);
-    if (isLocale(base)) return base;
-  }
-
   return defaultLocale;
 }
 
