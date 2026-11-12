@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, IBM_Plex_Mono } from "next/font/google";
-import { Providers } from "@/components/layout/providers";
+
 import { pages } from "@/content/pages";
 import { site } from "@/content/site";
 import "./globals.css";
@@ -44,16 +44,14 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${geist.variable} ${mono.variable} antialiased`}
     >
-      <body className="min-h-dvh">
-        <Providers>{children}</Providers>
-      </body>
+      <body className="min-h-dvh">{children}</body>
     </html>
   );
 }

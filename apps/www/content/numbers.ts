@@ -101,13 +101,13 @@ export const search = {
 export const headline: StatGroup[] = [
   {
     claim: "Filesystem",
-    line: "A workspace for every agent, that never loses work.",
+    line: "Isolated workspaces that start instantly and keep every synced write.",
     href: "/filesystem#benchmarks",
     stats: [files.groups[0]!.stats[0]!, files.groups[2]!.stats[0]!],
   },
   {
     claim: "Search",
-    line: "10M vectors, searched straight from object storage.",
+    line: "10M vectors queried straight from object storage, cold or warm.",
     href: "/search#benchmarks",
     stats: [search.groups[0]!.stats[1]!, search.groups[0]!.stats[0]!],
   },

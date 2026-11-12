@@ -1,8 +1,8 @@
 export const site = {
   name: "Skywake",
-  title: "Skywake: Fast files and search for agents and apps",
+  title: "Skywake: A scalable filesystem and search engine for AI agents",
   description:
-    "A versioned filesystem and a vector and full-text index on your own object storage. Fork the whole workspace for every agent in 10 ms.",
+    "A versioned filesystem and hybrid search index on your own object storage. Give every AI agent its own branch in milliseconds, mount it like a local disk, and search by meaning or keyword.",
   url: process.env.SITE_URL as string,
   docsUrl: process.env.DOCS_LINK as string,
   consoleUrl: process.env.CONSOLE_LINK as string,

@@ -20,7 +20,9 @@ import {
 } from "lucide-react";
 
 import { CARD, Container, Section } from "@/components/ui/section";
+import { getMessages, type HomeMessages } from "@/content/messages";
 import { files, headline, search, type StatGroup, type StatIcon } from "@/content/numbers";
+import { defaultLocale, localizePath, type Locale } from "@/lib/i18n";
 
 const ICONS: Record<StatIcon, typeof Zap> = {
   fork: GitFork,
@@ -41,7 +43,15 @@ const ICONS: Record<StatIcon, typeof Zap> = {
   load: Download,
 };
 
-function GroupCard({ group }: { group: StatGroup }) {
+function GroupCard({
+  group,
+  seeAll,
+  locale,
+}: {
+  group: StatGroup;
+  seeAll: string;
+  locale: Locale;
+}) {
   return (
     <div className={`${CARD} flex flex-col p-6 sm:p-8`}>
       <h3 className="t-h3 text-foreground">{group.claim}</h3>
@@ -62,10 +72,10 @@ function GroupCard({ group }: { group: StatGroup }) {
       </dl>
       {group.href && (
         <Link
-          href={group.href}
+          href={localizePath(locale, group.href)}
           className="t-small group mt-4 inline-flex w-fit items-center gap-1.5 text-foreground"
         >
-          See all benchmarks
+          {seeAll}
           <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
         </Link>
       )}
@@ -73,19 +83,45 @@ function GroupCard({ group }: { group: StatGroup }) {
   );
 }
 
-const SETS = {
-  all: { groups: headline, note: undefined },
-  files: { groups: files.groups, note: files.setup },
-  search: { groups: search.groups, note: search.setup },
-};
+export function Benchmarks({
+  show = "all",
+  locale = defaultLocale,
+  messages,
+}: {
+  show?: "all" | "files" | "search";
+  locale?: Locale;
+  messages?: HomeMessages;
+}) {
+  const t = messages ?? getMessages(locale);
 
-export function Benchmarks({ show = "all" }: { show?: keyof typeof SETS }) {
-  const { groups, note } = SETS[show];
+  const groups =
+    show === "all"
+      ? headline.map((group, i) => ({
+          ...group,
+          claim: t.benchmarks.groups[i]?.claim ?? group.claim,
+          line: t.benchmarks.groups[i]?.line ?? group.line,
+        }))
+      : show === "files"
+        ? files.groups
+        : search.groups;
+
+  const note = show === "files" ? files.setup : show === "search" ? search.setup : undefined;
+
   return (
-    <Section id="benchmarks" label="Benchmarks" title="Local speed, straight from your bucket.">
+    <Section
+      id="benchmarks"
+      label={t.benchmarks.label}
+      title={t.benchmarks.title}
+      line={t.benchmarks.line}
+    >
       <Container className="grid gap-3 lg:grid-cols-2">
         {groups.map((group) => (
-          <GroupCard key={group.claim} group={group} />
+          <GroupCard
+            key={group.claim}
+            group={group}
+            seeAll={t.benchmarks.seeAll}
+            locale={locale}
+          />
         ))}
       </Container>
       {note && <Container className="t-mono pt-4 text-muted-foreground">{note}.</Container>}
