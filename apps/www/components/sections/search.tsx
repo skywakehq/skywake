@@ -4,7 +4,7 @@ import { Bento } from "./bento";
 
 export function Search() {
   return (
-    <Section id="search" label="Search" title="Every kind of search, on your bucket.">
+    <Section id="search" label="Search" title="Search by meaning, by keyword, or both.">
       <Bento features={searchFeatures} />
     </Section>
   );

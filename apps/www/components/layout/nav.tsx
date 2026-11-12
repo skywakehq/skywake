@@ -34,9 +34,15 @@ export function Nav() {
               GitHub
             </a>
           )}
-          <a href={site.docsUrl} className="btn btn-sm btn-primary">
-            Get started <ArrowUpRight className="size-3.5" />
-          </a>
+          {site.cloudOpen ? (
+            <a href={site.consoleUrl} className="btn btn-sm btn-primary">
+              Get started <ArrowUpRight className="size-3.5" />
+            </a>
+          ) : (
+            <SiteLink href="/#waitlist" className="btn btn-sm btn-primary">
+              Join waitlist
+            </SiteLink>
+          )}
         </div>
       </div>
     </header>

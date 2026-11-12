@@ -112,7 +112,7 @@ const QUERIES: { q: string; hits: [string, string][] }[] = [
   },
 ];
 
-const COUNT = 420;
+const COUNT = 700;
 const POINTS = Array.from({ length: COUNT }, (_, i) => {
   const y = 1 - (2 * (i + 0.5)) / COUNT;
   const r = Math.sqrt(1 - y * y);
@@ -133,7 +133,7 @@ function nearest(t: readonly number[], turn: number) {
   return new Set(
     POINTS.map((p, i) => [p[0] * x + p[1] * t[1]! + p[2] * z, i] as const)
       .sort((a, b) => b[0] - a[0])
-      .slice(0, 7)
+      .slice(0, 9)
       .map(([, i]) => i),
   );
 }
@@ -184,9 +184,11 @@ export function SearchArt() {
 
       const cos = Math.cos(turn);
       const sin = Math.sin(turn);
-      const R = Math.min(w * 0.36, h * 0.62);
+      const R = Math.min(w * 0.4, h * 0.44);
       const cx = w * 0.62;
-      const cy = h * 0.62;
+      const cy = h * 0.5;
+      // Dots and halos grow with the sphere, so a big hero art stays bold.
+      const size = Math.max(1, R / 130);
 
       const litXY: [number, number][] = [];
       POINTS.forEach(([x, y, z], i) => {
@@ -199,32 +201,32 @@ export function SearchArt() {
           litXY.push([px, py]);
           return;
         }
-        ctx.globalAlpha = 0.08 + depth * 0.45;
+        ctx.globalAlpha = 0.12 + depth * 0.6;
         ctx.fillStyle = ink;
         ctx.beginPath();
-        ctx.arc(px, py, 0.6 + depth * 1.1, 0, Math.PI * 2);
+        ctx.arc(px, py, (0.7 + depth * 1.2) * size, 0, Math.PI * 2);
         ctx.fill();
       });
 
       const [best] = litXY;
       ctx.strokeStyle = signal;
       ctx.fillStyle = signal;
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 1.25 * size;
       litXY.forEach(([px, py], i) => {
         if (best && i > 0) {
-          ctx.globalAlpha = 0.45 * glow;
+          ctx.globalAlpha = 0.6 * glow;
           ctx.beginPath();
           ctx.moveTo(best[0], best[1]);
           ctx.lineTo(px, py);
           ctx.stroke();
         }
-        ctx.globalAlpha = 0.16 * glow;
+        ctx.globalAlpha = 0.18 * glow;
         ctx.beginPath();
-        ctx.arc(px, py, i === 0 ? 10 + Math.sin(now / 400) * 2 : 7, 0, Math.PI * 2);
+        ctx.arc(px, py, (i === 0 ? 11 + Math.sin(now / 400) * 2.5 : 7) * size, 0, Math.PI * 2);
         ctx.fill();
         ctx.globalAlpha = glow;
         ctx.beginPath();
-        ctx.arc(px, py, i === 0 ? 3.5 : 2.6, 0, Math.PI * 2);
+        ctx.arc(px, py, (i === 0 ? 4 : 3) * size, 0, Math.PI * 2);
         ctx.fill();
       });
       ctx.globalAlpha = 1;
@@ -237,30 +239,33 @@ export function SearchArt() {
 
   const { q, hits } = QUERIES[k]!;
   return (
-    <div aria-hidden className="relative -mx-6 h-64 sm:-mx-8" style={FADE}>
-      <canvas ref={canvas} className="absolute inset-0 h-full w-full text-muted-foreground" />
-      <div className="absolute top-0 left-6 flex flex-col gap-2 sm:left-8">
-        <p
-          key={q}
-          className="rise-in inline-flex h-8 w-fit items-center gap-2 rounded-md bg-background px-3.5 font-mono text-[12px] text-foreground ring-1 ring-border"
-        >
-          <span className="size-1.5 rounded-full bg-signal" />
-          {q}
-          <span className="text-muted-foreground">411 ms</span>
-        </p>
-        <ol key={`${q}-hits`} className="mt-1 grid gap-1.5 pl-1">
-          {hits.map(([file, score], i) => (
-            <li
-              key={file}
-              className="rise-in flex items-center gap-2 font-mono text-[11px]"
-              style={{ animationDelay: `${0.3 + i * 0.12}s` }}
-            >
-              <span className="text-signal">{i + 1}</span>
-              <span className="text-foreground">{file}</span>
-              <span className="text-muted-foreground">{score}</span>
-            </li>
-          ))}
-        </ol>
+    // Same height as ForkArt at any width: three rows of 5:4 tiles plus the label row.
+    <div aria-hidden className="@container -mx-6 sm:-mx-8">
+      <div className="relative h-[calc(34.29cqw+50px)]" style={FADE}>
+        <canvas ref={canvas} className="absolute inset-0 h-full w-full text-muted-foreground" />
+        <div className="absolute top-0 left-6 flex flex-col gap-2 sm:left-8">
+          <p
+            key={q}
+            className="rise-in inline-flex h-8 w-fit items-center gap-2 rounded-md bg-background px-3.5 font-mono text-[12px] text-foreground ring-1 ring-border"
+          >
+            <span className="size-1.5 rounded-full bg-signal" />
+            {q}
+            <span className="text-muted-foreground">411 ms</span>
+          </p>
+          <ol key={`${q}-hits`} className="mt-1 grid gap-1.5 pl-1">
+            {hits.map(([file, score], i) => (
+              <li
+                key={file}
+                className="rise-in flex items-center gap-2 font-mono text-[11px]"
+                style={{ animationDelay: `${0.3 + i * 0.12}s` }}
+              >
+                <span className="text-signal">{i + 1}</span>
+                <span className="text-foreground">{file}</span>
+                <span className="text-muted-foreground">{score}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </div>
   );

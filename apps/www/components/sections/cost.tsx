@@ -30,7 +30,7 @@ const comparisons = [
 
 export function Cost() {
   return (
-    <Section id="cost" label="Cost" title="Massive savings, even on your own bucket.">
+    <Section id="cost" label="Cost" title="A copy costs nothing until something changes.">
       <Container>
         <div
           className={`${CARD} grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]`}
@@ -40,7 +40,9 @@ export function Cost() {
               {agents} agents · {workspaceGb} GB workspace · {changed * 100}% changed each
             </p>
             <p className="t-num mt-6 text-foreground">{Math.round(copiesGb / forksGb)}×</p>
-            <p className="t-body mt-2 text-muted-foreground">less storage, in the same bucket</p>
+            <p className="t-body mt-2 text-muted-foreground">
+              less storage than a full copy per agent
+            </p>
             <dl className="mt-auto pt-10">
               {comparisons.map((row) => (
                 <div key={row.label} className="border-t border-border py-4">

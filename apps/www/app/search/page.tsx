@@ -16,7 +16,7 @@ export default function SearchPage() {
         label="Search"
         title="Search everything in"
         accent="your bucket."
-        line="Vector, full-text and hybrid search, straight from your object storage. No separate database to run or keep in sync."
+        line="Vector, full-text and hybrid search, straight from your object storage, served over an NVMe cache for blazing fast speed."
         docs="/indexes"
         art={<SearchArt />}
       />

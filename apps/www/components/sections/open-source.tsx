@@ -73,10 +73,8 @@ export function OpenSource() {
       label="Open source"
       title={
         <>
-          Skywake is open source.{" "}
-          <span className="text-muted-foreground">
-            So that you can read the code, contribute and self-host.
-          </span>
+          Skywake is <span className="text-signal">Apache 2.0</span>,{" "}
+          <span className="text-muted-foreground">so that you can contribute & self host.</span>
         </>
       }
       action={<StarButton />}

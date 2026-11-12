@@ -6,6 +6,7 @@
 }
 
 :root {
+  --radius: 1.125rem;
   --signal: #2f5bea;
   --love: #e5484d;
   --card: #efeee9;
@@ -288,11 +289,34 @@ html {
   }
 }
 
+/* Text with a light that sweeps across it every few seconds. */
+.shimmer-text {
+  background: linear-gradient(
+      100deg,
+      var(--muted-foreground) 40%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 60%
+    )
+    0 0 / 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
   .rise-in,
+  .shimmer-text,
   .oss-glow,
   .oss-warm,
   .beat,

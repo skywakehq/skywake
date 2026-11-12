@@ -1,6 +1,8 @@
 import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { siGithub } from "simple-icons";
 
+import { BrandIcon } from "@/components/ui/brand-icon";
 import { CARD, Container } from "@/components/ui/section";
 import { site } from "@/content/site";
 
@@ -23,7 +25,7 @@ export function ProductHero({
     <section>
       <Container className="pt-20 pb-12 lg:pt-28">
         <p className="t-eyebrow text-muted-foreground">{label}</p>
-        <h1 className="t-display t-regular mt-5 max-w-[20ch] text-foreground">
+        <h1 className="t-display t-regular mt-5 text-foreground">
           {title} <span className="text-signal">{accent}</span>
         </h1>
         <p className="t-lead mt-6 max-w-[52ch] text-muted-foreground">{line}</p>
@@ -33,6 +35,7 @@ export function ProductHero({
           </a>
           {site.repoUrl && (
             <a href={site.repoUrl} className="btn btn-secondary">
+              <BrandIcon icon={siGithub} className="size-4" />
               Star on GitHub
             </a>
           )}

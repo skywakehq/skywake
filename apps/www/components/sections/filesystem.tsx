@@ -7,7 +7,7 @@ export function Filesystem() {
     <Section
       id="filesystem"
       label="Filesystem"
-      title="Copy it, change it, merge it back. Nothing gets lost."
+      title="Every agent works on its own copy. You decide what to keep."
     >
       <Bento features={fileFeatures} />
     </Section>
