@@ -54,13 +54,21 @@ npm install @skywake/sdk
 
 [Branch commands](../filesystem/branches.mdx) and `skywaked` need to know where to keep data. Pass `--store`, or set `SKYWAKE_STORE`:
 
-| Store                          | Example                                                     |
-| ------------------------------ | ----------------------------------------------------------- |
-| A local folder                 | `.skywake` (the default)                                    |
-| A bucket                       | `s3://bucket`, or `s3://bucket/folder` for one folder of it |
-| One namespace, through the API | `skywake://prod/app`                                        |
+| Store                                  | Example                                                     |
+| -------------------------------------- | ----------------------------------------------------------- |
+| A local folder                         | `.skywake` (the default)                                    |
+| An S3 bucket, or any S3 compatible one | `s3://bucket`, or `s3://bucket/folder` for one folder of it |
+| A Google Cloud Storage bucket          | `gs://bucket`, or `gs://bucket/folder`                      |
+| An Azure Blob Storage container        | `az://container`, or `az://container/folder`                |
+| One namespace, through the API         | `skywake://prod/app`                                        |
 
-For a bucket, set the usual `AWS_*` variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ENDPOINT` if the bucket is not on AWS. To try a bucket locally, start the bundled object storage server:
+Each bucket reads the usual variables of its cloud:
+
+- **S3:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ENDPOINT` if the bucket is not on AWS, such as Cloudflare R2.
+- **Google Cloud Storage:** `GOOGLE_SERVICE_ACCOUNT` (the path to a service account key file), or nothing on a Google Cloud machine with a service account.
+- **Azure:** `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY`.
+
+To try a bucket locally, start the bundled object storage server:
 
 ```bash
 docker compose -f docker/dev/compose.yaml up -d
@@ -68,7 +76,7 @@ export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_H
        AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
 ```
 
-The bucket must support conditional writes (`If-None-Match` and `If-Match`), because that is how Skywake keeps two writers from overwriting each other. It checks once, before its first conditional write, and refuses a store that ignores them.
+The bucket must support conditional writes (`If-None-Match` and `If-Match`, or generation checks on Google Cloud Storage), because that is how Skywake keeps two writers from overwriting each other. It checks once, before its first conditional write, and refuses a store that ignores them.
 
 To use a `skywake://` store, see [scoped credentials](../security/scoped-credentials.mdx).
 

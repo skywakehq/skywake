@@ -35,7 +35,7 @@ metrics = "0.24"
 napi = { version = "3.16.1", features = ["async"] }
 napi-build = "2.6.0"
 napi-derive = "3.7.0"
-object_store = { version = "0.14.2", features = ["aws"] }
+object_store = { version = "0.14.2", features = ["aws", "azure", "gcp"] }
 parquet = { version = "60.1.0", default-features = false, features = ["snap", "zstd"] }
 postcard = { version = "1.1.3", features = ["use-std"] }
 regex = "1"
