@@ -12,7 +12,7 @@ COPY benchmarks benchmarks
 COPY sdks/rust sdks/rust
 RUN cargo build --release --locked -p skywake-node
 
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 # The engine's S3 client needs the system's CA certificates.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* && corepack enable
