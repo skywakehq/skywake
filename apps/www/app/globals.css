@@ -289,6 +289,18 @@ html {
   }
 }
 
+/* An SVG line that draws itself in (set pathLength={1} on the shape). */
+.draw-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw-line 0.9s ease-out forwards;
+}
+@keyframes draw-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Text with a light that sweeps across it every few seconds. */
 .shimmer-text {
   background: linear-gradient(
@@ -316,6 +328,7 @@ html {
     scroll-behavior: auto;
   }
   .rise-in,
+  .draw-line,
   .shimmer-text,
   .oss-glow,
   .oss-warm,
@@ -325,6 +338,9 @@ html {
   }
   .echo {
     opacity: 0;
+  }
+  .draw-line {
+    stroke-dashoffset: 0;
   }
 }
 

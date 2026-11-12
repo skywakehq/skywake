@@ -9,7 +9,7 @@ import {
   Sheet,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 const FADE = {
   maskImage:
@@ -112,39 +112,70 @@ const QUERIES: { q: string; hits: [string, string][] }[] = [
   },
 ];
 
-const COUNT = 700;
-const POINTS = Array.from({ length: COUNT }, (_, i) => {
-  const y = 1 - (2 * (i + 0.5)) / COUNT;
-  const r = Math.sqrt(1 - y * y);
-  const a = i * 2.39996;
-  return [Math.cos(a) * r, y, Math.sin(a) * r] as const;
-});
-const TARGETS = [
-  [0.35, 0.3, 0.88],
-  [-0.4, -0.25, 0.88],
-  [0.1, -0.5, 0.86],
-] as const;
-
-function nearest(t: readonly number[], turn: number) {
-  const c = Math.cos(turn);
-  const s = Math.sin(turn);
-  const x = t[0]! * c - t[2]! * s;
-  const z = t[0]! * s + t[2]! * c;
-  return new Set(
-    POINTS.map((p, i) => [p[0] * x + p[1] * t[1]! + p[2] * z, i] as const)
-      .sort((a, b) => b[0] - a[0])
-      .slice(0, 9)
-      .map(([, i]) => i),
-  );
+// A small neighbour graph, the shape vector indexes search over. Built once
+// from a fixed seed, so the server and the browser draw the same picture.
+const W = 600;
+const H = 260;
+const NODES: [number, number][] = [];
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+while (NODES.length < 46) {
+  const p: [number, number] = [20 + rand() * (W - 40), 16 + rand() * (H - 32)];
+  if (NODES.every((q) => dist(p, q) > 42)) NODES.push(p);
 }
 
+function dist(a: readonly number[], b: readonly number[]) {
+  return Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!);
+}
+
+const NEIGHBOURS: number[][] = NODES.map(() => []);
+const EDGES: [number, number][] = [];
+NODES.forEach((p, i) => {
+  NODES.map((q, j) => [dist(p, q), j] as const)
+    .sort((a, b) => a[0] - b[0])
+    .slice(1, 4)
+    .forEach(([, j]) => {
+      if (NEIGHBOURS[i]!.includes(j)) return;
+      NEIGHBOURS[i]!.push(j);
+      NEIGHBOURS[j]!.push(i);
+      EDGES.push([i, j]);
+    });
+});
+
+const ENTRY = NODES.reduce(
+  (best, p, i) => (dist(p, [30, 240]) < dist(NODES[best]!, [30, 240]) ? i : best),
+  0,
+);
+
+// Walk from the entry node to the neighbour closest to the query, like a real
+// graph search, then return the path and the three nearest results.
+function search(target: readonly [number, number]) {
+  const path = [ENTRY];
+  for (;;) {
+    const here = path.at(-1)!;
+    const next = NEIGHBOURS[here]!.reduce(
+      (best, j) => (dist(NODES[j]!, target) < dist(NODES[best]!, target) ? j : best),
+      here,
+    );
+    if (next === here) break;
+    path.push(next);
+  }
+  const end = path.at(-1)!;
+  const near = [...NEIGHBOURS[end]!].sort(
+    (a, b) => dist(NODES[a]!, target) - dist(NODES[b]!, target),
+  );
+  return { path, results: [end, ...near.slice(0, 2)] };
+}
+
+const TARGETS = [
+  [470, 80],
+  [540, 200],
+  [360, 140],
+] as const;
+const SEARCHES = TARGETS.map(search);
+
 export function SearchArt() {
-  const canvas = useRef<HTMLCanvasElement>(null);
   const [k, setK] = useState(0);
-  const query = useRef(0);
-  useEffect(() => {
-    query.current = k;
-  }, [k]);
 
   useEffect(() => {
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -152,120 +183,102 @@ export function SearchArt() {
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => {
-    const el = canvas.current!;
-    const ctx = el.getContext("2d")!;
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let frame = 0;
-    let since = performance.now();
-    let last = -1;
-    let lit = new Set<number>();
-
-    function draw(now: number) {
-      const dpr = devicePixelRatio || 1;
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      if (el.width !== w * dpr) el.width = w * dpr;
-      if (el.height !== h * dpr) el.height = h * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-
-      const style = getComputedStyle(el);
-      const ink = style.color;
-      const signal = style.getPropertyValue("--signal").trim() || "#2f5bea";
-
-      const turn = still ? 0.6 : now / 9000;
-      if (query.current !== last) {
-        last = query.current;
-        since = now;
-        lit = nearest(TARGETS[last]!, turn);
-      }
-      const glow = Math.min(1, (now - since) / 700);
-
-      const cos = Math.cos(turn);
-      const sin = Math.sin(turn);
-      const R = Math.min(w * 0.4, h * 0.44);
-      const cx = w * 0.62;
-      const cy = h * 0.5;
-      // Dots and halos grow with the sphere, so a big hero art stays bold.
-      const size = Math.max(1, R / 130);
-
-      const litXY: [number, number][] = [];
-      POINTS.forEach(([x, y, z], i) => {
-        const rx = x * cos + z * sin;
-        const rz = -x * sin + z * cos;
-        const depth = (rz + 1) / 2;
-        const px = cx + rx * R;
-        const py = cy + y * R;
-        if (lit.has(i)) {
-          litXY.push([px, py]);
-          return;
-        }
-        ctx.globalAlpha = 0.12 + depth * 0.6;
-        ctx.fillStyle = ink;
-        ctx.beginPath();
-        ctx.arc(px, py, (0.7 + depth * 1.2) * size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      const [best] = litXY;
-      ctx.strokeStyle = signal;
-      ctx.fillStyle = signal;
-      ctx.lineWidth = 1.25 * size;
-      litXY.forEach(([px, py], i) => {
-        if (best && i > 0) {
-          ctx.globalAlpha = 0.6 * glow;
-          ctx.beginPath();
-          ctx.moveTo(best[0], best[1]);
-          ctx.lineTo(px, py);
-          ctx.stroke();
-        }
-        ctx.globalAlpha = 0.18 * glow;
-        ctx.beginPath();
-        ctx.arc(px, py, (i === 0 ? 11 + Math.sin(now / 400) * 2.5 : 7) * size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = glow;
-        ctx.beginPath();
-        ctx.arc(px, py, (i === 0 ? 4 : 3) * size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.globalAlpha = 1;
-
-      if (!still) frame = requestAnimationFrame(draw);
-    }
-    frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-
   const { q, hits } = QUERIES[k]!;
+  const { path, results } = SEARCHES[k]!;
+  const end = results[0]!;
   return (
-    // Same height as ForkArt at any width: three rows of 5:4 tiles plus the label row.
-    <div aria-hidden className="@container -mx-6 sm:-mx-8">
-      <div className="relative h-[calc(34.29cqw+50px)]" style={FADE}>
-        <canvas ref={canvas} className="absolute inset-0 h-full w-full text-muted-foreground" />
-        <div className="absolute top-0 left-6 flex flex-col gap-2 sm:left-8">
-          <p
-            key={q}
-            className="rise-in inline-flex h-8 w-fit items-center gap-2 rounded-md bg-background px-3.5 font-mono text-[12px] text-foreground ring-1 ring-border"
-          >
-            <span className="size-1.5 rounded-full bg-signal" />
-            {q}
-            <span className="text-muted-foreground">411 ms</span>
-          </p>
-          <ol key={`${q}-hits`} className="mt-1 grid gap-1.5 pl-1">
-            {hits.map(([file, score], i) => (
-              <li
-                key={file}
-                className="rise-in flex items-center gap-2 font-mono text-[11px]"
-                style={{ animationDelay: `${0.3 + i * 0.12}s` }}
-              >
-                <span className="text-signal">{i + 1}</span>
-                <span className="text-foreground">{file}</span>
-                <span className="text-muted-foreground">{score}</span>
-              </li>
+    <div aria-hidden className="relative">
+      <p
+        key={q}
+        className="rise-in inline-flex h-8 items-center gap-2 rounded-md bg-background px-3.5 font-mono text-[12px] text-foreground ring-1 ring-border"
+      >
+        <span className="size-1.5 rounded-full bg-signal" />
+        {q}
+        <span className="text-muted-foreground">411 ms</span>
+      </p>
+      <div className="relative mt-4 aspect-[600/260]" style={FADE}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 h-full w-full">
+          <g className="stroke-muted-foreground/25" strokeWidth={1}>
+            {EDGES.map(([a, b]) => (
+              <line
+                key={`${a}-${b}`}
+                x1={NODES[a]![0]}
+                y1={NODES[a]![1]}
+                x2={NODES[b]![0]}
+                y2={NODES[b]![1]}
+                vectorEffect="non-scaling-stroke"
+              />
             ))}
-          </ol>
-        </div>
+          </g>
+          <g className="fill-muted-foreground/45">
+            {NODES.map(([x, y], i) => (
+              <circle key={i} cx={x} cy={y} r={2.5} />
+            ))}
+          </g>
+          <g key={q} className="stroke-signal fill-signal">
+            <polyline
+              points={path.map((i) => NODES[i]!.join(",")).join(" ")}
+              pathLength={1}
+              fill="none"
+              strokeWidth={2}
+              strokeLinejoin="round"
+              className="draw-line"
+            />
+            {results.slice(1).map((i) => (
+              <line
+                key={i}
+                x1={NODES[end]![0]}
+                y1={NODES[end]![1]}
+                x2={NODES[i]![0]}
+                y2={NODES[i]![1]}
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
+                vectorEffect="non-scaling-stroke"
+                className="rise-in"
+                style={{ animationDelay: "0.9s" }}
+              />
+            ))}
+            {path.map((i, n) => (
+              <circle
+                key={i}
+                cx={NODES[i]![0]}
+                cy={NODES[i]![1]}
+                r={i === end ? 5 : 3}
+                stroke="none"
+                className="rise-in"
+                style={{ animationDelay: `${(n / path.length) * 0.8}s` }}
+              />
+            ))}
+            {results.slice(1).map((i) => (
+              <circle
+                key={`r${i}`}
+                cx={NODES[i]![0]}
+                cy={NODES[i]![1]}
+                r={4}
+                stroke="none"
+                className="rise-in"
+                style={{ animationDelay: "0.9s" }}
+              />
+            ))}
+          </g>
+        </svg>
+        {results.map((i, n) => {
+          const [x, y] = NODES[i]!;
+          const [file, score] = hits[n]!;
+          return (
+            <span
+              key={`${q}-${i}`}
+              className={`rise-in absolute flex -translate-y-1/2 items-center gap-1.5 rounded-md bg-background px-2 py-0.5 font-mono text-[11px] whitespace-nowrap ring-1 ring-border ${
+                x > W * 0.7 ? "-translate-x-[calc(100%+10px)]" : "translate-x-[10px]"
+              }`}
+              style={{ left: `${(x / W) * 100}%`, top: `${(y / H) * 100}%`, animationDelay: "1s" }}
+            >
+              <span className="text-signal">{n + 1}</span>
+              <span className="text-foreground">{file}</span>
+              <span className="text-muted-foreground">{score}</span>
+            </span>
+          );
+        })}
       </div>
     </div>
   );
