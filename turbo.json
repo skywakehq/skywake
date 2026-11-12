@@ -12,7 +12,9 @@
         "DOCS_ASSET_PREFIX",
         "CONSOLE_URL",
         "CONSOLE_LINK",
-        "CONSOLE_BASE_PATH"
+        "CONSOLE_BASE_PATH",
+        "SITE_URL",
+        "CLOUD_OPEN"
       ]
     },
     "typecheck": {

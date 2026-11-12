@@ -26,7 +26,13 @@ const nextConfig: NextConfig = {
       },
     },
   },
-  env: { DOCS_LINK: docsLink, CONSOLE_LINK: consoleLink, SITE_URL: siteUrl },
+  env: {
+    DOCS_LINK: docsLink,
+    CONSOLE_LINK: consoleLink,
+    SITE_URL: siteUrl,
+    // Skywake Cloud: off shows the waitlist, on (`1`) links to the console.
+    CLOUD_OPEN: process.env.CLOUD_OPEN ?? "",
+  },
   async rewrites() {
     return [docs, dashboard].flatMap((zone) => (zone.url ? zoneRewrites(zone.path, zone.url) : []));
   },
