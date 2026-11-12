@@ -6,7 +6,7 @@ name: skywake
 
 services:
   s3:
-    image: rustfs/rustfs:1.0.3
+    image: rustfs/rustfs:1.0.4
     environment:
       RUSTFS_ACCESS_KEY: skywake
       RUSTFS_SECRET_KEY: skywake-dev
