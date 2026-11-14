@@ -12,6 +12,14 @@ export const localeNames: Record<Locale, string> = {
   de: "Deutsch",
 };
 
+export const localeFlags: Record<Locale, string> = {
+  en: "🇺🇸",
+  it: "🇮🇹",
+  fr: "🇫🇷",
+  es: "🇪🇸",
+  de: "🇩🇪",
+};
+
 export const localeOg: Record<Locale, string> = {
   en: "en_US",
   it: "it_IT",

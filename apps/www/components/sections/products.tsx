@@ -32,13 +32,13 @@ export function Products({
               <Link
                 key={product.name}
                 href={localizePath(locale, product.href)}
-                className={`${CARD} group flex flex-col overflow-hidden p-6 transition-[border-color,transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-[0_18px_40px_-28px_color-mix(in_oklab,var(--foreground)_45%,transparent)] sm:p-8`}
+                className={`${CARD} group flex flex-col overflow-hidden p-6 transition-colors duration-300 hover:border-foreground/20 sm:p-8`}
               >
-                <h2 className="t-h3 flex items-center gap-2.5 text-foreground">
+                <h3 className="t-h3 flex items-center gap-2.5 text-foreground">
                   <Icon className="size-5 text-muted-foreground" />
                   {product.name}
                   <ArrowRight className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </h2>
+                </h3>
                 <p className="t-body mt-3 max-w-[44ch] text-muted-foreground">
                   {product.before}
                   <span className="text-foreground">{product.highlight}</span>

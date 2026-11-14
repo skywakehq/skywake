@@ -115,7 +115,7 @@ export function Footer({
       <div className="mt-14 border-y border-border">
         <Container className="flex flex-wrap items-center justify-between gap-4 py-5">
           <p className="t-small flex items-center gap-2 text-muted-foreground">
-            <Scale className="size-3.5" strokeWidth={1.75} />© 2026 {site.name} · GPL-3.0
+            <Scale className="size-3.5" strokeWidth={1.75} />© 2026 {site.name} · Apache-2.0
           </p>
           <div className="flex items-center gap-3">
             {site.repoUrl && (

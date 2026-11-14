@@ -23,7 +23,7 @@ export function Hero({
         {!site.cloudOpen && (
           <a
             href="#waitlist"
-            className="t-small mb-7 inline-flex items-center gap-2 rounded-full bg-(--soft) py-1.5 pr-3 pl-2.5 ring-1 ring-(--hairline) transition-colors hover:bg-(--hairline)"
+            className="t-small mb-7 inline-flex items-center gap-2 bg-(--soft) py-1.5 pr-3 pl-2.5 ring-1 ring-(--hairline) transition-colors hover:bg-(--hairline)"
           >
             <span className="shimmer-text">{t.hero.badge}</span>
             <ArrowRight className="size-3.5 text-muted-foreground" />
@@ -56,7 +56,7 @@ export function Hero({
         </div>
 
         <div className={`${CARD} mt-12 overflow-hidden lg:mt-14`}>
-          <HeroDemo messages={t} />
+          <HeroDemo />
         </div>
       </Container>
       <Hatch />

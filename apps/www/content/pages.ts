@@ -26,9 +26,9 @@ export const pages = {
     priority: 0.8,
   },
   "/use-cases": {
-    title: "Use cases: agent sandboxes, RL environments, CI",
+    title: "Use cases: knowledge bases, agent memory, coding agents and more",
     description:
-      "Sandboxes, RL environments, CI, preview environments, datasets and shared data on one bucket, step by step.",
+      "How teams use Skywake for knowledge bases, agent memory, sandboxes, coding and document agents, evals, CI and datasets, step by step.",
     priority: 0.7,
   },
   "/pricing": {

@@ -67,12 +67,19 @@ export function OpenSource({
   messages?: HomeMessages;
 }) {
   const t = messages ?? getMessages(locale);
+  const [before, after] = t.openSource.title.split("Apache 2.0");
 
   return (
     <Section
       id="open-source"
       label={t.openSource.label}
-      title={t.openSource.title}
+      title={
+        <>
+          {before}
+          <span className="text-signal">Apache 2.0</span>
+          {after}
+        </>
+      }
       line={t.openSource.line}
       action={
         site.repoUrl ? (
@@ -83,7 +90,7 @@ export function OpenSource({
       }
     >
       <Container>
-        <div className={`${CARD} relative h-[440px] overflow-hidden`}>
+        <div className={`${CARD} reveal relative h-[440px] overflow-hidden`}>
           <div
             aria-hidden
             className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 gap-3 [mask-image:radial-gradient(closest-side,black_40%,transparent)]"

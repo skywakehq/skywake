@@ -39,20 +39,22 @@ export type HomeMessages = {
     starCta: string;
     docsCta: string;
   };
-  demo: {
-    workspace: string;
-    storage: string;
-    branchNote: string;
-    bucketNote: string;
-    terminal: string;
-    agents: { id: string; idle: string }[];
-    steps: {
-      label: string;
-      detail: string;
-      cmd: string;
-      result: string;
-      focus: string;
-    }[];
+  useCases: {
+    label: string;
+    title: string;
+    more: string;
+    cta: string;
+    items: { name: string; title: string; line: string }[];
+    moreTitle: string;
+    others: { name: string; line: string }[];
+  };
+  git: {
+    label: string;
+    titleBefore: string;
+    titleAccent: string;
+    line: string;
+    works: string;
+    note: string;
   };
   products: {
     eyebrow: string;
@@ -77,10 +79,9 @@ export type HomeMessages = {
   architecture: {
     label: string;
     titleBefore: string;
-    titleCache: string;
-    titleMid: string;
-    titleDisk: string;
+    titleAccent: string;
     line: string;
+    stats: string[];
   };
   search: {
     label: string;
@@ -102,9 +103,19 @@ export type HomeMessages = {
     setup: string;
     lessStorage: string;
     chartTitle: string;
+    chart: {
+      without: string;
+      with: string;
+      withoutDetail: string;
+      withDetail: string;
+      perMonth: string;
+      gap: string;
+    };
     storageMonth: string;
     beforeAgent: string;
     vsCopies: string;
+    howTitle: string;
+    steps: { title: string; line: string }[];
   };
   openSource: {
     label: string;

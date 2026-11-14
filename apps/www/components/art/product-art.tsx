@@ -47,7 +47,7 @@ export function ForkArt() {
         >
           <span className="size-1.5 rounded-full bg-signal" />
           agent-{n}
-          <span className="text-muted-foreground">forked in 10 ms</span>
+          <span className="text-muted-foreground">copied in 10 ms</span>
         </p>
       </div>
       <div
@@ -73,7 +73,7 @@ export function ForkArt() {
                 }`}
               />
               {lit && (
-                <span className="rise-in absolute top-1.5 right-1.5 rounded-full bg-signal px-1.5 font-mono text-[9px] leading-4 text-background">
+                <span className="rise-in absolute top-1.5 right-1.5 bg-signal px-1.5 font-mono text-[9px] leading-4 text-background">
                   M
                 </span>
               )}
