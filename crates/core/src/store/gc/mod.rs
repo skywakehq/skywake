@@ -58,6 +58,8 @@ async fn collect_in(
     dry_run: bool,
     slices: Option<usize>,
 ) -> Result<Collected> {
+    // Never sweep a search index's folder: none of its roots are ours to see.
+    super::kind::require(objects.store().as_ref(), super::kind::Kind::Filesystem).await?;
     let collected = match dry_run {
         true => dry(objects, refs, grace, slices).await?,
         false => {

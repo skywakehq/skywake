@@ -14,6 +14,7 @@ use crate::ops::worktree;
 use crate::retry::{SAVE_ATTEMPTS, backoff};
 use crate::store::gc::lock;
 use crate::store::gc::{self, Collected};
+use crate::store::kind::{self, Kind};
 use crate::store::objects::commit_path;
 use crate::{Commit, Error, Hash, Head, Objects, Refs, Result, Tree, Trees};
 
@@ -58,6 +59,12 @@ impl Repo {
         let commit = match from {
             Some(source) => self.stored_head(source).await?.commit,
             None => {
+                // A branch from nothing is how a folder starts. Credentials scoped to
+                // the folder may not write the marker; GC marks such a folder later.
+                match kind::mark(self.objects.store().as_ref(), Kind::Filesystem).await {
+                    Err(error @ crate::Error::WrongKind(_)) => return Err(error),
+                    _ => {}
+                }
                 let empty = Tree::new();
                 let packs = Packs {
                     recent: vec![empty.clone()],

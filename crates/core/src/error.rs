@@ -58,6 +58,9 @@ pub enum Error {
     #[error("garbage collection stopped: {0}")]
     Collection(String),
 
+    #[error("{0}")]
+    WrongKind(String),
+
     #[error("corrupt store: {0}")]
     Corrupt(String),
 

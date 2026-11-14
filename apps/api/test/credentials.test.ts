@@ -45,12 +45,18 @@ test("the session policy reaches only the namespace's prefix", () => {
     Action: ["s3:PutObject"],
     Resource: ["arn:aws:s3:::b/org_1/ns_2/gc/*"],
   };
+  const kind = {
+    Effect: "Deny",
+    Action: ["s3:PutObject"],
+    Resource: ["arn:aws:s3:::b/org_1/ns_2/skywake.json"],
+  };
   assert.deepEqual(policyFor(place, "read"), {
     Version: "2012-10-17",
     Statement: [
       { Effect: "Allow", Action: ["s3:GetObject"], Resource: ["arn:aws:s3:::b/org_1/ns_2/*"] },
       list,
       gc,
+      kind,
     ],
   });
   assert.deepEqual(policyFor(place, "write").Statement, [
@@ -61,14 +67,15 @@ test("the session policy reaches only the namespace's prefix", () => {
     },
     list,
     gc,
+    kind,
   ]);
-  assert.deepEqual(policyFor(place, "write", ["main", "release/v1"]).Statement[3], {
+  assert.deepEqual(policyFor(place, "write", ["main", "release/v1"]).Statement[4], {
     Effect: "Deny",
     Action: ["s3:PutObject"],
     Resource: ["arn:aws:s3:::b/org_1/ns_2/refs/main", "arn:aws:s3:::b/org_1/ns_2/refs/release/v1"],
   });
-  assert.equal(policyFor(place, "read", ["main"]).Statement.length, 3);
-  assert.deepEqual(policyFor(place, "write", ["main"], true).Statement[3], {
+  assert.equal(policyFor(place, "read", ["main"]).Statement.length, 4);
+  assert.deepEqual(policyFor(place, "write", ["main"], true).Statement[4], {
     Effect: "Deny",
     Action: ["s3:PutObject"],
     Resource: ["arn:aws:s3:::b/org_1/ns_2/refs/*"],

@@ -110,6 +110,7 @@ impl Index {
         options: Options,
     ) -> Result<Self> {
         schema.check()?;
+        skywake_core::kind::mark(store.as_ref(), skywake_core::kind::Kind::Index).await?;
         let index = Self::at(store, MAIN, options);
         let version = Version::new(schema);
         let written = Written::new();

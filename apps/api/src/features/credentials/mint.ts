@@ -40,6 +40,8 @@ export function policyFor(
       Condition: { StringLike: { "s3:prefix": [`${place.prefix}/*`] } },
     },
     { Effect: "Deny", Action: ["s3:PutObject"], Resource: [`${objects}/gc/*`] },
+    // The folder's kind keeps garbage collectors off it; only the API writes it.
+    { Effect: "Deny", Action: ["s3:PutObject"], Resource: [`${objects}/skywake.json`] },
   ];
   if (access === "write" && ownersHoldRefs) {
     statements.push({ Effect: "Deny", Action: ["s3:PutObject"], Resource: [`${objects}/refs/*`] });

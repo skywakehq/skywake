@@ -841,3 +841,34 @@ async fn a_build_with_nothing_new_changes_nothing() {
     index.build().await.unwrap();
     assert_eq!(near(&index, 0.0, 0.0, 10).await, nums(&[1]));
 }
+
+/// Files and an index may share a bucket, never a folder: each garbage
+/// collector refuses the other's folder, and one holding both, deleting nothing.
+#[tokio::test]
+async fn garbage_collectors_keep_to_their_own_kind_of_folder() {
+    let (_dir, store) = folder();
+    let index = Index::create(store.clone(), schema(Metric::Euclidean))
+        .await
+        .unwrap();
+    index.upsert(vec![doc(1, 0.0, 0.0)]).await.unwrap();
+    let repo = skywake_core::Repo::new(store.clone());
+    assert!(matches!(
+        repo.create_branch("main", None).await,
+        Err(skywake_core::Error::WrongKind(_))
+    ));
+    let core_gc = repo.collect_garbage(Duration::ZERO, false).await;
+    assert!(matches!(core_gc, Err(skywake_core::Error::WrongKind(_))));
+    let hits = index.query(&Query::new("v", vec![0.0, 0.0], 5)).await.unwrap();
+    assert_eq!(ids(&hits), [Id::Num(1)]);
+
+    // A filesystem made before markers: judged by what it holds, then marked.
+    let (_dir, files) = folder();
+    let repo = skywake_core::Repo::new(files.clone());
+    repo.create_branch("main", None).await.unwrap();
+    files.delete(&Path::from(skywake_core::kind::MARKER)).await.unwrap();
+    let index_gc = gc::collect(files.clone(), Duration::ZERO, false).await;
+    assert!(matches!(index_gc, Err(Error::Core(skywake_core::Error::WrongKind(_)))));
+    repo.collect_garbage(Duration::ZERO, false).await.unwrap();
+    assert!(files.head(&Path::from(skywake_core::kind::MARKER)).await.is_ok());
+    assert_eq!(repo.branches().await.unwrap(), ["main"]);
+}

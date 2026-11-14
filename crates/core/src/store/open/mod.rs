@@ -241,9 +241,10 @@ async fn probe(store: &dyn ObjectStore) -> Result<Result<(), String>> {
     put(PutMode::Create).await?;
     let again = put(PutMode::Create).await;
     // S3 and Azure check the ETag; Google Cloud Storage checks the version
-    // (its "generation"). Neither of these matches the probe just written.
+    // (its "generation"). Neither of these matches the probe just written: no
+    // store makes this ETag, not even an in-memory one counting from `"0"`.
     let stale = put(PutMode::Update(UpdateVersion {
-        e_tag: Some("\"0\"".to_string()),
+        e_tag: Some("\"skywake-stale-probe\"".to_string()),
         version: Some("1".to_string()),
     }))
     .await;

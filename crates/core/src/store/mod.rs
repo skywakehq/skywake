@@ -4,6 +4,7 @@ pub mod bundles;
 pub(crate) mod gc;
 pub mod held;
 pub(crate) mod io;
+pub mod kind;
 pub mod measure;
 pub(crate) mod objects;
 mod open;

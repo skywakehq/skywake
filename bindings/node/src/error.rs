@@ -22,6 +22,7 @@ pub(crate) fn fail(error: skywake_core::Error) -> Error {
         BranchExists(_) | Conflict(_) | EditConflict(_) => "conflict",
         InvalidBranchName(_) | InvalidPath(_) | NotAFolder(_) | BadPattern(_)
         | MissingSource(_) | NotEmpty(_) | NonUtf8Path(_) => "invalid",
+        WrongKind(_) => "conflict",
         CollectionRunning | Unsettled(_) | HeadsUnavailable => "unavailable",
         Collection(_) | Corrupt(_) | Store(_) | Io(_) | Encoding(_) => "internal",
     };

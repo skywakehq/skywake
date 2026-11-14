@@ -24,6 +24,7 @@ pub use ops::worktree::{INLINE_BUDGET, INLINE_MAX, store_file, store_file_reusin
 pub use repo::{Claim, Content, Edit, Match, Merged, Repo, Resolution, Take};
 pub use store::gc::Collected;
 pub use store::gc::lock;
+pub use store::kind;
 pub use store::refs::wire as heads;
 pub use store::{
     Bundler, Encryption, Head, HeadNodes, HeadsAt, Objects, Refs, StoreKeys, Trees, bucket_folder,

@@ -10,6 +10,7 @@ use object_store::path::Path;
 use object_store::prefix::PrefixStore;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
 use skywake_core::lock::{self, Lease};
+use skywake_core::kind::{Kind, require};
 use skywake_core::{Hash, Objects};
 
 pub use skywake_core::Collected;
@@ -35,6 +36,7 @@ pub async fn collect(
     grace: Duration,
     dry_run: bool,
 ) -> Result<Collected> {
+    require(store.as_ref(), Kind::Index).await?;
     collect_keeping(store, grace, Some(HISTORY), dry_run).await
 }
 
@@ -44,6 +46,8 @@ pub async fn collect_index(
     keep: Duration,
     dry_run: bool,
 ) -> Result<Collected> {
+    // Never sweep a filesystem's folder: none of its roots are ours to see.
+    require(store.as_ref(), Kind::Index).await?;
     let folders = shard_folders(store.as_ref()).await?;
     if folders.is_empty() {
         return collect_keeping(store, grace, Some(keep), dry_run).await;
