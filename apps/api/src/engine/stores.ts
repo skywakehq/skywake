@@ -145,6 +145,11 @@ export class Stores {
     this.#held.delete(folder);
   }
 
+  /** Stops reusing what is open on a folder, such as one about to be deleted. */
+  close(folder: string) {
+    this.#drop(folder);
+  }
+
   #drop(folder: string) {
     this.#engines.delete(folder);
     this.#indexes.delete(folder);

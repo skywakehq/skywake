@@ -4,7 +4,7 @@ import { mayUse } from "../../auth/roles.ts";
 import type { Ctx } from "../../http/context.ts";
 import { badRequest, HttpError, isMissing, notFound } from "../../http/errors.ts";
 import { indexFor, signedIn } from "../../http/request.ts";
-import { MAIN } from "../indexes/lifecycle.ts";
+import { deleteIndex, MAIN } from "../indexes/lifecycle.ts";
 import * as indexes from "../indexes/queries.ts";
 import * as names from "./queries.ts";
 
@@ -81,15 +81,5 @@ export async function remove(c: Ctx, name: string) {
   await names.hide(db, index.org, index.name);
 }
 
-async function destroy(c: Ctx, index: Awaited<ReturnType<typeof indexFor>>["index"]) {
-  await indexes.remove(c.var.services.db, index.org, index.name);
-  await index.store.destroy().catch((error: unknown) => {
-    c.var.services.log({
-      level: "warn",
-      msg: "index data left behind",
-      request_id: c.get("requestId"),
-      folder: index.folder,
-      error: String(error),
-    });
-  });
-}
+const destroy = (c: Ctx, index: Awaited<ReturnType<typeof indexFor>>["index"]) =>
+  deleteIndex(c, index);

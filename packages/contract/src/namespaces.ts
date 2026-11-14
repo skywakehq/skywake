@@ -60,3 +60,16 @@ export const updateNamespace = createRoute({
   request: { params: NamespaceParams, body: body(NamespaceUpdate) },
   responses: { 204: noContent, ...errors(400, 401, 403, 404) },
 });
+
+export const deleteNamespace = createRoute({
+  method: "delete",
+  path: "/namespaces/{namespace}",
+  operationId: "deleteNamespace",
+  tags: ["namespaces"],
+  summary:
+    "Deletes a namespace: its branches and history at once, and its files from the bucket " +
+    "soon after. It can't be undone.",
+  security: signedIn,
+  request: { params: NamespaceParams },
+  responses: { 204: noContent, ...errors(401, 403, 404) },
+});

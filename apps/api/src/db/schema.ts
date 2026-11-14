@@ -598,3 +598,26 @@ export const indexStamps = api.table(
     index("index_stamps_newest").on(table.org, table.index, table.branch, table.at),
   ],
 );
+
+// Data to delete from a bucket: a namespace's or index's folder whose row is
+// gone. No foreign key, so it outlives the row; the row's removal and this
+// insert are one statement, so a folder is never forgotten. Servers claim
+// rows with SKIP LOCKED and retry until the folder is empty.
+export const deletions = api.table(
+  "deletions",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    org: text("org").notNull(),
+    kind: text("kind").$type<"namespace" | "index">().notNull(),
+    name: text("name").notNull(),
+    region: text("region").notNull(),
+    folder: text("folder").notNull(),
+    due: time("due").notNull().defaultNow(),
+    claimedBy: text("claimed_by"),
+    claimedUntil: time("claimed_until"),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    created: time("created").notNull().defaultNow(),
+  },
+  (table) => [index("deletions_due").on(table.due), index("deletions_region").on(table.region)],
+);

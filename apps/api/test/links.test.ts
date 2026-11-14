@@ -145,6 +145,10 @@ test("servers never claim one branch twice, and take back a lapsed claim", { ski
     await links.addBranch(db, id, "prod/app", name, null);
   }
   const mine = sql`org = ${id}`;
+  // Tests run one at a time: park what earlier ones left, so only this org is due.
+  await db.execute(sql`
+    UPDATE api.index_link_branches SET dirty = false, checked = now() + interval '1 hour'
+    WHERE NOT (${mine})`);
   // One claim takes at most PER_ORG branches of one organization.
   const first = await links.claim(db, "x", 10);
   assert.equal(first.filter((row) => row.org === id).length, links.PER_ORG);

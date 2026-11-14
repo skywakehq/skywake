@@ -68,6 +68,7 @@ export const routes = {
     namespaces.createNamespace,
     namespaces.getNamespace,
     namespaces.updateNamespace,
+    namespaces.deleteNamespace,
   ],
   links: [
     links.linkIndex,

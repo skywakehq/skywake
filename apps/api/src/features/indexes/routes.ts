@@ -3,12 +3,12 @@ import { indexes as routes } from "@skywake/contract";
 import { note } from "../../audit/note.ts";
 import { mayUse, type Caller } from "../../auth/roles.ts";
 import type { Ctx, Feature } from "../../http/context.ts";
-import { forbidden, messageOf, notFound } from "../../http/errors.ts";
+import { forbidden, notFound } from "../../http/errors.ts";
 import { pageOf } from "../../http/page.ts";
 import { addressOf, indexFor, signedIn } from "../../http/request.ts";
 import { requires } from "../billing/require.ts";
 import * as orgs from "../orgs/queries.ts";
-import { MAIN, makeIndex } from "./lifecycle.ts";
+import { deleteIndex, MAIN, makeIndex } from "./lifecycle.ts";
 import * as indexes from "./queries.ts";
 import { addAttributes, dropAttributes, engineSchema } from "./schemas.ts";
 import { statsOf } from "./stats.ts";
@@ -109,19 +109,7 @@ export const indexesFeature: Feature = {
 
     api.openapi(routes.deleteIndex, async (c) => {
       const { index } = await indexFor(c, c.req.valid("param").index, "admin");
-      const { db, log } = c.var.services;
-      await indexes.remove(db, index.org, index.name);
-      try {
-        await index.store.destroy();
-      } catch (error) {
-        log({
-          level: "warn",
-          msg: "index data left behind",
-          request_id: c.get("requestId"),
-          folder: index.folder,
-          error: messageOf(error),
-        });
-      }
+      await deleteIndex(c, index);
       return c.body(null, 204);
     });
   },

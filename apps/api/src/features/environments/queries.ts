@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.ts";
 import { environments, indexes, namespaces, type StoreAccess } from "../../db/schema.ts";
 import type { Stores } from "../../engine/stores.ts";
 import { badRequest } from "../../http/errors.ts";
+import { pendingIn } from "../deletions/queries.ts";
 import { bucketRegion } from "./buckets.ts";
 
 export async function ensure(db: Db, org: string, name: string) {
@@ -102,7 +103,9 @@ export async function holdsData(db: Db, org: string, environment: string) {
     .select({ n: sql<number>`count(*)::int` })
     .from(indexes)
     .where(and(eq(indexes.org, org), inside(indexes.name)));
-  return (ns?.n ?? 0) + (ix?.n ?? 0) > 0;
+  if ((ns?.n ?? 0) + (ix?.n ?? 0) > 0) return true;
+  // Folders still being deleted need the bucket's access until they are gone.
+  return pendingIn(db, bucketRegion(org, environment));
 }
 
 export async function setStore(

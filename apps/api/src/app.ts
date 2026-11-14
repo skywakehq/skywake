@@ -43,6 +43,7 @@ import { indexWritesFeature } from "./features/indexes/writes.ts";
 import { keysFeature } from "./features/keys/routes.ts";
 import { linksFeature } from "./features/links/routes.ts";
 import { Syncer } from "./features/links/sync.ts";
+import { Deleter } from "./features/deletions/worker.ts";
 import { namespacesFeature } from "./features/namespaces/routes.ts";
 import { Allowlists } from "./features/orgs/allowlist.ts";
 import { orgsFeature } from "./features/orgs/routes.ts";
@@ -125,6 +126,7 @@ export function services(
   const token = config.peer.token;
   const models = new Models(config);
   const syncer = new Syncer(id, db, stores, usage, models, log);
+  const deleter = new Deleter(id, db, stores, log);
   const builds =
     token === undefined ? null : new Builds(id, token, () => pinning.live(), stores, log);
   if (builds) stores.splitBuilds(builds);
@@ -148,6 +150,7 @@ export function services(
     usage,
     models,
     syncer,
+    deleter,
     allowlists: new Allowlists(db, changes),
     leases,
     changes,
