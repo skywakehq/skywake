@@ -48,6 +48,7 @@ export class Keeper {
     if (replica.warming) return;
     replica.warming = true;
     try {
+      await this.#stores.ready(row.region);
       const store = this.#stores.index(row.region, row.folder, openOptions(row));
       const [head] = await store.versions(MAIN, null, 1);
       const version = head?.version ?? "";

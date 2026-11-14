@@ -52,7 +52,7 @@ function wrap(engine) {
 }
 
 export const Engine = {
-  open: (location) => wrap(guard(() => native.Engine.open(location))),
+  open: (location, options) => wrap(guard(() => native.Engine.open(location, options))),
 };
 
 export const Index = {
@@ -61,3 +61,5 @@ export const Index = {
 
 export const blake3 = native.blake3;
 export const validName = native.validName;
+export const renewStoreKeys = native.renewStoreKeys;
+export const forgetStoreKeys = native.forgetStoreKeys;

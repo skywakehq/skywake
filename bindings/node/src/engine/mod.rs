@@ -9,7 +9,7 @@ use napi::Result;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 use skywake_core::{
-    EXECUTABLE_MODE, Edit, Entry, FILE_MODE, HeadNodes, Merged, Repo, bucket_folder, open_store,
+    EXECUTABLE_MODE, Edit, Entry, FILE_MODE, HeadNodes, Merged, Repo, bucket_folder,
 };
 
 use self::commits::{
@@ -30,6 +30,7 @@ pub struct Stored {
 #[napi(object)]
 pub struct EngineOpenOptions {
     pub heads: Option<bool>,
+    pub keys: Option<crate::StoreKeys>,
 }
 
 fn head_nodes(location: &str) -> Result<HeadNodes> {
@@ -59,7 +60,9 @@ pub struct Engine {
 impl Engine {
     #[napi(factory)]
     pub fn open(location: String, options: Option<EngineOpenOptions>) -> Result<Self> {
-        let store = open_store(&location).map_err(fail)?;
+        let keys = options.as_ref().and_then(|options| options.keys.clone());
+        let keys = keys.map(skywake_core::StoreKeys::from);
+        let store = skywake_core::open_store_keyed(&location, None, keys.as_ref()).map_err(fail)?;
         let mut repo = Repo::new(store);
         if options.and_then(|options| options.heads).unwrap_or(false) {
             repo = repo.with_head_nodes(Arc::new(head_nodes(&location)?));

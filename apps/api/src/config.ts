@@ -20,6 +20,10 @@ export interface Config {
   s3: { region: string; endpoint: string | null };
   placementCheck: boolean;
   sts?: { roleArn: string; endpoint?: string; seconds: number };
+  /** Seals secrets kept in Postgres, such as the keys of a customer's bucket. */
+  secretKey?: Buffer;
+  /** What customers trust in the role of a bucket they bring. */
+  byobPrincipal?: string;
   heads?: { nodes: string[]; token: string };
   embed?: Provider;
   rerank?: Provider;
@@ -76,6 +80,13 @@ function vendors(text: string): Vendors {
       { key: v.key, url: trim(v.url), rerankUrl: trim(v.rerank_url) },
     ]),
   );
+}
+
+function secretKey(text: string | undefined) {
+  if (text === undefined) return undefined;
+  const key = Buffer.from(text, "base64");
+  if (key.length !== 32) throw new Error("SKYWAKE_API_SECRET_KEY must be 32 bytes in base64");
+  return key;
 }
 
 const list = (text: string) =>
@@ -135,6 +146,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
           seconds: values.SKYWAKE_API_STS_SECONDS,
         }
       : undefined,
+    secretKey: secretKey(values.SKYWAKE_API_SECRET_KEY),
+    byobPrincipal: values.SKYWAKE_API_BYOB_PRINCIPAL,
     heads: heads(values.SKYWAKE_HEADS, values.SKYWAKE_CACHE_NODES, values.SKYWAKE_CACHE_TOKEN),
     embed: provider(values.SKYWAKE_API_EMBED_URL, values.SKYWAKE_API_EMBED_KEY),
     rerank: provider(values.SKYWAKE_API_RERANK_URL, values.SKYWAKE_API_RERANK_KEY),

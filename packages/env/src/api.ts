@@ -31,6 +31,10 @@ export const apiEnv = z.object({
   SKYWAKE_API_STS_ROLE_ARN: z.string().min(1).optional(),
   SKYWAKE_API_STS_ENDPOINT: z.url().optional(),
   SKYWAKE_API_STS_SECONDS: z.coerce.number().int().min(900).max(3600).default(900),
+  // 32 random bytes in base64. Seals the keys of buckets customers bring, at rest in Postgres.
+  SKYWAKE_API_SECRET_KEY: z.string().min(1).optional(),
+  // The AWS principal (an account or role ARN) customers trust in the role of a bucket they bring.
+  SKYWAKE_API_BYOB_PRINCIPAL: z.string().min(1).optional(),
   // `tier`: the cache servers own the default region's branch heads; they serve its whole bucket.
   SKYWAKE_HEADS: z.enum(["bucket", "tier"]).default("bucket"),
   SKYWAKE_CACHE_NODES: z.string().default(""),

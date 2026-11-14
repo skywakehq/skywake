@@ -25,10 +25,12 @@ use tokio::sync::OnceCell;
 use local::LocalStore;
 use measured::Measured;
 
+mod keys;
 mod local;
 mod measured;
 mod scoped;
 use crate::retry::random;
+pub use keys::{StoreKeys, forget_keys, renew_keys};
 
 const MAX_REQUESTS: usize = 256;
 
@@ -82,18 +84,32 @@ pub fn open_store(location: &str) -> crate::Result<Arc<dyn ObjectStore>> {
     open_store_with(location, None)
 }
 
+pub fn open_store_with(
+    location: &str,
+    encryption: Option<&Encryption>,
+) -> crate::Result<Arc<dyn ObjectStore>> {
+    open_store_keyed(location, encryption, None)
+}
+
 #[derive(Clone, Debug)]
 pub enum Encryption {
     Kms(String),
     Customer(String),
 }
 
-pub fn open_store_with(
+/// Opens a store, signing with `keys` instead of the process's own
+/// credentials when given. Keys work only for `s3://` stores.
+pub fn open_store_keyed(
     location: &str,
     encryption: Option<&Encryption>,
+    keys: Option<&StoreKeys>,
 ) -> crate::Result<Arc<dyn ObjectStore>> {
     if encryption.is_some() && !location.starts_with("s3://") {
         let message = "only an s3:// store takes an encryption key";
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into());
+    }
+    if keys.is_some() && !location.starts_with("s3://") {
+        let message = "only an s3:// store takes its own keys";
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, message).into());
     }
     let store: Arc<dyn ObjectStore> = if let Some(rest) = location.strip_prefix("s3://") {
@@ -101,7 +117,20 @@ pub fn open_store_with(
             Some((rest, region)) => (rest, Some(region)),
             None => (rest, None),
         };
-        let mut s3 = AmazonS3Builder::from_env();
+        let mut s3 = match keys {
+            None => AmazonS3Builder::from_env(),
+            Some(keys) => {
+                let mut s3 = AmazonS3Builder::new()
+                    .with_region(keys.region.as_deref().unwrap_or("us-east-1"))
+                    .with_credentials(Arc::new(keys::Ringed(keys::slot(keys))));
+                if let Some(endpoint) = &keys.endpoint {
+                    s3 = s3
+                        .with_endpoint(endpoint)
+                        .with_allow_http(endpoint.starts_with("http://"));
+                }
+                s3
+            }
+        };
         if let Some(region) = region {
             s3 = s3.with_region(region);
         }
@@ -110,7 +139,13 @@ pub fn open_store_with(
             Some(Encryption::Customer(key)) => s3.with_ssec_encryption(key),
             None => s3,
         };
-        Arc::new(Checked::new(location, s3_store(rest, s3)?))
+        // Keys of another account may reach a different bucket under the same
+        // name, so they get their own check.
+        let checked = match keys {
+            Some(keys) => format!("{location}#{}", keys.id),
+            None => location.to_string(),
+        };
+        Arc::new(Checked::new(&checked, s3_store(rest, s3)?))
     } else if let Some(rest) = location.strip_prefix("gs://") {
         // Credentials come from the usual GOOGLE_* variables, or from the
         // machine's service account on Google Cloud.

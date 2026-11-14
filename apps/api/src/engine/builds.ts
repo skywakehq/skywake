@@ -96,6 +96,7 @@ export class Builds {
   async build(order: BuildOrder) {
     const key = keyOf(order.folder, order.branch);
     const { region, folder, shards, kmsKeyId } = order;
+    await this.#stores.ready(region);
     const index = this.#stores.index(region, folder, { shards, kmsKeyId });
     const was = this.#building.get(key);
     const build = [...new Set([...(was?.order.build ?? []), ...order.build])].sort((a, b) => a - b);

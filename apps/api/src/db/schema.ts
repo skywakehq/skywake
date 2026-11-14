@@ -23,6 +23,18 @@ import type { ActorKind, Outcome } from "../audit/event.ts";
 
 type IndexSchema = contract.IndexSchema;
 
+/** How the API signs for a bucket a customer brings. No secret is kept in the clear. */
+export type StoreAccess =
+  | { type: "aws_role"; roleArn: string; externalId: string; region: string }
+  | {
+      type: "keys";
+      accessKeyId: string;
+      /** Sealed with SKYWAKE_API_SECRET_KEY (`security/sealed.ts`). */
+      secret: string;
+      endpoint: string | null;
+      region: string;
+    };
+
 const bytea = customType<{ data: Buffer }>({ dataType: () => "bytea" });
 const time = (name: string) => timestamp(name, { withTimezone: true });
 
@@ -85,6 +97,11 @@ export const environments = api.table(
   {
     org: text("org").notNull(),
     name: text("name").notNull(),
+    // A bucket the customer brings: every namespace and index made in the
+    // environment after it is set lives there. Null: the server's regions.
+    store: text("store"),
+    storeAccess: jsonb("store_access").$type<StoreAccess>(),
+    storeVerified: time("store_verified"),
     created: time("created").notNull().defaultNow(),
   },
   (table) => [

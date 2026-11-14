@@ -18,6 +18,7 @@ pub struct IndexOpenOptions {
     pub customer_key: Option<String>,
     pub cache_folder: Option<String>,
     pub builders: Option<bool>,
+    pub keys: Option<crate::StoreKeys>,
 }
 
 pub(crate) type Stores = (Arc<dyn ObjectStore>, Vec<Arc<dyn ObjectStore>>);
@@ -29,6 +30,7 @@ pub(crate) fn stores_of(location: &str, options: Option<IndexOpenOptions>) -> Re
         customer_key: None,
         cache_folder: None,
         builders: None,
+        keys: None,
     });
     let encryption = match (options.kms_key_id, options.customer_key) {
         (Some(_), Some(_)) => {
@@ -41,7 +43,9 @@ pub(crate) fn stores_of(location: &str, options: Option<IndexOpenOptions>) -> Re
     if encryption.is_some() && !location.starts_with("s3://") {
         return Err(invalid("only an s3:// store takes an encryption key"));
     }
-    let store = skywake_core::open_store_with(location, encryption.as_ref()).map_err(fail)?;
+    let keys = options.keys.map(skywake_core::StoreKeys::from);
+    let store = skywake_core::open_store_keyed(location, encryption.as_ref(), keys.as_ref())
+        .map_err(fail)?;
     let count = options.shards.unwrap_or(1) as usize;
     if !(1..=skywake_index::MAX_SHARDS).contains(&count) {
         let message = format!("an index has 1 to {} shards", skywake_index::MAX_SHARDS);

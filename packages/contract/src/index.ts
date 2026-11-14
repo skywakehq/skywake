@@ -57,6 +57,9 @@ export const routes = {
     environments.listRegions,
     environments.listEnvironments,
     environments.createEnvironment,
+    environments.getStoreTrust,
+    environments.setEnvironmentStore,
+    environments.removeEnvironmentStore,
   ],
   namespaces: [
     namespaces.listNamespaces,

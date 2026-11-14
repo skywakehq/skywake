@@ -1,10 +1,19 @@
-import { Engine, Index, type IndexOpenOptions } from "@skywake/engine";
+import { Engine, Index, type IndexOpenOptions, type StoreKeys } from "@skywake/engine";
 
 import { badRequest } from "../http/errors.ts";
 import type { Builds } from "./builds.ts";
 import type { Leases } from "./leases.ts";
 
 const OPEN_ENGINES = 1024;
+
+/** A store this server does not serve as a region of its own, such as a customer's bucket. */
+export interface OwnStore {
+  store: string;
+  keys?: StoreKeys;
+}
+
+/** Finds the store behind a region this server does not list itself, or null. */
+export type FindStore = (region: string) => Promise<OwnStore | null>;
 
 const WRITES: Record<string, number> = {
   alter: 0,
@@ -20,9 +29,13 @@ const WRITES: Record<string, number> = {
 
 export class Stores {
   readonly #regions: Map<string, string>;
+  readonly #own = new Map<string, OwnStore>();
+  #find: FindStore | undefined;
   readonly #engines = new Map<string, Engine>();
   readonly #indexes = new Map<string, Index>();
   readonly #held = new Set<string>();
+  // The region each open folder came from, so forgetting a region closes them.
+  readonly #opened = new Map<string, string>();
   readonly #max: number;
   readonly #roots = new Map<string, Engine>();
   readonly #leases: Leases | undefined;
@@ -51,6 +64,34 @@ export class Stores {
     }));
   }
 
+  /** Lets regions this server does not list (customer buckets) be found by `ready`. */
+  findOwnStores(find: FindStore) {
+    this.#find = find;
+  }
+
+  /** Whether the region is one of this server's own, not a customer's bucket. */
+  serves(region: string) {
+    return this.#regions.has(region);
+  }
+
+  /** Makes a customer's bucket usable under its region, before `location`, `engine` or `index`. */
+  async ready(region: string) {
+    if (this.#regions.has(region) || this.#own.has(region)) return;
+    const found = this.#find ? await this.#find(region) : null;
+    if (!found) throw new Error(`region \`${region}\` is not served here`);
+    this.#own.set(region, found);
+  }
+
+  /** Forgets a customer's bucket, so the next `ready` reads it again. */
+  forget(region: string) {
+    this.#own.delete(region);
+    for (const [folder, open] of this.#opened) if (open === region) this.#drop(folder);
+  }
+
+  keysOf(region: string): StoreKeys | undefined {
+    return this.#own.get(region)?.keys;
+  }
+
   pick(asked?: string) {
     const region = asked ?? this.defaultRegion;
     if (!this.#regions.has(region)) throw badRequest(`this server has no region \`${region}\``);
@@ -58,15 +99,17 @@ export class Stores {
   }
 
   location(region: string, folder: string) {
-    const store = this.#regions.get(region);
+    const store = this.#regions.get(region) ?? this.#own.get(region)?.store;
     if (!store) throw new Error(`region \`${region}\` is not served here`);
     return inFolder(store, folder);
   }
 
   engine(region: string, folder: string): Engine {
     const heads = this.#heads && region === this.defaultRegion;
+    const keys = this.keysOf(region);
+    this.#opened.set(folder, region);
     return this.#reuse(this.#engines, folder, () =>
-      Engine.open(this.location(region, folder), { heads }),
+      Engine.open(this.location(region, folder), { heads, keys }),
     );
   }
 
@@ -77,11 +120,14 @@ export class Stores {
   index(region: string, folder: string, options?: IndexOpenOptions): Index {
     const cacheFolder = region === this.defaultRegion ? folder : undefined;
     const builds = this.#builds;
+    const keys = this.keysOf(region);
+    this.#opened.set(folder, region);
     return this.#reuse(this.#indexes, folder, () => {
       let index = Index.open(this.location(region, folder), {
         ...options,
         cacheFolder,
         builders: builds === undefined,
+        keys,
       });
       if (builds) {
         const where = { region, folder, shards: options?.shards ?? 1, kmsKeyId: options?.kmsKeyId };
@@ -97,6 +143,12 @@ export class Stores {
 
   release(folder: string) {
     this.#held.delete(folder);
+  }
+
+  #drop(folder: string) {
+    this.#engines.delete(folder);
+    this.#indexes.delete(folder);
+    this.#opened.delete(folder);
   }
 
   #reuse<T>(open: Map<string, T>, folder: string, make: () => T): T {

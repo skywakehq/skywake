@@ -6,6 +6,8 @@ import { HttpError } from "../../http/errors.ts";
 import { changeable } from "../../http/request.ts";
 import { admitsDownload, admitsFiles, filesChanged } from "../billing/require.ts";
 import * as branches from "../branches/queries.ts";
+import { isBucketRegion } from "../environments/buckets.ts";
+import { customerRole } from "../environments/queries.ts";
 import { placeOf } from "./mint.ts";
 import { passFor } from "./pass.ts";
 
@@ -15,11 +17,24 @@ export const credentialsFeature: Feature = {
       const { access } = c.req.valid("json");
       const { caller, ns } = await changeable(c, c.req.valid("param").namespace, access);
       const { config, credentials, db, stores } = c.var.services;
-      const place = placeOf(stores.location(ns.region, ns.folder), config.s3.region);
+      const own = isBucketRegion(ns.region);
+      const role = own ? await customerRole(db, ns.org, ns.name) : undefined;
+      const keys = stores.keysOf(ns.region);
+      const place = placeOf(
+        stores.location(ns.region, ns.folder),
+        own ? (keys?.region ?? config.s3.region) : config.s3.region,
+      );
       if (!credentials) {
         throw new HttpError(501, "this server has no STS role to mint credentials with");
       }
       if (!place) throw new HttpError(501, "this namespace's store is not in S3");
+      if (own && !role) {
+        throw new HttpError(
+          501,
+          "credentials can only be minted for a bucket the API reaches through a role; " +
+            "use the file routes for this namespace",
+        );
+      }
       await admitsDownload(c, ns.org);
       if (access !== "read") {
         await admitsFiles(c, ns.org);
@@ -33,6 +48,7 @@ export const credentialsFeature: Feature = {
         caller.actor,
         guarded,
         owners !== undefined,
+        role,
       );
       const heads = owners && {
         nodes: owners.nodes,
@@ -44,7 +60,7 @@ export const credentialsFeature: Feature = {
         {
           store: `s3://${place.bucket}/${place.prefix}`,
           region: place.region,
-          endpoint: config.s3.endpoint,
+          endpoint: own ? (keys?.endpoint ?? null) : config.s3.endpoint,
           ...minted,
           access,
           heads: heads ?? null,

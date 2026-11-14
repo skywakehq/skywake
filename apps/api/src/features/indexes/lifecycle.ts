@@ -8,6 +8,7 @@ import type { Ctx } from "../../http/context.ts";
 import { conflict, forbidden, HttpError } from "../../http/errors.ts";
 import { admitsIndex, requires } from "../billing/require.ts";
 import { indexFor, signedIn } from "../../http/request.ts";
+import { bucketFolder } from "../environments/buckets.ts";
 import * as environments from "../environments/queries.ts";
 import * as indexes from "./queries.ts";
 import {
@@ -46,8 +47,16 @@ export async function makeIndex(
   if (asked.encryption) await requires(c, caller.org, "customer_keys");
   if (asked.pinned) await requires(c, caller.org, "pinning");
   const { db, stores } = c.var.services;
-  const region = await environments.place(db, stores, caller.org, asked.name, asked.region);
-  const folder = `${caller.org}/indexes/${randomId("ix_")}`;
+  const { region, own } = await environments.place(
+    db,
+    stores,
+    caller.org,
+    asked.name,
+    asked.region,
+  );
+  const folder = own
+    ? bucketFolder("ix", randomId("ix_"))
+    : `${caller.org}/indexes/${randomId("ix_")}`;
   const row = {
     org: caller.org,
     name: asked.name,
@@ -59,7 +68,8 @@ export async function makeIndex(
     pinnedReplicas: asked.pinned?.replicas ?? null,
   };
   if (!(await indexes.create(db, row))) throw conflict(`index \`${asked.name}\` exists`);
-  const options = indexes.openOptions(row);
+  // A copy into a customer's bucket signs with that bucket's keys.
+  const options = { ...indexes.openOptions(row), keys: stores.keysOf(region) };
   try {
     const store = stores.index(region, folder, options);
     await fill({ store, location: stores.location(region, folder), options });

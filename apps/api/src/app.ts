@@ -57,6 +57,7 @@ import { peerRoutes } from "./http/peer-routes.ts";
 import { identify } from "./http/identify.ts";
 import { PEER_HEADER } from "./http/peers.ts";
 import { clientOf, RateLimiter } from "./http/rate-limit.ts";
+import { Buckets } from "./features/environments/buckets.ts";
 
 const FEATURES: Feature[] = [
   orgsFeature,
@@ -96,6 +97,8 @@ export function services(
   const leases = new Leases(db, id, config.peer, log);
   const changes = new Changes(db, log);
   const stores = new Stores(config.regions, undefined, leases, config.heads !== undefined);
+  const buckets = new Buckets(db, config, log);
+  stores.findOwnStores(buckets.find);
   const billing = config.billing
     ? new Billing({
         db,
@@ -147,6 +150,7 @@ export function services(
     builds,
     audit: new AuditRecorder(postgresSink(db), log),
     billing,
+    buckets,
   };
 }
 

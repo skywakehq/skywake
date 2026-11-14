@@ -51,11 +51,11 @@ export class Access {
       allow(caller, role, name);
       const row = await namespaces.find(this.#db, org, name);
       if (!row) throw notFound(`namespace \`${name}\``);
-      return this.#open(row);
+      return await this.#open(row);
     }
 
     const row = await namespaces.find(this.#db, org, name);
-    if (row?.visibility === "public" && role === "read") return this.#open(row);
+    if (row?.visibility === "public" && role === "read") return await this.#open(row);
     if (!caller) throw unauthorized();
     throw notFound(`namespace \`${ref}\``);
   }
@@ -65,6 +65,7 @@ export class Access {
     allow(caller, role, name);
     const row = await this.#row(caller.org, name, role);
     if (!row) throw notFound(`index \`${name}\``);
+    await this.#stores.ready(row.region);
     return { ...row, store: this.#stores.index(row.region, row.folder, indexes.openOptions(row)) };
   }
 
@@ -76,7 +77,8 @@ export class Access {
     return this.#rows.get(rowKey(org, name), load, (row) => row !== null && changes.listening);
   }
 
-  #open(row: namespaces.NamespaceRow): Namespace {
+  async #open(row: namespaces.NamespaceRow): Promise<Namespace> {
+    await this.#stores.ready(row.region);
     return { ...row, engine: this.#stores.engine(row.region, row.folder) };
   }
 }
