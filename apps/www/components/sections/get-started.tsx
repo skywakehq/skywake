@@ -1,13 +1,22 @@
 import { ArrowUpRight } from "lucide-react";
 
 import { Container } from "@/components/ui/section";
+import { getMessages, type HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
+import { defaultLocale, type Locale } from "@/lib/i18n";
 import { WaitlistForm } from "./waitlist-form";
 
 const QUIET_LINK =
   "t-small inline-flex items-center gap-1 text-background/60 transition-colors hover:text-background";
 
-export function GetStarted() {
+export function GetStarted({
+  locale = defaultLocale,
+  messages,
+}: {
+  locale?: Locale;
+  messages?: HomeMessages;
+}) {
+  const t = messages ?? getMessages(locale);
   const waitlist = !site.cloudOpen;
   return (
     <section
@@ -20,44 +29,40 @@ export function GetStarted() {
           <div aria-hidden className="cta-grain" />
           {waitlist ? (
             <>
-              <p className="t-eyebrow text-background/60">🚀 Skywake Cloud</p>
-              <h2 className="t-h2 t-regular mt-4 max-w-[22ch]">Coming soon. Get in early.</h2>
-              <p className="t-lead mt-4 max-w-[44ch] text-background/60">
-                We run it for you, free to start. One email when it opens.
-              </p>
+              <p className="t-eyebrow text-background/60">{t.waitlist.eyebrow}</p>
+              <h2 className="t-h2 t-regular mt-4 max-w-[24ch]">{t.waitlist.title}</h2>
+              <p className="t-lead mt-4 max-w-[46ch] text-background/60">{t.waitlist.line}</p>
               <div className="mt-10 flex w-full justify-center">
                 <WaitlistForm />
               </div>
               <div className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2">
                 <a href={site.docsUrl} className={QUIET_LINK}>
-                  Or self-host it free today <ArrowUpRight className="size-3.5" />
+                  {t.waitlist.selfHost} <ArrowUpRight className="size-3.5" />
                 </a>
                 {site.repoUrl && (
                   <a href={site.repoUrl} className={QUIET_LINK}>
-                    Star on GitHub <ArrowUpRight className="size-3.5" />
+                    {t.waitlist.star} <ArrowUpRight className="size-3.5" />
                   </a>
                 )}
               </div>
             </>
           ) : (
             <>
-              <h2 className="t-h2 t-regular max-w-[22ch]">Start building with Skywake.</h2>
-              <p className="t-lead mt-4 max-w-[46ch] text-background/60">
-                Fast files and search for your agents and apps, on your own object storage.
-              </p>
+              <h2 className="t-h2 t-regular max-w-[24ch]">{t.waitlist.openTitle}</h2>
+              <p className="t-lead mt-4 max-w-[46ch] text-background/60">{t.waitlist.openLine}</p>
               <div className="mt-10 flex flex-wrap justify-center gap-3">
                 <a
                   href={site.consoleUrl}
                   className="btn bg-background text-foreground hover:opacity-90"
                 >
-                  Get started <ArrowUpRight className="size-3.5" />
+                  {t.waitlist.openCta} <ArrowUpRight className="size-3.5" />
                 </a>
                 {site.repoUrl && (
                   <a
                     href={site.repoUrl}
                     className="btn text-background ring-1 ring-background/25 hover:bg-background/10"
                   >
-                    Star on GitHub
+                    {t.waitlist.star}
                   </a>
                 )}
               </div>

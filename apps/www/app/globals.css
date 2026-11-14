@@ -3,10 +3,20 @@
 @theme inline {
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --container-6xl: min(72rem, calc(100% - 1.5rem));
+
+  /* The marketing site uses square corners everywhere. */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-4xl: 0px;
 }
 
 :root {
-  --radius: 1.125rem;
+  --radius: 0px;
   --signal: #2f5bea;
   --love: #e5484d;
   --card: #efeee9;
@@ -58,8 +68,8 @@ html {
 
 @layer components {
   .t-display {
-    font-size: clamp(2.5rem, 1.7rem + 2.4vw, 3.75rem);
-    line-height: 1.04;
+    font-size: clamp(2.35rem, 1.45rem + 2.6vw, 3.65rem);
+    line-height: 1.05;
     font-weight: 500;
     letter-spacing: -0.04em;
     text-wrap: balance;
@@ -110,6 +120,13 @@ html {
     letter-spacing: -0.04em;
     font-variant-numeric: tabular-nums;
   }
+  .t-stat {
+    font-size: clamp(4.5rem, 3.5rem + 4vw, 6.5rem);
+    line-height: 0.9;
+    font-weight: 500;
+    letter-spacing: -0.055em;
+    font-variant-numeric: tabular-nums;
+  }
   .t-mono {
     font-size: 0.8125rem;
     line-height: 1.25rem;
@@ -126,7 +143,7 @@ html {
     flex-shrink: 0;
     align-items: center;
     gap: 0.5rem;
-    border-radius: var(--radius-md);
+    border-radius: 0.9rem; /* Buttons stay rounded while everything else is square. */
     padding-inline: 1.25rem;
     font-size: 0.875rem;
     font-weight: 500;
@@ -208,7 +225,7 @@ html {
     ),
     radial-gradient(
       50% 70% at 90% -10%,
-      color-mix(in oklab, #8b5cf6 40%, transparent),
+      color-mix(in oklab, var(--signal) 30%, transparent),
       transparent 70%
     ),
     radial-gradient(
@@ -323,11 +340,38 @@ html {
   }
 }
 
+/* Cards fade up as they scroll into view. Browsers without scroll timelines show them as is. */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 40%;
+  }
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* A dashed SVG line whose dashes drift slowly along it. */
+.dash-flow {
+  animation: dash-flow 1.6s linear infinite;
+}
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
   .rise-in,
+  .reveal,
+  .dash-flow,
   .draw-line,
   .shimmer-text,
   .oss-glow,
@@ -342,13 +386,6 @@ html {
   .draw-line {
     stroke-dashoffset: 0;
   }
-}
-
-.section-label {
-  counter-increment: section;
-}
-.section-label::before {
-  content: counter(section, decimal-leading-zero) " · ";
 }
 
 .hatch {

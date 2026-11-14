@@ -435,7 +435,7 @@ function FullTextMini() {
             {line.split(" ").map((w, i) => (
               <span
                 key={i}
-                className={`rounded transition-colors duration-700 ${w === word ? "bg-signal/15 text-signal" : ""}`}
+                className={`transition-colors duration-700 ${w === word ? "bg-signal/15 text-signal" : ""}`}
               >
                 {w}{" "}
               </span>

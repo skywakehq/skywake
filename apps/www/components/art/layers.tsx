@@ -52,7 +52,7 @@ const products = [
 
 export function Layers() {
   return (
-    <figure className="hidden rounded-3xl border border-border bg-card sm:block">
+    <figure className="reveal hidden rounded-3xl border border-border bg-card sm:block">
       <svg
         viewBox="0 0 960 330"
         role="img"
@@ -81,7 +81,7 @@ export function Layers() {
             </g>
           ))}
           <path d="M800 140H736" />
-          <path d="M116 172V290H872V178" strokeDasharray="4 4" />
+          <path d="M116 172V290H872V178" strokeDasharray="4 4" className="dash-flow" />
         </g>
 
         <Box x={56} y={108} w={140} title="Agents" note="and your apps" />
