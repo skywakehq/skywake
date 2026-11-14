@@ -92,6 +92,49 @@ their uncompressed bytes, and checked against that hash on every read.
   `.DS_Store`, stays in the branch as it was. Changes to it stay in the
   mount.
 
+### Files and search in one bucket
+
+A search index is built on the same storage engine: it keeps `refs/`,
+`objects/` and `chunks/` too, plus `blobs/` for its segments. The two share a
+bucket, never a folder:
+
+```
+<bucket>/<prefix>/fs/ns_…/        a namespace (in the hosted store: <org>/ns_…)
+<bucket>/<prefix>/ix/ix_…/        an index    (in the hosted store: <org>/indexes/ix_…)
+```
+
+- **Each folder says its kind.** `skywake.json` (`{"kind": "filesystem" |
+  "index"}`) is written when the folder is made: by the first branch made
+  from nothing, or by the index's creation. Both garbage collectors read it
+  first and stop on a folder of the other kind, or one holding both. A GC
+  sweeps what no root it knows reaches, and it knows only its own kind's
+  roots, so one run on the wrong folder would delete everything. A folder
+  made before the marker is judged by what only one kind writes
+  (`commits/`, `bundles/`, `moved/` against `blobs/`, `shards/`) and marked
+  then. Scoped credentials may not write the marker.
+- **Linked indexes follow branches.** A namespace may link one index. Each
+  linked branch has a row in Postgres saying which commit its index branch
+  matches and whether it is behind. Commits through the API mark it due at
+  once; saves are marked due 30 seconds on (`/advanced`), and a branch
+  nobody marks is still read every 5 minutes, since most saves are written
+  straight to the bucket. Every API server claims due rows with
+  `FOR UPDATE SKIP LOCKED` (a 60-second lease, renewed while it works; at
+  most 4 per organization at once), diffs the two commits' trees and writes
+  only the files that changed. A claim clears the row's mark, so a save
+  during a sync marks it again rather than being lost. Each sync records
+  which index version matches which commit, and a branch forked with its
+  index starts from such a version: any one is right, since the diff is
+  between trees, not history.
+- **Deletes are queued.** Deleting a namespace or an index removes its row
+  and queues its folder in one SQL statement, and a worker on every server
+  deletes queued folders until they are empty. Nothing is left in the
+  bucket by a crash between the two.
+- **A customer's bucket.** An environment may keep its data in a bucket its
+  owner brings, reached through a role Skywake assumes (with an external
+  ID) or through keys sealed with AES-256-GCM. Its namespaces and indexes
+  have the region `bucket:<org>/<environment>`, and the bucket can't change
+  while the environment holds data.
+
 ## The mount
 
 On Linux, `skywake mount agent-37 /work` serves a branch as a folder,

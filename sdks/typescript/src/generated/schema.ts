@@ -352,6 +352,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{environment}/store/trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a role must trust before an environment can keep its data in your bucket. */
+        get: operations["getStoreTrust"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{environment}/store": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Keeps the environment's data in your own bucket. The API checks it can write, list and delete there first. Only while the environment holds no namespaces or indexes. */
+        put: operations["setEnvironmentStore"];
+        post?: never;
+        /** Goes back to the server's regions. Only while the environment holds no data. */
+        delete: operations["removeEnvironmentStore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/namespaces": {
         parameters: {
             query?: never;
@@ -380,11 +415,64 @@ export interface paths {
         get: operations["getNamespace"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Deletes a namespace: its branches and history at once, and its files from the bucket soon after. It can't be undone. */
+        delete: operations["deleteNamespace"];
         options?: never;
         head?: never;
         /** Makes a namespace public or private. */
         patch: operations["updateNamespace"];
+        trace?: never;
+    };
+    "/namespaces/{namespace}/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getIndexLink"];
+        /** Keeps an index up with the namespace's files: `main` now, and branches forked with `withIndex`. Each save is indexed within about 30 seconds; a commit at once. */
+        put: operations["linkIndex"];
+        post?: never;
+        /** Stops indexing the files. The index and what it holds stay. */
+        delete: operations["unlinkIndex"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/namespaces/{namespace}/branches/{branch}/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** How far the branch's index is behind its files. */
+        get: operations["getBranchIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/namespaces/{namespace}/branches/{branch}/advanced": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Tells the API a branch moved without it, such as a save written straight to the bucket. Cheap and safe to repeat; an unlinked branch ignores it. */
+        post: operations["branchAdvanced"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/namespaces/{namespace}/credentials": {
@@ -1495,9 +1583,60 @@ export interface components {
             name: string;
             /** Format: date-time */
             created: string;
+            store: components["schemas"]["EnvironmentStore"];
         };
+        /** @description Your bucket, when the environment keeps its data there. Null: the server's. */
+        EnvironmentStore: {
+            store: string;
+            access: {
+                /** @enum {string} */
+                type: "aws_role";
+                roleArn: string;
+                externalId: string;
+                region: string;
+            } | {
+                /** @enum {string} */
+                type: "keys";
+                accessKeyId: string;
+                endpoint: string | null;
+                region: string;
+            };
+            /** Format: date-time */
+            verified: string | null;
+        } | null;
         NewEnvironment: {
             name: string;
+        };
+        StoreTrust: {
+            /** @description The AWS principal to trust in the role's trust policy. */
+            principal: string | null;
+            /** @description The external ID the trust policy must require. */
+            externalId: string;
+        };
+        NewEnvironmentStore: {
+            /** @example s3://acme-data/skywake */
+            store: string;
+            access: components["schemas"]["StoreAccess"];
+        };
+        StoreAccess: {
+            /** @enum {string} */
+            type: "aws_role";
+            roleArn: string;
+            /** @example us-east-1 */
+            region: string;
+        } | {
+            /** @enum {string} */
+            type: "keys";
+            accessKeyId: string;
+            /** @description Kept sealed; never shown again. */
+            secretAccessKey: string;
+            /**
+             * Format: uri
+             * @description An S3 compatible endpoint, such as R2's or MinIO's. AWS when not given.
+             */
+            endpoint?: string;
+            /** @default auto */
+            region?: string;
         };
         Namespace: {
             name: string;
@@ -1520,6 +1659,60 @@ export interface components {
         };
         NamespaceUpdate: {
             visibility: components["schemas"]["Visibility"];
+        };
+        IndexLink: {
+            namespace: string;
+            index: string;
+            include: string[];
+            exclude: string[];
+            maxBytes: number;
+            /** Format: date-time */
+            created: string;
+            branches: components["schemas"]["LinkedBranch"][];
+        };
+        LinkedBranch: {
+            branch: string;
+            /** @description The commit the index matches. */
+            synced: string | null;
+            /** @description Whether newer files wait to be indexed. */
+            behind: boolean;
+            /** Format: date-time */
+            syncedAt: string | null;
+            /** @description Why the last try failed, if it did. */
+            error: string | null;
+        };
+        NewIndexLink: {
+            /**
+             * @description The index to keep up with the files. Made when missing, with `path` and `text` attributes; an existing one must have both.
+             * @example prod/app-files
+             */
+            index: string;
+            /**
+             * @description Globs of paths to index, such as `src/**`. All when empty.
+             * @default []
+             */
+            include?: string[];
+            /**
+             * @description Globs of paths never to index, such as `node_modules/**`.
+             * @default []
+             */
+            exclude?: string[];
+            /**
+             * @description Larger files are left out. 1 MiB when not given.
+             * @default 1048576
+             */
+            maxBytes?: number;
+            /** @description Also embed each file (its first 8,000 characters) for vector search, when the index is made. Billed as embeddings. */
+            embed?: {
+                model: string;
+                dims: number;
+            };
+        };
+        BranchIndex: components["schemas"]["LinkedBranch"] & {
+            /** @description The branch's head now. */
+            head: string;
+            /** @description The index version that matches `synced`. */
+            version: string | null;
         };
         StoreCredentials: {
             /**
@@ -1572,6 +1765,8 @@ export interface components {
             from?: string;
             /** @description Fork this older commit of `from` instead of its head. */
             at?: string;
+            /** @description Also fork the linked index, from its version that matches the fork's commit, and keep it up with this branch. Needs `from` and a namespace with a linked index. */
+            withIndex?: boolean;
         };
         BranchInfo: components["schemas"]["Branch"] & {
             /** @description The commit the branch points to. */
@@ -4226,6 +4421,209 @@ export interface operations {
             };
         };
     };
+    getStoreTrust: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The trust to grant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreTrust"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    setEnvironmentStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewEnvironmentStore"];
+            };
+        };
+        responses: {
+            /** @description The bucket, checked. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnvironmentStore"];
+                };
+            };
+            /** @description The request is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description This server cannot do this. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    removeEnvironmentStore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listNamespaces: {
         parameters: {
             query?: never;
@@ -4392,6 +4790,63 @@ export interface operations {
             };
         };
     };
+    deleteNamespace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     updateNamespace: {
         parameters: {
             query?: never;
@@ -4423,6 +4878,332 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getIndexLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexLink"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    linkIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewIndexLink"];
+            };
+        };
+        responses: {
+            /** @description The link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexLink"];
+                };
+            };
+            /** @description The request is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The organization's plan does not include this, or its limit is reached. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    unlinkIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Done. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getBranchIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+                /** @description A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`. */
+                branch: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The branch's index. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchIndex"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    branchAdvanced: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`. */
+                namespace: string;
+                /** @description A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`. */
+                branch: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Noted. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description A valid API key or token is needed. */
             401: {

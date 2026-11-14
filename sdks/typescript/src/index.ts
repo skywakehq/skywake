@@ -13,6 +13,7 @@ export {
   type CommitOptions,
   type DiffOptions,
   type FileChange,
+  type ForkOptions,
   type ReadRange,
   type TreeEntry,
 } from "./filesystem/branch.js";

@@ -115,6 +115,47 @@ export class Namespace {
     );
   }
 
+  /**
+   * Keeps an index up with the files: `main` now, and branches forked with
+   * `withIndex`. Each save is searchable about 30 seconds later, a commit at
+   * once. The index is made when missing.
+   */
+  async linkIndex(
+    index: string,
+    options: Omit<Schemas["NewIndexLink"], "index"> = {},
+  ): Promise<Schemas["IndexLink"]> {
+    const params = { path: { namespace: this.name } };
+    return unwrap(
+      await this.client.PUT("/namespaces/{namespace}/index", {
+        params,
+        body: { index, ...options },
+      }),
+    );
+  }
+
+  /** The index kept up with the files, and how far each branch is behind; null without one. */
+  async indexLink(): Promise<Schemas["IndexLink"] | null> {
+    const params = { path: { namespace: this.name } };
+    const answer = await this.client.GET("/namespaces/{namespace}/index", { params });
+    if (answer.response.status === 404) return null;
+    return unwrap(answer);
+  }
+
+  /** Stops indexing the files. The index and what it holds stay. */
+  async unlinkIndex(): Promise<void> {
+    const params = { path: { namespace: this.name } };
+    unwrap(await this.client.DELETE("/namespaces/{namespace}/index", { params }));
+  }
+
+  /**
+   * Deletes the namespace: its branches and history at once, its files from
+   * the bucket soon after. It can't be undone. Needs an admin key.
+   */
+  async delete(): Promise<void> {
+    const params = { path: { namespace: this.name } };
+    unwrap(await this.client.DELETE("/namespaces/{namespace}", { params }));
+  }
+
   /** Starts a session. Call `keepAlive` or `heartbeat` so it does not end. */
   async startSession(label: string, seconds?: number): Promise<Session> {
     const path = { namespace: this.name };

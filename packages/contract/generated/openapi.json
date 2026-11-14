@@ -1094,12 +1094,99 @@
           "created": {
             "type": "string",
             "format": "date-time"
+          },
+          "store": {
+            "$ref": "#/components/schemas/EnvironmentStore"
           }
         },
         "required": [
           "name",
-          "created"
+          "created",
+          "store"
         ]
+      },
+      "EnvironmentStore": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "store": {
+            "type": "string"
+          },
+          "access": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "aws_role"
+                    ]
+                  },
+                  "roleArn": {
+                    "type": "string"
+                  },
+                  "externalId": {
+                    "type": "string"
+                  },
+                  "region": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "roleArn",
+                  "externalId",
+                  "region"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "keys"
+                    ]
+                  },
+                  "accessKeyId": {
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "region": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "accessKeyId",
+                  "endpoint",
+                  "region"
+                ]
+              }
+            ]
+          },
+          "verified": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "store",
+          "access",
+          "verified"
+        ],
+        "description": "Your bucket, when the environment keeps its data there. Null: the server's."
       },
       "NewEnvironment": {
         "type": "object",
@@ -1113,6 +1200,108 @@
           "name"
         ],
         "additionalProperties": false
+      },
+      "StoreTrust": {
+        "type": "object",
+        "properties": {
+          "principal": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The AWS principal to trust in the role's trust policy."
+          },
+          "externalId": {
+            "type": "string",
+            "description": "The external ID the trust policy must require."
+          }
+        },
+        "required": [
+          "principal",
+          "externalId"
+        ]
+      },
+      "NewEnvironmentStore": {
+        "type": "object",
+        "properties": {
+          "store": {
+            "type": "string",
+            "pattern": "^s3:\\/\\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9](\\/[^?]*)?$",
+            "example": "s3://acme-data/skywake"
+          },
+          "access": {
+            "$ref": "#/components/schemas/StoreAccess"
+          }
+        },
+        "required": [
+          "store",
+          "access"
+        ],
+        "additionalProperties": false
+      },
+      "StoreAccess": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "aws_role"
+                ]
+              },
+              "roleArn": {
+                "type": "string",
+                "pattern": "^arn:aws[\\w-]*:iam::\\d{12}:role\\/.+$"
+              },
+              "region": {
+                "type": "string",
+                "minLength": 1,
+                "example": "us-east-1"
+              }
+            },
+            "required": [
+              "type",
+              "roleArn",
+              "region"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "keys"
+                ]
+              },
+              "accessKeyId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "secretAccessKey": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Kept sealed; never shown again."
+              },
+              "endpoint": {
+                "type": "string",
+                "format": "uri",
+                "description": "An S3 compatible endpoint, such as R2's or MinIO's. AWS when not given."
+              },
+              "region": {
+                "type": "string",
+                "minLength": 1,
+                "default": "auto"
+              }
+            },
+            "required": [
+              "type",
+              "accessKeyId",
+              "secretAccessKey"
+            ]
+          }
+        ]
       },
       "Namespace": {
         "type": "object",
@@ -1186,6 +1375,182 @@
           "visibility"
         ],
         "additionalProperties": false
+      },
+      "IndexLink": {
+        "type": "object",
+        "properties": {
+          "namespace": {
+            "type": "string"
+          },
+          "index": {
+            "type": "string"
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxBytes": {
+            "type": "integer"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedBranch"
+            }
+          }
+        },
+        "required": [
+          "namespace",
+          "index",
+          "include",
+          "exclude",
+          "maxBytes",
+          "created",
+          "branches"
+        ]
+      },
+      "LinkedBranch": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "synced": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The commit the index matches."
+          },
+          "behind": {
+            "type": "boolean",
+            "description": "Whether newer files wait to be indexed."
+          },
+          "syncedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the last try failed, if it did."
+          }
+        },
+        "required": [
+          "branch",
+          "synced",
+          "behind",
+          "syncedAt",
+          "error"
+        ]
+      },
+      "NewIndexLink": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]*(\\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$",
+            "example": "prod/app-files",
+            "description": "The index to keep up with the files. Made when missing, with `path` and `text` attributes; an existing one must have both."
+          },
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 64,
+            "default": [],
+            "description": "Globs of paths to index, such as `src/**`. All when empty."
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 64,
+            "default": [],
+            "description": "Globs of paths never to index, such as `node_modules/**`."
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4194304,
+            "default": 1048576,
+            "description": "Larger files are left out. 1 MiB when not given."
+          },
+          "embed": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dims": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 4096
+              }
+            },
+            "required": [
+              "model",
+              "dims"
+            ],
+            "description": "Also embed each file (its first 8,000 characters) for vector search, when the index is made. Billed as embeddings."
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "additionalProperties": false
+      },
+      "BranchIndex": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LinkedBranch"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "head": {
+                "type": "string",
+                "description": "The branch's head now."
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The index version that matches `synced`."
+              }
+            },
+            "required": [
+              "head",
+              "version"
+            ]
+          }
+        ]
       },
       "StoreCredentials": {
         "type": "object",
@@ -1348,6 +1713,10 @@
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
             "description": "Fork this older commit of `from` instead of its head."
+          },
+          "withIndex": {
+            "type": "boolean",
+            "description": "Also fork the linked index, from its version that matches the fork's commit, and keep it up with this branch. Needs `from` and a namespace with a linked index."
           }
         },
         "required": [
@@ -6727,6 +7096,268 @@
         }
       }
     },
+    "/environments/{environment}/store/trust": {
+      "get": {
+        "operationId": "getStoreTrust",
+        "tags": [
+          "environments"
+        ],
+        "summary": "What a role must trust before an environment can keep its data in your bucket.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "prod"
+            },
+            "required": true,
+            "name": "environment",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The trust to grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreTrust"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/environments/{environment}/store": {
+      "put": {
+        "operationId": "setEnvironmentStore",
+        "tags": [
+          "environments"
+        ],
+        "summary": "Keeps the environment's data in your own bucket. The API checks it can write, list and delete there first. Only while the environment holds no namespaces or indexes.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "prod"
+            },
+            "required": true,
+            "name": "environment",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewEnvironmentStore"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The bucket, checked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvironmentStore"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "It conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "This server cannot do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeEnvironmentStore",
+        "tags": [
+          "environments"
+        ],
+        "summary": "Goes back to the server's regions. Only while the environment holds no data.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "prod"
+            },
+            "required": true,
+            "name": "environment",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "It conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/namespaces": {
       "get": {
         "operationId": "listNamespaces",
@@ -6985,6 +7616,514 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteNamespace",
+        "tags": [
+          "namespaces"
+        ],
+        "summary": "Deletes a namespace: its branches and history at once, and its files from the bucket soon after. It can't be undone.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/namespaces/{namespace}/index": {
+      "put": {
+        "operationId": "linkIndex",
+        "tags": [
+          "links"
+        ],
+        "summary": "Keeps an index up with the namespace's files: `main` now, and branches forked with `withIndex`. Each save is indexed within about 30 seconds; a commit at once.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewIndexLink"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexLink"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "The organization's plan does not include this, or its limit is reached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "It conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getIndexLink",
+        "tags": [
+          "links"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unlinkIndex",
+        "tags": [
+          "links"
+        ],
+        "summary": "Stops indexing the files. The index and what it holds stay.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done."
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/namespaces/{namespace}/branches/{branch}/index": {
+      "get": {
+        "operationId": "getBranchIndex",
+        "tags": [
+          "links"
+        ],
+        "summary": "How far the branch's index is behind its files.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`.",
+              "example": "main"
+            },
+            "required": true,
+            "description": "A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`.",
+            "name": "branch",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The branch's index.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchIndex"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/namespaces/{namespace}/branches/{branch}/advanced": {
+      "post": {
+        "operationId": "branchAdvanced",
+        "tags": [
+          "links"
+        ],
+        "summary": "Tells the API a branch moved without it, such as a save written straight to the bucket. Cheap and safe to repeat; an unlinked branch ignores it.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+              "example": "prod%2Fapp"
+            },
+            "required": true,
+            "description": "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public namespace of another one. Encode `/` as `%2F`.",
+            "name": "namespace",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`.",
+              "example": "main"
+            },
+            "required": true,
+            "description": "A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`.",
+            "name": "branch",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Noted."
           },
           "401": {
             "description": "A valid API key or token is needed.",

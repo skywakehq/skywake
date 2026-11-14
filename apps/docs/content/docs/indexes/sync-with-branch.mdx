@@ -1,59 +1,72 @@
 ---
 title: Keep an index in step with a branch
 icon: RefreshCw
-description: Index a branch's files, fork the index with the branch, and merge both together.
+description: Link an index to a namespace, so its files are searchable and every fork has its own index.
 ---
 
-If your agents search the files on a branch, you want the index to match those files. `syncIndex` keeps an index up to date with a branch, and the pattern below keeps each agent's index fork in step with its file fork.
+If your agents search the files on a branch, the index must match those files. Link an index to the namespace and Skywake keeps it in step: `main` from the moment you link, and every branch you fork `withIndex`.
 
 ```ts
-import { Skywake, syncIndex } from "@skywake/sdk";
+import { Skywake } from "@skywake/sdk";
 
 const sky = new Skywake({ url: process.env.SKYWAKE_URL!, key: process.env.SKYWAKE_KEY! });
-const main = sky.namespace("team/app").branch("main");
-const code = await sky.indexes.create(
-  "team/code",
-  {
-    attributes: [
-      { name: "path", type: "string" },
-      { name: "text", type: "text" },
-    ],
-  },
-  { ifMissing: true },
-);
+const app = sky.namespace("team/app");
 
-let synced = await syncIndex(main, code); // every file, the first time
-// later, after more commits:
-synced = await syncIndex(main, code, { since: synced.head });
+await app.linkIndex("team/app-files", {
+  include: ["src/**", "docs/**"],
+  exclude: ["**/*.lock"],
+});
+
+const hits = await sky.index("team/app-files").search({ query: "retry backoff" });
+// each hit's id is the file's path; `path` and `text` are its attributes
 ```
 
-`syncIndex` (TypeScript) upserts the files that changed since `since`, and deletes the documents of files that were removed. It returns `{head, upserted, deleted}`. Keep `head` and pass it as `since` the next time you sync.
+The index is made when it does not exist, with a `path` string and a `text` attribute searched by BM25. An existing index works if it has both. Linking is opt-in: a namespace without a link is never indexed, and an index used on its own is unchanged.
 
-## The pattern
+## What gets indexed, and when
 
-Give each agent a fork of the files and a fork of the index, both with the same name. As the agent commits, sync its index fork. When the agent is done, merge both forks, or delete both.
+- Files that match `include` (all when empty) and none of `exclude`, at most `maxBytes` (1 MiB by default), and valid UTF-8 text. Others are left out.
+- A commit is searchable within seconds. A save, such as a mount's autosave, waits about 30 seconds, so a burst of saves is indexed once.
+- Saves written straight to the bucket, by a mount or the CLI with `skywake://` credentials, are found too: they can call `advanced` to be indexed sooner, and every linked branch is checked at least every 5 minutes either way.
+- Each sync writes only what changed between the commit the index matches and the branch's head. Removing a folder removes the documents of everything in it.
+
+Give `embed: {model, dims}` when the link makes the index to also embed each file's first 8,000 characters for vector search. Embeddings are billed as usual.
+
+## Forks
+
+Fork a branch `withIndex` and its index forks with it:
 
 ```ts
-// 1. Fork both from the same commit of main.
-const files = await main.fork("agents/42", synced.head);
-const docs = await code.fork("agents/42");
-
-// 2. As the agent commits, sync its index fork.
-let since = synced.head;
-since = (await syncIndex(files, docs, { since })).head;
-
-// 3. Merge both together.
-const merged = await files.mergeInto("main");
-if (merged.conflicts.length === 0) await code.merge("agents/42");
+const main = app.branch("main");
+const agent = await main.fork("agents/42", undefined, { withIndex: true });
+const found = await sky.index("team/app-files").at("agents/42").search({ query: "retry" });
 ```
 
-- `fork(name, at)` forks the files at the commit the index was last synced to. That way the index fork matches the file fork from the start, and the first sync sends only the agent's own changes.
-- What an agent writes lands only in its own index fork. Searches on `main` and on other agents' forks never see the notes or code of a fork that was not merged.
-- If you don't keep a fork, delete both the branch and the index branch: `files.delete()` and `docs.deleteBranch()`.
+The new index branch starts from the newest version of `main`'s index, so it is searchable at once and only what differs is indexed. What the agent writes lands only in its own index branch. Deleting the files branch deletes its index branch.
 
-After a merge, sync `main` again with its own `since`. Upserts replace documents by id, so it is safe to send the same file twice.
+After you merge the agent's branch into `main`, `main`'s index catches up on its own: the merge moved `main`, so the difference is indexed.
 
-## Options
+## How far behind
+
+```ts
+const status = await agent.indexStatus();
+// {branch, head, synced, behind, syncedAt, error, version}
+```
+
+`synced` is the commit the index matches and `version` the index version that matches it. `error` says why the last try failed, if it did; failed tries are retried with backoff.
+
+To change the globs, link again with the new ones; the branches are indexed again in full. `unlinkIndex()` stops indexing and keeps the index.
+
+## Doing it yourself
+
+To control the documents yourself, skip the link and call `syncIndex` (TypeScript), which upserts the files that changed since an earlier sync and deletes the documents of removed ones:
+
+```ts
+import { syncIndex } from "@skywake/sdk";
+
+let synced = await syncIndex(main, code); // every file, the first time
+synced = await syncIndex(main, code, { since: synced.head });
+```
 
 | Option        | Default                                                                | Meaning                                                                      |
 | ------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -62,14 +75,10 @@ After a merge, sync `main` again with its own `since`. Upserts replace documents
 | `id`          | the path                                                               | The id of a file's document, to delete it. Must match `document`.            |
 | `concurrency` | `8`                                                                    | Files read at once.                                                          |
 
-Symlinks are left out. A folder counts through the files it holds. If 1,000 or more commits have happened since `since`, the sync compares the two whole trees instead of reading each commit.
-
-To embed text into a vector column, give the column `embed` and put the text in that column in `document`. See [embeddings](./embeddings-and-rerank.mdx).
-
 ## Next
 
 <Cards>
   <Card href="./time-travel.mdx" />
   <Card href="../filesystem/diff-and-merge.mdx" />
-  <Card href="../agents/mcp.mdx" />
+  <Card href="../self-hosting/your-bucket.mdx" />
 </Cards>

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from ._encode import name_in_url
+from ._encode import compact, name_in_url
 from ._http import check
 from ._paging import every, page
 from .branch import Branch
@@ -67,6 +67,33 @@ class Namespace:
         """Short-lived S3 credentials that reach only this namespace's data.
         The server answers 501 when it has no STS role to mint them with."""
         return self.sky.call("POST", f"{self.path}/credentials", json={"access": access}).json()
+
+    def link_index(self, index, include=None, exclude=None, max_bytes=None, embed=None):
+        """Keeps an index up with the files: `main` now, and branches forked
+        with `with_index`. Each save is searchable about 30 seconds later, a
+        commit at once. The index is made when missing; `embed` is
+        `{"model", "dims"}` to embed each file too."""
+        body = compact(
+            {"index": index, "include": include, "exclude": exclude, "maxBytes": max_bytes, "embed": embed}
+        )
+        return self.sky.call("PUT", f"{self.path}/index", json=body).json()
+
+    def index_link(self):
+        """The index kept up with the files, and how far each branch is
+        behind; None without one."""
+        response = self.sky.send("GET", f"{self.path}/index")
+        if response.status_code == 404:
+            return None
+        return check(response).json()
+
+    def unlink_index(self):
+        """Stops indexing the files. The index and what it holds stay."""
+        self.sky.call("DELETE", f"{self.path}/index")
+
+    def delete(self):
+        """Deletes the namespace: its branches and history at once, its files
+        from the bucket soon after. It can't be undone. Needs an admin key."""
+        self.sky.call("DELETE", self.path)
 
     def session(self, label="", seconds=60):
         """Starts a session. Use it in `with`, or call `heartbeat` yourself."""

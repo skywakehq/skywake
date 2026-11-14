@@ -37,6 +37,7 @@ export function NamespacePage({
     { href: nsPath(ns), label: "Files", view: "files" },
     { href: nsPath(ns, "branches"), label: "Branches", view: "branches" },
     { href: nsPath(ns, "history"), label: "History", view: "history" },
+    { href: nsPath(ns, "search"), label: "Search", view: "search" },
   ];
   return (
     <div className="flex-1 overflow-y-auto">

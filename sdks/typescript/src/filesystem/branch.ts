@@ -39,6 +39,11 @@ export interface DiffOptions {
   against?: "head" | "base";
 }
 
+export interface ForkOptions {
+  /** Also fork the namespace's linked index, so it follows the new branch. */
+  withIndex?: boolean;
+}
+
 export class Branch {
   constructor(
     readonly namespace: Namespace,
@@ -53,15 +58,38 @@ export class Branch {
     return { namespace: this.namespace.name, branch: this.name };
   }
 
-  /** Forks this branch as `name`, at its head or at an older commit `at`. No data is copied. */
-  async fork(name: string, at?: string): Promise<Branch> {
+  /**
+   * Forks this branch as `name`, at its head or at an older commit `at`. No
+   * data is copied. `withIndex` also forks the namespace's linked index, which
+   * then follows the new branch.
+   */
+  async fork(name: string, at?: string, options: ForkOptions = {}): Promise<Branch> {
     unwrap(
       await this.client.POST("/namespaces/{namespace}/branches", {
         params: { path: { namespace: this.namespace.name } },
-        body: { name, from: this.name, at },
+        body: { name, from: this.name, at, withIndex: options.withIndex },
       }),
     );
     return this.namespace.branch(name);
+  }
+
+  /** How far this branch's linked index is behind its files. */
+  async indexStatus(): Promise<Schemas["BranchIndex"]> {
+    const params = { path: this.path };
+    return unwrap(
+      await this.client.GET("/namespaces/{namespace}/branches/{branch}/index", { params }),
+    );
+  }
+
+  /**
+   * Tells the API the branch moved without it, such as a save written straight
+   * to the bucket, so its linked index catches up within about 30 seconds.
+   */
+  async advanced(): Promise<void> {
+    const params = { path: this.path };
+    unwrap(
+      await this.client.POST("/namespaces/{namespace}/branches/{branch}/advanced", { params }),
+    );
   }
 
   async info(): Promise<Schemas["BranchInfo"]> {

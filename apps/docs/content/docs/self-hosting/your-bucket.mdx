@@ -1,0 +1,76 @@
+---
+title: Keep data in your own bucket
+icon: Database
+description: Point an environment at your S3 bucket, so its files and indexes live there and nowhere else.
+---
+
+An environment can keep its data in a bucket you own. The API still runs the branches, commits, searches and billing, but every byte of the environment's filesystems and search indexes is written to your bucket. One bucket holds both:
+
+```
+s3://acme-data/skywake/
+  fs/ns_…/   a filesystem: refs/, objects/, chunks/, commits/, …
+  ix/ix_…/   a search index: refs/, objects/, chunks/, blobs/, …
+```
+
+Each folder says what it holds in a small `skywake.json`. Garbage collection checks that file and refuses any folder of the other kind, so files and indexes never collect each other's data.
+
+## Choose the bucket before you make anything
+
+An environment's bucket can be set, changed or removed only while the environment holds no namespaces or indexes, and no folders still waiting to be deleted. Set it right after you create the environment.
+
+## With an AWS role (recommended)
+
+Skywake assumes a role in your account, so no long-lived key leaves it.
+
+1. Ask what the role must trust:
+
+   ```bash
+   curl -H "Authorization: Bearer $SKYWAKE_KEY" $SKYWAKE_URL/v1/environments/prod/store/trust
+   # {"principal": "arn:aws:iam::…:role/skywake-api", "externalId": "skywake-org_…"}
+   ```
+
+2. Create a role whose trust policy lets that `principal` call `sts:AssumeRole` when `sts:ExternalId` equals `externalId`. Give it `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and `s3:AbortMultipartUpload` on `arn:aws:s3:::acme-data/skywake/*`, and `s3:ListBucket` on the bucket with the prefix `skywake/*`.
+
+3. Point the environment at the bucket:
+
+   ```bash
+   curl -X PUT -H "Authorization: Bearer $SKYWAKE_KEY" -H "content-type: application/json" \
+     $SKYWAKE_URL/v1/environments/prod/store \
+     -d '{"store": "s3://acme-data/skywake",
+          "access": {"type": "aws_role", "roleArn": "arn:aws:iam::123456789012:role/skywake", "region": "us-east-1"}}'
+   ```
+
+The API tries the bucket before it saves anything: it writes, reads and deletes a test branch and checks the bucket supports conditional writes. A bucket that fails answers `400` and nothing changes.
+
+## With keys, for any S3 compatible store
+
+R2, MinIO, Google Cloud Storage (HMAC keys) and others take an access key and an endpoint:
+
+```json
+{
+  "store": "s3://acme-data/skywake",
+  "access": {
+    "type": "keys",
+    "accessKeyId": "…",
+    "secretAccessKey": "…",
+    "endpoint": "https://<account>.r2.cloudflarestorage.com",
+    "region": "auto"
+  }
+}
+```
+
+The secret is sealed with the server's `SKYWAKE_API_SECRET_KEY` and never shown again. A server without that key answers `501`.
+
+## What changes
+
+- New namespaces and indexes in the environment go to your bucket. Asking for a `region` in such an environment answers `400`.
+- With an AWS role, `skywake://` mounts get short-lived credentials from your role, limited to one namespace's folder. With keys, there is no role to scope, so mounts and the CLI read and write through the API instead.
+- Deleting a namespace or an index removes its folder from your bucket. The API keeps trying until it is gone, so remove the role or keys only after that.
+- Cache nodes are not used for your bucket yet; each server's own disk cache still is.
+
+## Next
+
+<Cards>
+  <Card href="../indexes/sync-with-branch.mdx" />
+  <Card href="./what-to-run.mdx" />
+</Cards>

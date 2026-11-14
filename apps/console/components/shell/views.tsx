@@ -6,6 +6,7 @@ import { Branches } from "@/features/branches/branches";
 import { Files } from "@/features/files/files";
 import { History } from "@/features/namespaces/history";
 import { Namespaces } from "@/features/namespaces/namespaces";
+import { NamespaceSearch } from "@/features/namespaces/search";
 import { Home } from "@/features/environments/home";
 import { IndexPage } from "@/features/indexes/index-page";
 import { Indexes } from "@/features/indexes/indexes";
@@ -37,6 +38,8 @@ export function Views() {
       return <Branches key={route.ns} ns={route.ns} />;
     case "history":
       return <History key={route.ns} ns={route.ns} />;
+    case "search":
+      return <NamespaceSearch key={route.ns} ns={route.ns} />;
     case "branch":
       return (
         <BranchView key={`${route.ns}\n${route.branch}`} ns={route.ns} branch={route.branch} />

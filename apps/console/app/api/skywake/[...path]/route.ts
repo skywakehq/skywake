@@ -108,11 +108,27 @@ export async function POST(request: Request, { params }: RouteContext<"/api/skyw
   return pass(await skywake(who, apiPath(path), { method: "POST", body: sent }, orgs));
 }
 
-/** Deletes an index, one of its branches, or nothing else. */
+/** A namespace's linked index: `namespaces/<ns>/index`, nothing else of a namespace. */
+const isIndexLink = (path: string[]) =>
+  path.length === 3 && path[0] === "namespaces" && path[2] === "index";
+
+/** Links an index to a namespace, or nothing else. */
+export async function PUT(request: Request, { params }: RouteContext<"/api/skywake/[...path]">) {
+  const who = await caller(request.headers);
+  if (!who) return new Response("sign in first", { status: 401 });
+  const { path } = await params;
+  if (!isIndexLink(path)) return Response.json({ error: "not allowed here" }, { status: 400 });
+  const body = JSON.stringify(await request.json().catch(() => null));
+  return pass(await skywake(who, apiPath(path), { method: "PUT", body }));
+}
+
+/** Deletes an index, one of its branches, a namespace's index link, or nothing else. */
 export async function DELETE(request: Request, { params }: RouteContext<"/api/skywake/[...path]">) {
   const who = await caller(request.headers);
   if (!who) return new Response("sign in first", { status: 401 });
   const { path } = await params;
-  if (path[0] !== "indexes") return Response.json({ error: "not allowed here" }, { status: 400 });
+  if (path[0] !== "indexes" && !isIndexLink(path)) {
+    return Response.json({ error: "not allowed here" }, { status: 400 });
+  }
   return pass(await skywake(who, apiPath(path), { method: "DELETE" }));
 }

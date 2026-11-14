@@ -14,14 +14,27 @@ class Branch:
     def _call(self, method, route, **kwargs):
         return self.namespace.sky.call(method, f"{self.path}{route}", **kwargs)
 
-    def fork(self, name, at=None):
+    def fork(self, name, at=None, with_index=False):
         """Forks this branch as `name`, at its head or at an older commit
-        `at`. No data is copied."""
+        `at`. No data is copied. `with_index` also forks the namespace's
+        linked index, which then follows the new branch."""
         body = {"name": name, "from": self.name}
         if at is not None:
             body["at"] = at
+        if with_index:
+            body["withIndex"] = True
         self.namespace.sky.call("POST", f"{self.namespace.path}/branches", json=body)
         return self.namespace.branch(name)
+
+    def index_status(self):
+        """How far this branch's linked index is behind its files."""
+        return self._call("GET", "/index").json()
+
+    def advanced(self):
+        """Tells the API the branch moved without it, such as a save written
+        straight to the bucket, so its linked index catches up within about
+        30 seconds."""
+        self._call("POST", "/advanced")
 
     def info(self):
         return self._call("GET", "").json()

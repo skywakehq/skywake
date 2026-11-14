@@ -10,7 +10,7 @@ export type Route =
   | { view: "usage" }
   | { view: "filesystems"; env: string }
   | { view: (typeof ENV_PAGES)[number]; env: string }
-  | { view: "files" | "branches" | "history"; ns: string }
+  | { view: "files" | "branches" | "history" | "search"; ns: string }
   | { view: "branch"; ns: string; branch: string }
   | { view: "index"; index: string; tab: IndexTab }
   | { view: "missing" };
@@ -26,7 +26,8 @@ export function parse(path: string): Route {
   }
   if (first === "n" && id) {
     if ((!page || page === "files") && !rest.length) return { view: "files", ns: id };
-    if ((page === "branches" || page === "history") && !rest.length) return { view: page, ns: id };
+    if ((page === "branches" || page === "history" || page === "search") && !rest.length)
+      return { view: page, ns: id };
     if (page === "b" && rest.length) return { view: "branch", ns: id, branch: rest.join("/") };
   }
   if (first === "i" && id && !rest.length) {
