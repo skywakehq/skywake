@@ -25,6 +25,7 @@ served.leases.start();
 served.builds?.start();
 served.limiter?.start();
 served.billing?.start();
+served.syncer.start();
 await served.changes.start();
 const stopRetention = keepFor(db, config.auditDays, log);
 
@@ -59,6 +60,7 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
       () =>
         void Promise.allSettled([
           served.pinning.stop(),
+          served.syncer.stop(),
           served.builds?.stop(),
           served.leases.stop(),
           served.changes.stop(),

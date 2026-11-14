@@ -9,6 +9,7 @@ import * as files from "./files.ts";
 import * as history from "./history.ts";
 import * as indexes from "./indexes/index.ts";
 import * as keys from "./keys.ts";
+import * as links from "./links.ts";
 import * as namespaces from "./namespaces.ts";
 import * as orgs from "./orgs.ts";
 import * as sessions from "./sessions.ts";
@@ -26,6 +27,7 @@ export {
   history,
   indexes,
   keys,
+  links,
   namespaces,
   orgs,
   sessions,
@@ -66,6 +68,13 @@ export const routes = {
     namespaces.createNamespace,
     namespaces.getNamespace,
     namespaces.updateNamespace,
+  ],
+  links: [
+    links.linkIndex,
+    links.getIndexLink,
+    links.unlinkIndex,
+    links.getBranchIndex,
+    links.branchAdvanced,
   ],
   credentials: [credentials.createCredentials],
   branches: [

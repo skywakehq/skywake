@@ -204,6 +204,13 @@
       "when": 1794647712221,
       "tag": "0028_byob_environments",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1794648288019,
+      "tag": "0029_index_links",
+      "breakpoints": true
     }
   ]
 }

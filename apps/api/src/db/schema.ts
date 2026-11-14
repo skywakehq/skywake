@@ -509,3 +509,92 @@ export const filesystemSizes = api.table(
   },
   (table) => [index("filesystem_sizes_by_org").on(table.org)],
 );
+
+// A namespace whose files an index keeps up with. One per namespace.
+export const indexLinks = api.table(
+  "index_links",
+  {
+    org: text("org").notNull(),
+    namespace: text("namespace").notNull(),
+    index: text("index").notNull(),
+    include: text("include").array().notNull().default(sql`'{}'`),
+    exclude: text("exclude").array().notNull().default(sql`'{}'`),
+    maxBytes: integer("max_bytes").notNull(),
+    created: time("created").notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: "index_links_pkey", columns: [table.org, table.namespace] }),
+    foreignKey({
+      name: "index_links_namespace_fkey",
+      columns: [table.org, table.namespace],
+      foreignColumns: [namespaces.org, namespaces.name],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "index_links_index_fkey",
+      columns: [table.org, table.index],
+      foreignColumns: [indexes.org, indexes.name],
+    }).onDelete("cascade"),
+  ],
+);
+
+// One linked branch: the commit its index branch matches, and whether it is
+// behind. Servers claim due rows with SKIP LOCKED; a claim that runs out is
+// taken again, so a server that dies mid-sync costs only time.
+export const indexLinkBranches = api.table(
+  "index_link_branches",
+  {
+    org: text("org").notNull(),
+    namespace: text("namespace").notNull(),
+    branch: text("branch").notNull(),
+    synced: text("synced"),
+    dirty: boolean("dirty").notNull().default(true),
+    due: time("due").notNull().defaultNow(),
+    checked: time("checked").notNull().defaultNow(),
+    claimedBy: text("claimed_by"),
+    claimedUntil: time("claimed_until"),
+    attempts: integer("attempts").notNull().default(0),
+    error: text("error"),
+    syncedAt: time("synced_at"),
+  },
+  (table) => [
+    primaryKey({
+      name: "index_link_branches_pkey",
+      columns: [table.org, table.namespace, table.branch],
+    }),
+    foreignKey({
+      name: "index_link_branches_link_fkey",
+      columns: [table.org, table.namespace],
+      foreignColumns: [indexLinks.org, indexLinks.namespace],
+    }).onDelete("cascade"),
+    index("index_link_branches_due")
+      .on(table.due)
+      .where(sql`dirty`),
+    index("index_link_branches_checked").on(table.checked),
+  ],
+);
+
+// Which index version matches which commit of a linked branch: how a search
+// pins a commit, and where an index fork starts.
+export const indexStamps = api.table(
+  "index_stamps",
+  {
+    org: text("org").notNull(),
+    index: text("index").notNull(),
+    branch: text("branch").notNull(),
+    commit: text("commit").notNull(),
+    version: text("version").notNull(),
+    at: time("at").notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: "index_stamps_pkey",
+      columns: [table.org, table.index, table.branch, table.commit],
+    }),
+    foreignKey({
+      name: "index_stamps_index_fkey",
+      columns: [table.org, table.index],
+      foreignColumns: [indexes.org, indexes.name],
+    }).onDelete("cascade"),
+    index("index_stamps_newest").on(table.org, table.index, table.branch, table.at),
+  ],
+);

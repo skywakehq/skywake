@@ -34,6 +34,11 @@ export const NewBranch = z
     at: Hash.optional().openapi({
       description: "Fork this older commit of `from` instead of its head.",
     }),
+    withIndex: z.boolean().optional().openapi({
+      description:
+        "Also fork the linked index, from its version that matches the fork's commit, and keep " +
+        "it up with this branch. Needs `from` and a namespace with a linked index.",
+    }),
   })
   .openapi("NewBranch");
 

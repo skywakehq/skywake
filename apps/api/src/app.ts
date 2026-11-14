@@ -41,6 +41,8 @@ import { Models } from "./features/indexes/models.ts";
 import { IndexUsage } from "./features/indexes/usage.ts";
 import { indexWritesFeature } from "./features/indexes/writes.ts";
 import { keysFeature } from "./features/keys/routes.ts";
+import { linksFeature } from "./features/links/routes.ts";
+import { Syncer } from "./features/links/sync.ts";
 import { namespacesFeature } from "./features/namespaces/routes.ts";
 import { Allowlists } from "./features/orgs/allowlist.ts";
 import { orgsFeature } from "./features/orgs/routes.ts";
@@ -67,6 +69,7 @@ const FEATURES: Feature[] = [
   auditFeature,
   environmentsFeature,
   namespacesFeature,
+  linksFeature,
   credentialsFeature,
   branchesFeature,
   filesFeature,
@@ -120,6 +123,8 @@ export function services(
   const usage = new IndexUsage(db, billing);
   const pinning = new Pinning(id, db, config.peer, stores, usage, log);
   const token = config.peer.token;
+  const models = new Models(config);
+  const syncer = new Syncer(id, db, stores, usage, models, log);
   const builds =
     token === undefined ? null : new Builds(id, token, () => pinning.live(), stores, log);
   if (builds) stores.splitBuilds(builds);
@@ -141,7 +146,8 @@ export function services(
     log,
     metrics: options.metrics ?? new Metrics(),
     usage,
-    models: new Models(config),
+    models,
+    syncer,
     allowlists: new Allowlists(db, changes),
     leases,
     changes,

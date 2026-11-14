@@ -6,6 +6,8 @@ import type { Feature } from "../../http/context.ts";
 import { conflict, isMissing, notFound } from "../../http/errors.ts";
 import { changeable, readable } from "../../http/request.ts";
 import * as commits from "../history/commits.ts";
+import { dropIndex, forkIndex } from "../links/routes.ts";
+import * as links from "../links/queries.ts";
 import * as branches from "./queries.ts";
 import { protect, whileWritable } from "./protection.ts";
 
@@ -40,9 +42,12 @@ export const branchesFeature: Feature = {
 
     api.openapi(routes.createBranch, async (c) => {
       const { caller, ns } = await changeable(c, c.req.valid("param").namespace, "write");
-      const { name, from, at } = c.req.valid("json");
+      const { name, from, at, withIndex } = c.req.valid("json");
       const { db } = c.var.services;
       const ref = { org: ns.org, namespace: ns.name, name };
+      if (withIndex && !(await links.find(db, ns.org, ns.name))) {
+        throw conflict(`namespace \`${ns.name}\` has no index to fork; link one first`);
+      }
       // The head the new branch must have; none for an empty branch.
       const source = at ?? (from ? await ns.engine.head(from) : null);
       if (!(await branches.add(db, ref, from ?? null)))
@@ -69,6 +74,7 @@ export const branchesFeature: Feature = {
         }
       }
       note(c, { details: { branch: name, head } });
+      if (withIndex) await forkIndex(c, ns.org, ns.name, name, from ?? null, source);
       await commits.record(db, ns.engine, ref, head, caller.actor, false);
       return c.json({ head }, 201);
     });
@@ -115,6 +121,7 @@ export const branchesFeature: Feature = {
         }
       });
       await branches.remove(db, ref);
+      await dropIndex(c, ns.org, ns.name, branch);
       return c.body(null, 204);
     });
   },

@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.ts";
 import { branches, commits } from "../../db/schema.ts";
 import type { BranchRef } from "../branches/queries.ts";
+import { moved } from "../links/queries.ts";
 
 export async function record(
   db: Db,
@@ -44,4 +45,6 @@ export async function record(
       })
       .onConflictDoNothing();
   });
+  // A linked index follows at once; a namespace without a link changes no row.
+  await moved(db, ref.org, ref.namespace, ref.name, true);
 }
