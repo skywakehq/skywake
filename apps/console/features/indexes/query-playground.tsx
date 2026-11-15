@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Play } from "lucide-react";
+import { Play } from "lucide-react";
 import { type FormEvent, Fragment, useState } from "react";
 import { Button, Choice, Panel, cx as cn } from "@/components/kit";
 import { useUrls } from "@/components/shell/console";
@@ -14,6 +14,7 @@ import {
   branchUrl,
   call,
 } from "./api";
+import { CodeBlock, LangChoice } from "./code";
 import { Label, Select, TextArea, TextField } from "./fields";
 import { type Condition, FilterBuilder, toFilter } from "./filter-builder";
 import { type Lang, type QueryBody, type Request, type SearchBody, snippet } from "./snippets";
@@ -379,20 +380,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
 
       {hits && <Results hits={hits.hits} ms={hits.ms} kind={kind} attributes={include} />}
 
-      <Panel
-        title="As code"
-        action={
-          <Choice
-            value={lang}
-            onChange={setLang}
-            options={[
-              { value: "ts", label: "TypeScript" },
-              { value: "python", label: "Python" },
-              { value: "curl", label: "curl" },
-            ]}
-          />
-        }
-      >
+      <Panel title="As code" action={<LangChoice value={lang} onChange={setLang} />}>
         {code ? (
           <CodeBlock code={code} />
         ) : (
@@ -582,27 +570,3 @@ function Marked({ highlight }: { highlight: Highlight }) {
 
 const format = (value: unknown) =>
   value === undefined ? "—" : Array.isArray(value) ? value.join(", ") : String(value);
-
-function CodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="relative">
-      <pre className="rounded-lg overflow-x-auto bg-muted/50 p-4 font-mono text-xs leading-5">
-        {code}
-      </pre>
-      <button
-        type="button"
-        aria-label="Copy"
-        onClick={() =>
-          navigator.clipboard.writeText(code).then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          })
-        }
-        className="rounded-md absolute top-2 right-2 grid size-7 place-items-center text-muted-foreground hover:bg-muted hover:text-foreground"
-      >
-        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-      </button>
-    </div>
-  );
-}

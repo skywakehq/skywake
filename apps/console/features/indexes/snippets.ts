@@ -91,30 +91,62 @@ function pythonCall(request: Request): string {
   ].join(", ")})`;
 }
 
-export function snippet(lang: Lang, index: string, branch: string, request: Request, api: string) {
-  const at = branch === "main" ? "" : `.at(${json(branch)})`;
-  if (lang === "ts") {
-    return [
-      `import { Skywake } from "@skywake/sdk";`,
-      ``,
-      `const sky = new Skywake({ url: ${json(api)}, key: process.env.SKYWAKE_KEY! });`,
-      `const hits = await sky.index(${json(index)})${at}.${request.route}(${JSON.stringify(request.body, null, 2)});`,
-    ].join("\n");
-  }
-  if (lang === "python") {
-    return [
-      `import os`,
-      `from skywake import Skywake`,
-      ``,
-      `sky = Skywake(${json(api)}, os.environ["SKYWAKE_KEY"])`,
-      `hits = sky.index(${json(index)})${at}.${pythonCall(request)}`,
-    ].join("\n");
-  }
-  const path = `${api}/v1/indexes/${encodeURIComponent(index)}/branches/${encodeURIComponent(branch)}/${request.route}`;
+const TS_CLIENT = (api: string) => [
+  `import { Skywake } from "@skywake/sdk";`,
+  ``,
+  `const sky = new Skywake({ url: ${json(api)}, key: process.env.SKYWAKE_KEY! });`,
+];
+
+const PYTHON_CLIENT = (api: string) => [
+  `import os`,
+  `from skywake import Skywake`,
+  ``,
+  `sky = Skywake(${json(api)}, os.environ["SKYWAKE_KEY"])`,
+];
+
+function curl(api: string, index: string, branch: string, route: string, body: unknown) {
+  const path = `${api}/v1/indexes/${encodeURIComponent(index)}/branches/${encodeURIComponent(branch)}/${route}`;
   return [
     `curl -X POST '${path}' \\`,
     `  -H "Authorization: Bearer $SKYWAKE_KEY" \\`,
     `  -H 'content-type: application/json' \\`,
-    `  -d '${JSON.stringify(request.body).replace(/'/g, "'\\''")}'`,
+    `  -d '${JSON.stringify(body).replace(/'/g, "'\\''")}'`,
   ].join("\n");
+}
+
+const handle = (index: string, branch: string) =>
+  `sky.index(${json(index)})${branch === "main" ? "" : `.at(${json(branch)})`}`;
+
+export function snippet(lang: Lang, index: string, branch: string, request: Request, api: string) {
+  const target = handle(index, branch);
+  if (lang === "ts") {
+    return [
+      ...TS_CLIENT(api),
+      `const hits = await ${target}.${request.route}(${JSON.stringify(request.body, null, 2)});`,
+    ].join("\n");
+  }
+  if (lang === "python") {
+    return [...PYTHON_CLIENT(api), `hits = ${target}.${pythonCall(request)}`].join("\n");
+  }
+  return curl(api, index, branch, request.route, request.body);
+}
+
+export function writeSnippet(
+  lang: Lang,
+  index: string,
+  branch: string,
+  documents: unknown[],
+  api: string,
+) {
+  const target = handle(index, branch);
+  if (lang === "ts") {
+    return [
+      ...TS_CLIENT(api),
+      `await ${target}.upsert(${JSON.stringify(documents, null, 2)});`,
+    ].join("\n");
+  }
+  if (lang === "python") {
+    return [...PYTHON_CLIENT(api), `${target}.upsert(${python(documents)})`].join("\n");
+  }
+  return curl(api, index, branch, "documents", { documents });
 }

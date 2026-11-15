@@ -1,94 +1,262 @@
 "use client";
 
-import { useState } from "react";
+import { Sparkles, Type } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { Choice, Panel, cx } from "@/components/kit";
-import { indexApi } from "@/lib/paths";
+import { useUrls } from "@/components/shell/console";
 import { city } from "@/features/environments/regions";
-import { type IndexInfo, type Stats, type UsageDay, branchUrl, bytes, useApi } from "./api";
+import { indexApi } from "@/lib/paths";
+import {
+  type AttributeColumn,
+  type IndexInfo,
+  type Stats,
+  type UsageDay,
+  type VectorColumn,
+  branchUrl,
+  bytes,
+  useApi,
+} from "./api";
+import { CopyIcon } from "./code";
 import { Label } from "./fields";
+import { Start } from "./start";
 
-const FIGURES: { key: keyof Stats; label: string }[] = [
-  { key: "rows", label: "Rows" },
-  { key: "indexed_rows", label: "Indexed" },
-  { key: "unindexed_rows", label: "Unindexed" },
-  { key: "deleted_rows", label: "Deleted" },
-  { key: "segments", label: "Segments" },
-  { key: "clusters", label: "Clusters" },
-];
+type Loaded<T> = ReturnType<typeof useApi<T>>["loaded"];
 
-/** A branch's counts, then the schema. */
 export function Overview({ index, branch }: { index: IndexInfo; branch: string }) {
-  const { loaded } = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
-  const stats = loaded.state === "done" ? loaded.value.stats : undefined;
+  const stats = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
+  const usage = useApi<{ days: UsageDay[] }>(indexApi(index.name, `usage?days=${DAYS}`));
+  const counted = stats.loaded.state === "done" ? stats.loaded.value.stats : undefined;
+  const days = usage.loaded.state === "done" ? usage.loaded.value.days : undefined;
+  const total = (pick: (day: UsageDay) => number) =>
+    days ? days.reduce((sum, day) => sum + pick(day), 0) : undefined;
+  const queries = total((day) => day.queries);
+  const writes = total((day) => day.writes + day.deletes);
+  const written = !!counted && counted.rows > 0;
+  const queried = (queries ?? 0) > 0;
+  const fresh = counted?.rows === 0;
+  const guiding =
+    counted !== undefined && queries !== undefined && !(written && queried) && counted !== null;
+
+  function reload() {
+    stats.reload();
+    usage.reload();
+  }
 
   return (
     <div className="grid gap-10">
-      <div className="grid grid-cols-2 gap-x-10 gap-y-6 border-b pb-8 sm:grid-cols-4 lg:grid-cols-7">
-        {FIGURES.map(({ key, label }) => (
-          <Figure key={key} label={label} value={stats ? stats[key].toLocaleString() : undefined} />
-        ))}
-        <Figure label="Size" value={stats ? bytes(stats.bytes) : undefined} />
+      {guiding && (
+        <Start
+          index={index}
+          branch={branch}
+          written={written}
+          queried={queried}
+          onWritten={reload}
+        />
+      )}
+
+      {!fresh && (
+        <>
+          <div className="grid gap-6">
+            <div className="grid grid-cols-2 gap-x-10 gap-y-6 md:grid-cols-4">
+              <Figure label="Documents" value={counted?.rows.toLocaleString()} />
+              <Figure label="Size" value={counted ? bytes(counted.bytes) : undefined} />
+              <Figure label="Queries" hint="14 days" value={queries?.toLocaleString()} />
+              <Figure label="Writes" hint="14 days" value={writes?.toLocaleString()} />
+            </div>
+            {counted && <Health stats={counted} />}
+            {counted === null && (
+              <p className="text-sm text-muted-foreground">
+                This server does not count rows yet. Queries and writes work as usual.
+              </p>
+            )}
+            {stats.loaded.state === "failed" && (
+              <p className="text-sm text-destructive">{stats.loaded.error}</p>
+            )}
+          </div>
+          <Usage loaded={usage.loaded} />
+        </>
+      )}
+
+      <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <Schema index={index} />
+        <Connect index={index} branch={branch} />
       </div>
-      {stats === null && (
-        <p className="-mt-6 text-sm text-muted-foreground">
-          This server does not count rows yet. Queries and writes work as usual.
-        </p>
-      )}
-      {loaded.state === "failed" && <p className="text-sm text-destructive">{loaded.error}</p>}
-
-      <Usage index={index.name} />
-
-      {index.schema.vectors.length > 0 && (
-        <Panel title="Vector columns" count={index.schema.vectors.length}>
-          {index.schema.vectors.map((column) => (
-            <Row
-              key={column.name}
-              name={column.name}
-              detail={[
-                `${column.dims} dims`,
-                column.metric,
-                column.embed && `embeds with ${column.embed.model}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            />
-          ))}
-        </Panel>
-      )}
-      <Panel title="Attributes" count={index.schema.attributes.length}>
-        {index.schema.attributes.length ? (
-          index.schema.attributes.map((column) => (
-            <Row key={column.name} name={column.name} detail={column.type} />
-          ))
-        ) : (
-          <p className="px-4 py-3 text-sm text-muted-foreground">No attributes.</p>
-        )}
-      </Panel>
-      <p className="text-xs text-faint">
-        In {city(index.region)} ({index.region}), made{" "}
-        {new Date(index.created).toLocaleDateString(undefined, { dateStyle: "long" })}.
-      </p>
     </div>
   );
 }
 
-function Figure({ label, value }: { label: string; value?: string }) {
+function Figure({ label, hint, value }: { label: string; hint?: string; value?: string }) {
   return (
     <div className="grid gap-1">
-      <Label>{label}</Label>
-      <span className="text-[22px] leading-8 font-medium tracking-[-0.02em] whitespace-nowrap tabular-nums">
+      <div className="flex items-baseline gap-1.5">
+        <Label>{label}</Label>
+        {hint && <span className="text-xs text-faint">{hint}</span>}
+      </div>
+      <span
+        className={cx(
+          "text-[26px] leading-8 font-medium tracking-[-0.025em] whitespace-nowrap tabular-nums",
+          value === undefined && "text-faint",
+        )}
+      >
         {value ?? "—"}
       </span>
     </div>
   );
 }
 
-function Row({ name, detail }: { name: string; detail: string }) {
+function Health({ stats }: { stats: Stats }) {
+  const share = stats.rows ? stats.indexed_rows / stats.rows : 1;
+  const all = stats.unindexed_rows === 0;
+  const none = stats.indexed_rows === 0;
+  const details = [
+    `${stats.segments.toLocaleString()} segment${stats.segments === 1 ? "" : "s"}`,
+    `${stats.clusters.toLocaleString()} cluster${stats.clusters === 1 ? "" : "s"}`,
+    stats.deleted_rows > 0 && `${stats.deleted_rows.toLocaleString()} deleted`,
+  ].filter(Boolean);
   return (
-    <div className="flex h-10 items-center gap-4 border-b border-border/60 px-4 last:border-0">
-      <span className="flex-1 text-sm">{name}</span>
-      <span className="text-xs text-muted-foreground">{detail}</span>
+    <div className="grid gap-2 border-y py-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+        <span className="font-medium">
+          {all
+            ? "Every document is indexed"
+            : none
+              ? "Not indexed yet"
+              : `${stats.indexed_rows.toLocaleString()} of ${stats.rows.toLocaleString()} indexed`}
+        </span>
+        <span className="text-muted-foreground">
+          {all
+            ? "Searches read the index directly."
+            : none
+              ? "Searches read every document exactly until the first build."
+              : "The rest are read exactly until the next build, so nothing is missed."}
+        </span>
+        <span className="ml-auto text-xs text-faint tabular-nums">{details.join(" · ")}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-foreground/10">
+        <div
+          className="h-full rounded-full bg-foreground/70 transition-[width] duration-700"
+          style={{ width: `${Math.max(share * 100, share > 0 ? 2 : 0)}%` }}
+        />
+      </div>
     </div>
+  );
+}
+
+function Schema({ index }: { index: IndexInfo }) {
+  const { vectors, attributes } = index.schema;
+  return (
+    <Panel title="Schema" count={vectors.length + attributes.length}>
+      {vectors.map((column) => (
+        <VectorRow key={column.name} column={column} />
+      ))}
+      {attributes.map((column) => (
+        <AttributeRow key={column.name} column={column} />
+      ))}
+      <p className="px-4 pt-3 text-xs text-faint">
+        A document may also bring attributes the schema lacks; each is added with its value&apos;s
+        type.
+      </p>
+    </Panel>
+  );
+}
+
+function SchemaRow({ name, kind, children }: { name: string; kind: string; children: ReactNode }) {
+  return (
+    <div className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-2">
+      <span className="font-mono text-[13px]">{name}</span>
+      <Chip>{kind}</Chip>
+      <span className="ml-auto flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        {children}
+      </span>
+    </div>
+  );
+}
+
+function VectorRow({ column }: { column: VectorColumn }) {
+  return (
+    <SchemaRow name={column.name} kind="vector">
+      <span className="tabular-nums">{column.dims} dims</span>
+      <span className="text-faint">·</span>
+      <span>{column.metric}</span>
+      {column.embed && (
+        <Chip strong>
+          <Sparkles className="size-3" aria-hidden />
+          {column.embed.model}
+          {column.embed.from && <span className="text-faint">from {column.embed.from}</span>}
+        </Chip>
+      )}
+    </SchemaRow>
+  );
+}
+
+const USES: Record<AttributeColumn["type"], string> = {
+  string: "eq, in, lt, gt",
+  number: "eq, in, lt, gt",
+  bool: "eq, in",
+  strings: "any of a list",
+  text: "keyword search",
+};
+
+function AttributeRow({ column }: { column: AttributeColumn }) {
+  return (
+    <SchemaRow name={column.name} kind={column.type}>
+      {column.type === "text" && <Type className="size-3.5" aria-hidden />}
+      <span>{USES[column.type]}</span>
+    </SchemaRow>
+  );
+}
+
+function Chip({ children, strong }: { children: ReactNode; strong?: boolean }) {
+  return (
+    <span
+      className={cx(
+        "rounded-md inline-flex h-5 items-center gap-1 px-1.5 text-[11px] leading-none",
+        strong ? "bg-foreground/[0.08] text-foreground" : "bg-muted text-muted-foreground",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function Connect({ index, branch }: { index: IndexInfo; branch: string }) {
+  const api = useUrls().api;
+  const facts: [string, string, boolean][] = [
+    ["Name", index.name, true],
+    ["Endpoint", `${api}/v1/indexes/${encodeURIComponent(index.name)}`, true],
+    ["Branch", branch, false],
+    ["Region", `${city(index.region)} · ${index.region}`, false],
+    [
+      "Created",
+      new Date(index.created).toLocaleDateString(undefined, { dateStyle: "long" }),
+      false,
+    ],
+  ];
+  return (
+    <Panel title="Connect" className="min-w-0">
+      <dl className="grid grid-cols-[minmax(0,1fr)]">
+        {facts.map(([label, value, copies]) => (
+          <div
+            key={label}
+            className="group flex min-h-11 items-center gap-3 border-b border-border/60 px-4 py-2 last:border-0"
+          >
+            <dt className="w-20 shrink-0 text-xs text-muted-foreground">{label}</dt>
+            <dd
+              className={cx("min-w-0 flex-1 truncate text-[13px]", copies && "font-mono")}
+              title={value}
+            >
+              {value}
+            </dd>
+            {copies && (
+              <CopyIcon
+                text={value}
+                className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              />
+            )}
+          </div>
+        ))}
+      </dl>
+    </Panel>
   );
 }
 
@@ -107,8 +275,7 @@ const MEASURES: { value: Measure; label: string; note: string }[] = [
  * The index's last two weeks. Rows and size are counted when someone looks
  * at the index, so a day nobody did keeps the day before's numbers.
  */
-function Usage({ index }: { index: string }) {
-  const { loaded } = useApi<{ days: UsageDay[] }>(indexApi(index, `usage?days=${DAYS}`));
+function Usage({ loaded }: { loaded: Loaded<{ days: UsageDay[] }> }) {
   const [measure, setMeasure] = useState<Measure>("queries");
   const [hover, setHover] = useState<number | null>(null);
   const days = loaded.state === "done" ? carried(loaded.value.days) : null;
