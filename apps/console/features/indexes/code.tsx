@@ -48,30 +48,6 @@ export function CodeBlock({ code, className }: { code: string; className?: strin
   );
 }
 
-export function CodePane({
-  code,
-  lang,
-  onLang,
-  className,
-}: {
-  code: string;
-  lang: Lang;
-  onLang: (lang: Lang) => void;
-  className?: string;
-}) {
-  return (
-    <div className={cx("flex min-w-0 flex-col", className)}>
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-        <LangChoice value={lang} onChange={onLang} />
-        <CopyIcon text={code} className="ml-auto" />
-      </div>
-      <pre className="flex-1 overflow-x-auto px-5 py-4 font-mono text-[12.5px] leading-[22px]">
-        <Highlighted code={code} />
-      </pre>
-    </div>
-  );
-}
-
 export function CopyIcon({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
   return (

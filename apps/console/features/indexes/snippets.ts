@@ -153,20 +153,3 @@ export function snippet(lang: Lang, index: string, branch: string, request: Requ
   }
   return curl(api, index, branch, request.route, request.body);
 }
-
-export function writeSnippet(
-  lang: Lang,
-  index: string,
-  branch: string,
-  documents: unknown[],
-  api: string,
-) {
-  const target = handle(index, branch);
-  if (lang === "ts") {
-    return [...TS_CLIENT(api), `await ${target}.upsert(${literal(documents, "ts")});`].join("\n");
-  }
-  if (lang === "python") {
-    return [...PYTHON_CLIENT(api), `${target}.upsert(${python(documents)})`].join("\n");
-  }
-  return curl(api, index, branch, "documents", { documents });
-}

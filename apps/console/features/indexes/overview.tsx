@@ -6,9 +6,6 @@ import { indexApi } from "@/lib/paths";
 import { city } from "@/features/environments/regions";
 import { type IndexInfo, type Stats, type UsageDay, branchUrl, bytes, useApi } from "./api";
 import { Label } from "./fields";
-import { Start } from "./start";
-
-type Loaded<T> = ReturnType<typeof useApi<T>>["loaded"];
 
 const FIGURES: { key: keyof Stats; label: string }[] = [
   { key: "rows", label: "Rows" },
@@ -21,25 +18,11 @@ const FIGURES: { key: keyof Stats; label: string }[] = [
 
 /** A branch's counts, then the schema. */
 export function Overview({ index, branch }: { index: IndexInfo; branch: string }) {
-  const { loaded, reload } = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
-  const usage = useApi<{ days: UsageDay[] }>(indexApi(index.name, `usage?days=${DAYS}`));
+  const { loaded } = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
   const stats = loaded.state === "done" ? loaded.value.stats : undefined;
-  const days = usage.loaded.state === "done" ? usage.loaded.value.days : undefined;
-  const written = !!stats && stats.rows > 0;
-  const queried = !!days && days.some((day) => day.queries > 0);
-  const guiding = !!stats && !!days && !(written && queried);
 
   return (
     <div className="grid gap-10">
-      {guiding && (
-        <Start
-          index={index}
-          branch={branch}
-          written={written}
-          queried={queried}
-          onWritten={() => (reload(), usage.reload())}
-        />
-      )}
       <div className="grid grid-cols-2 gap-x-10 gap-y-6 border-b pb-8 sm:grid-cols-4 lg:grid-cols-7">
         {FIGURES.map(({ key, label }) => (
           <Figure key={key} label={label} value={stats ? stats[key].toLocaleString() : undefined} />
@@ -53,7 +36,7 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
       )}
       {loaded.state === "failed" && <p className="text-sm text-destructive">{loaded.error}</p>}
 
-      <Usage loaded={usage.loaded} />
+      <Usage index={index.name} />
 
       {index.schema.vectors.length > 0 && (
         <Panel title="Vector columns" count={index.schema.vectors.length}>
@@ -124,7 +107,8 @@ const MEASURES: { value: Measure; label: string; note: string }[] = [
  * The index's last two weeks. Rows and size are counted when someone looks
  * at the index, so a day nobody did keeps the day before's numbers.
  */
-function Usage({ loaded }: { loaded: Loaded<{ days: UsageDay[] }> }) {
+function Usage({ index }: { index: string }) {
+  const { loaded } = useApi<{ days: UsageDay[] }>(indexApi(index, `usage?days=${DAYS}`));
   const [measure, setMeasure] = useState<Measure>("queries");
   const [hover, setHover] = useState<number | null>(null);
   const days = loaded.state === "done" ? carried(loaded.value.days) : null;
