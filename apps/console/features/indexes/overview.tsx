@@ -9,8 +9,8 @@ import { Label } from "./fields";
 
 const FIGURES: { key: keyof Stats; label: string }[] = [
   { key: "rows", label: "Rows" },
-  { key: "indexed_rows", label: "Indexed" },
-  { key: "unindexed_rows", label: "Unindexed" },
+  { key: "indexed_rows", label: "Built" },
+  { key: "unindexed_rows", label: "Waiting to build" },
   { key: "deleted_rows", label: "Deleted" },
   { key: "segments", label: "Segments" },
   { key: "clusters", label: "Clusters" },
@@ -32,6 +32,12 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
       {stats === null && (
         <p className="-mt-6 text-sm text-muted-foreground">
           This server does not count rows yet. Queries and writes work as usual.
+        </p>
+      )}
+      {stats && stats.unindexed_rows > 0 && (
+        <p className="-mt-6 text-sm text-muted-foreground">
+          Every row is searchable now. Rows waiting to build are searched exactly, then grouped
+          for speed after 10,000 new rows or 64 MB.
         </p>
       )}
       {loaded.state === "failed" && <p className="text-sm text-destructive">{loaded.error}</p>}

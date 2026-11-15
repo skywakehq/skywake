@@ -1,15 +1,18 @@
 "use client";
 
-import { Link2, Search as SearchIcon, Unlink } from "lucide-react";
+import { Link2, Search as SearchIcon, Sparkles, Unlink } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "@/components/shell/router";
-import { Ago, Button, Empty, Hash, Panel, Rows, cx } from "@/components/kit";
+import { Ago, Button, Choice, Empty, Hash, Panel, Rows, cx, plural } from "@/components/kit";
 import { mainOf, useFleet } from "@/features/fleet/fleet";
-import { call } from "@/features/indexes/api";
+import { call, useApi } from "@/features/indexes/api";
 import { Label, TextArea, TextField } from "@/features/indexes/fields";
 import { apiPath, indexPath } from "@/lib/paths";
+import { withBase } from "@/lib/zone";
 import { NamespacePage } from "./namespace-header";
+
+type Skipped = { path: string; reason: string };
 
 type LinkedBranch = {
   branch: string;
@@ -17,6 +20,9 @@ type LinkedBranch = {
   behind: boolean;
   syncedAt: string | null;
   error: string | null;
+  files: number | null;
+  chunks: number | null;
+  skipped: Skipped[];
 };
 
 type IndexLink = {
@@ -25,9 +31,25 @@ type IndexLink = {
   include: string[];
   exclude: string[];
   maxBytes: number;
+  embed: { model: string; dims: number; images: boolean } | null;
+  made: boolean;
   created: string;
   branches: LinkedBranch[];
 };
+
+type Defaults = { embed: { model: string; images: boolean } | null };
+
+type Mode = "meaning" | "words";
+
+const MODES: { value: Mode; label: string }[] = [
+  { value: "meaning", label: "Meaning and words" },
+  { value: "words", label: "Words only" },
+];
+
+function useDefaults() {
+  const { loaded } = useApi<Defaults>(withBase("/api/skywake/index-links/defaults"));
+  return loaded.state === "done" ? loaded.value.embed : null;
+}
 
 /** How often the page reads the link again while a branch is behind. */
 const BEHIND_POLL_MS = 5_000;
@@ -102,7 +124,11 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
   const [index, setIndex] = useState(`${ns}-files`);
   const [include, setInclude] = useState("");
   const [exclude, setExclude] = useState("node_modules/**\n**/*.lock");
+  const [mode, setMode] = useState<Mode>("meaning");
+  const [model, setModel] = useState("");
   const [busy, setBusy] = useState(false);
+  const fallback = useDefaults();
+  const needsModel = mode === "meaning" && !fallback && !model.trim();
 
   async function save() {
     setBusy(true);
@@ -111,6 +137,7 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
         index,
         include: lines(include),
         exclude: lines(exclude),
+        embed: mode === "words" ? false : model.trim() ? { model: model.trim() } : undefined,
       });
       toast.success("Linked", { description: `${index} now follows main.` });
       onLinked();
@@ -162,12 +189,31 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
             aria-label="Paths to exclude"
           />
         </label>
+        <div className="grid gap-1.5">
+          <Label>Search by</Label>
+          <Choice value={mode} options={MODES} onChange={setMode} />
+          {mode === "meaning" && (
+            <TextField
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder={fallback?.model ?? "Embedding model, such as voyage/voyage-multimodal-3.5"}
+              className="mt-1 font-mono"
+              aria-label="Embedding model"
+            />
+          )}
+          <span className="text-xs text-muted-foreground">
+            {mode === "words"
+              ? "Exact words and parts of words, nothing more."
+              : "Every file is split into passages and each one is embedded, so a question finds " +
+                "the right part of a long file. Images are embedded too when the model takes them."}
+          </span>
+        </div>
         <Button
           variant="primary"
           size="default"
           leadingIcon={Link2}
           className="w-fit"
-          disabled={busy || !index.trim()}
+          disabled={busy || !index.trim() || needsModel}
           onClick={save}
         >
           Link index
@@ -179,6 +225,26 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
 
 function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
+  const fallback = useDefaults();
+
+  async function upgrade() {
+    setBusy(true);
+    try {
+      await call("PUT", apiPath(ns, "index"), {
+        index: link.index,
+        include: link.include,
+        exclude: link.exclude,
+        maxBytes: link.maxBytes,
+        embed: {},
+      });
+      toast.success("Rebuilding", { description: `${link.index} now searches by meaning too.` });
+      onChange();
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function unlink() {
     setBusy(true);
@@ -216,35 +282,83 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
           <dd className="font-mono">{link.exclude.length ? link.exclude.join("  ") : "nothing"}</dd>
           <dt className="text-muted-foreground">Largest file</dt>
           <dd className="tabular-nums">{Math.round(link.maxBytes / 1024)} KB</dd>
+          <dt className="text-muted-foreground">Search by</dt>
+          <dd className="flex flex-wrap items-center gap-3">
+            {link.embed ? (
+              <span>
+                Meaning and words · <span className="font-mono">{link.embed.model}</span>
+                {link.embed.images && " · images too"}
+              </span>
+            ) : (
+              <span>Words only</span>
+            )}
+            {!link.embed && link.made && fallback && (
+              <Button leadingIcon={Sparkles} disabled={busy} onClick={upgrade}>
+                Add search by meaning
+              </Button>
+            )}
+          </dd>
         </dl>
       </Panel>
       <Panel title="Branches" count={link.branches.length}>
         <div className="divide-y divide-border/60">
           {link.branches.map((branch) => (
-            <div key={branch.branch} className="flex h-11 items-center gap-4 px-4 text-sm">
-              <span className="min-w-0 flex-1 truncate font-mono">{branch.branch}</span>
-              {branch.error ? (
-                <span className="truncate text-red" title={branch.error}>
-                  {branch.error}
-                </span>
-              ) : (
-                <span
-                  className={cx(
-                    "text-xs",
-                    branch.behind ? "text-muted-foreground" : "text-green",
-                  )}
-                >
-                  {branch.behind ? "catching up" : "up to date"}
-                </span>
-              )}
-              <Hash value={branch.synced} />
-              <span className="w-24 text-right text-xs text-muted-foreground">
-                {branch.syncedAt ? <Ago time={Date.parse(branch.syncedAt)} /> : "not yet"}
-              </span>
-            </div>
+            <BranchRow key={branch.branch} branch={branch} />
           ))}
         </div>
       </Panel>
+    </div>
+  );
+}
+
+function BranchRow({ branch }: { branch: LinkedBranch }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <div className="flex h-11 items-center gap-4 px-4 text-sm">
+        <span className="min-w-0 flex-1 truncate font-mono">{branch.branch}</span>
+        {branch.files !== null && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {plural(branch.files, "file")}
+            {branch.chunks !== null && branch.chunks !== branch.files
+              ? ` · ${plural(branch.chunks, "passage")}`
+              : ""}
+          </span>
+        )}
+        {branch.skipped.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+          >
+            {branch.skipped.length} skipped
+          </button>
+        )}
+        {branch.error ? (
+          <span className="truncate text-red" title={branch.error}>
+            {branch.error}
+          </span>
+        ) : (
+          <span className={cx("text-xs", branch.behind ? "text-muted-foreground" : "text-green")}>
+            {branch.behind ? "catching up" : "up to date"}
+          </span>
+        )}
+        <Hash value={branch.synced} />
+        <span className="w-24 text-right text-xs text-muted-foreground">
+          {branch.syncedAt ? <Ago time={Date.parse(branch.syncedAt)} /> : "not yet"}
+        </span>
+      </div>
+      {open && (
+        <ul className="grid gap-1 px-4 pb-3 text-xs">
+          {branch.skipped.map((skip) => (
+            <li key={skip.path} className="flex gap-3">
+              <span className="min-w-0 truncate font-mono">{skip.path}</span>
+              <span className="text-muted-foreground">{skip.reason}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

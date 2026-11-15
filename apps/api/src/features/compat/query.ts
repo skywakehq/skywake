@@ -30,7 +30,7 @@ export async function query(c: Ctx, name: string, body: Body) {
   const plans = asked.map((q, i) => planOf(index.schema, q, many ? `queries[${i}].` : ""));
   const rerank = body.rerank_by as Body | unknown[] | undefined;
   const model = rerank && !Array.isArray(rerank) ? rerankPlan(index.schema, rerank) : undefined;
-  const texts = new Texts();
+  const texts = new Texts("query");
   const requests = plans.map((plan) => requestOf(index.schema, plan, texts, model?.field));
   const bill = c.var.services.usage.bill(index);
   await texts.embed(c.var.services.models, bill);
@@ -42,7 +42,7 @@ export async function query(c: Ctx, name: string, body: Body) {
   );
   const run = async (q: Body) => {
     const plan = planOf(index.schema, q, "");
-    const texts = new Texts();
+    const texts = new Texts("query");
     const request = requestOf(index.schema, plan, texts);
     await texts.embed(c.var.services.models, bill);
     const { results } = await answer(index, branch, [request], consistency, bill);

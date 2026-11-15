@@ -9,12 +9,13 @@ export async function answer(
   requests: IndexRequest[],
   consistency: indexes.Consistency | undefined,
   bill: Bill,
+  billed = requests.length,
 ) {
   const started = performance.now();
   await bill.admit("queries");
   const eventual = consistency === "eventual";
   const { results, reads } = await index.store.multi(branch, requests, { eventual });
-  bill.count("queries", requests.length);
+  bill.count("queries", billed);
   return {
     results,
     billing: bill.counts,

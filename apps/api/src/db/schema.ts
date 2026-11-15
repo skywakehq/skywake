@@ -520,6 +520,7 @@ export const indexLinks = api.table(
     include: text("include").array().notNull().default(sql`'{}'`),
     exclude: text("exclude").array().notNull().default(sql`'{}'`),
     maxBytes: integer("max_bytes").notNull(),
+    made: boolean("made").notNull().default(false),
     created: time("created").notNull().defaultNow(),
   },
   (table) => [
@@ -555,6 +556,11 @@ export const indexLinkBranches = api.table(
     attempts: integer("attempts").notNull().default(0),
     error: text("error"),
     syncedAt: time("synced_at"),
+    cursor: text("cursor"),
+    cursorAt: text("cursor_at"),
+    files: integer("files"),
+    chunks: integer("chunks"),
+    skipped: jsonb("skipped").$type<{ path: string; reason: string }[]>().notNull().default([]),
   },
   (table) => [
     primaryKey({

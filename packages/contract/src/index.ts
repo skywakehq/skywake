@@ -72,6 +72,7 @@ export const routes = {
   ],
   links: [
     links.linkIndex,
+    links.getLinkDefaults,
     links.getIndexLink,
     links.unlinkIndex,
     links.getBranchIndex,

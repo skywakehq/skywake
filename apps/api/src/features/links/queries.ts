@@ -34,6 +34,7 @@ export async function save(db: Db, link: typeof indexLinks.$inferInsert) {
         include: link.include,
         exclude: link.exclude,
         maxBytes: link.maxBytes,
+        made: link.made,
       },
     });
 }
@@ -96,7 +97,7 @@ export async function removeBranch(db: Db, org: string, namespace: string, name:
 export async function reindex(db: Db, org: string, namespace: string) {
   await db
     .update(indexLinkBranches)
-    .set({ synced: null, dirty: true, due: sql`now()` })
+    .set({ synced: null, dirty: true, due: sql`now()`, cursor: null, cursorAt: null })
     .where(and(eq(indexLinkBranches.org, org), eq(indexLinkBranches.namespace, namespace)));
 }
 
@@ -187,6 +188,11 @@ export async function claim(db: Db, server: string, limit: number): Promise<Link
     attempts: row.attempts as number,
     error: (row.error as string | null) ?? null,
     syncedAt: row.synced_at ? new Date(row.synced_at as string) : null,
+    cursor: (row.cursor as string | null) ?? null,
+    cursorAt: (row.cursor_at as string | null) ?? null,
+    files: (row.files as number | null) ?? null,
+    chunks: (row.chunks as number | null) ?? null,
+    skipped: (row.skipped as LinkedBranchRow["skipped"]) ?? [],
   }));
 }
 
@@ -200,11 +206,39 @@ export async function renew(db: Db, row: LinkedBranchRow, server: string) {
   return renewed.length > 0;
 }
 
+export interface Counts {
+  files: number;
+  chunks: number;
+  skipped: LinkedBranchRow["skipped"];
+}
+
+export async function progress(
+  db: Db,
+  row: LinkedBranchRow,
+  server: string,
+  cursor: string,
+  cursorAt: string,
+) {
+  await db
+    .update(indexLinkBranches)
+    .set({ cursor, cursorAt })
+    .where(and(...key(row), eq(indexLinkBranches.claimedBy, server)));
+}
+
 /** The branch's index now matches `head`. A save since the claim left it dirty. */
-export async function synced(db: Db, row: LinkedBranchRow, server: string, head: string) {
+export async function synced(
+  db: Db,
+  row: LinkedBranchRow,
+  server: string,
+  head: string,
+  counts?: Counts,
+) {
   await db
     .update(indexLinkBranches)
     .set({
+      ...counts,
+      cursor: null,
+      cursorAt: null,
       synced: head,
       checked: sql`now()`,
       claimedBy: null,

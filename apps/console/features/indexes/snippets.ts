@@ -3,7 +3,7 @@
 export type Lang = "ts" | "python" | "curl";
 
 export type QueryBody = {
-  vector: { column: string; value: number[] | string };
+  vector: { column: string; value: number[] | string | { image: string } };
   topK: number;
   recall?: number;
   probe?: number;

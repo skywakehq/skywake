@@ -16,6 +16,7 @@ import {
 } from "./api";
 import { CodeBlock, LangChoice } from "./code";
 import { Label, Select, TextArea, TextField } from "./fields";
+import { ImagePick, type Picked, SHOWN_IMAGE } from "./image-pick";
 import { type Condition, FilterBuilder, toFilter } from "./filter-builder";
 import { type Lang, type QueryBody, type Request, type SearchBody, snippet } from "./snippets";
 
@@ -50,21 +51,27 @@ async function timed<T>(work: () => Promise<T>) {
 /** `""` as unset, else the number. */
 const optional = (text: string) => (text.trim() ? Number(text) : undefined);
 
+const HIDDEN = new Set(["grams", "hash"]);
+
 /** Runs queries by hand, and shows them as code to paste. */
 export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: string }) {
   const { schema } = index;
   const api = useUrls().api;
-  const texts = schema.attributes.filter((a) => a.type === "text");
-  const others = schema.attributes.filter((a) => a.type !== "text");
+  const shown = schema.attributes.filter((a) => !HIDDEN.has(a.name));
+  const texts = shown.filter((a) => a.type === "text");
+  const others = shown.filter((a) => a.type !== "text");
   const kinds = KINDS.filter(
     (k) =>
       (k.value !== "vector" || schema.vectors.length) &&
       (k.value !== "text" || texts.length) &&
       (k.value !== "hybrid" || (schema.vectors.length && texts.length)),
   );
-  const [kind, setKind] = useState<Kind>(kinds[0]!.value);
+  const linked = schema.attributes.some((a) => a.name === "chunk");
+  const preferred = linked && kinds.some((k) => k.value === "hybrid") ? "hybrid" : kinds[0]!.value;
+  const [kind, setKind] = useState<Kind>(preferred);
   const [column, setColumn] = useState(schema.vectors[0]?.name ?? "");
   const [vector, setVector] = useState("");
+  const [image, setImage] = useState<Picked | null>(null);
   const [words, setWords] = useState("");
   // Per text attribute: a boost, `""` for 1.
   const [boosts, setBoosts] = useState<Record<string, string>>({});
@@ -97,10 +104,12 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     return filterText.trim() ? JSON.parse(filterText) : undefined;
   }
 
-  function vectorBody(): QueryBody {
+  function vectorBody(brief = false): QueryBody {
     const f = filter();
+    const value =
+      embed && image ? { image: brief ? SHOWN_IMAGE : image.url } : parseVector(vector, !!embed);
     return {
-      vector: { column, value: parseVector(vector, !!embed) },
+      vector: { column, value },
       topK,
       ...(probe ? { probe: Number(probe) } : recall !== null ? { recall } : {}),
       ...(f === undefined ? {} : { filter: f }),
@@ -125,8 +134,8 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   }
 
   /** The request. Throws while the form cannot make one. */
-  function request(): Request {
-    if (kind === "vector") return { route: "query", body: vectorBody() };
+  function request(brief = false): Request {
+    if (kind === "vector") return { route: "query", body: vectorBody(brief) };
     if (kind === "text") return { route: "search", body: textBody() };
     const weight = optional(textWeight);
     const k = optional(rankK);
@@ -137,7 +146,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     return {
       route: "hybrid",
       body: {
-        searches: { vector: vectorBody(), text: textBody() },
+        searches: { vector: vectorBody(brief), text: textBody() },
         topK,
         ...(Object.keys(fuse).length ? { fuse } : {}),
       },
@@ -146,7 +155,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
 
   let code = "";
   try {
-    code = snippet(lang, index.name, branch, request(), api);
+    code = snippet(lang, index.name, branch, request(true), api);
   } catch {
     code = "";
   }
@@ -189,16 +198,19 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
       <label className="grid gap-1.5">
         <Label>
           {embed
-            ? `Text or vector · embedded by ${embed.model}`
+            ? `Text, image or vector · embedded by ${embed.model}`
             : `Vector · ${dims ?? "?"} numbers`}
         </Label>
-        <TextArea
-          value={vector}
-          onChange={(e) => setVector(e.target.value)}
-          placeholder={embed ? "What to find, in your own words" : "[0.12, -0.03, 0.88, …]"}
-          className="min-h-20"
-        />
+        {!(embed && image) && (
+          <TextArea
+            value={vector}
+            onChange={(e) => setVector(e.target.value)}
+            placeholder={embed ? "What to find, in your own words" : "[0.12, -0.03, 0.88, …]"}
+            className="min-h-20"
+          />
+        )}
       </label>
+      {embed && <ImagePick picked={image} onPick={setImage} />}
       <div className="flex flex-wrap items-end gap-3">
         {topKField}
         <Recall value={recall} onChange={setRecall} overridden={!!probe} />
@@ -522,7 +534,12 @@ function Results({
                       )}
                       {attributes.map((name) => (
                         <td key={name} className="px-4 text-muted-foreground">
-                          {format(hit.attributes[name])}
+                          <span
+                            title={format(hit.attributes[name])}
+                            className="line-clamp-2 max-w-md break-words"
+                          >
+                            {format(hit.attributes[name])}
+                          </span>
                         </td>
                       ))}
                     </tr>
