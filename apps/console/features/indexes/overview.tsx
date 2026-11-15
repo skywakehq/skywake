@@ -44,7 +44,13 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
             <Row
               key={column.name}
               name={column.name}
-              detail={`${column.dims} dims · ${column.metric}`}
+              detail={[
+                `${column.dims} dims`,
+                column.metric,
+                column.embed && `embeds with ${column.embed.model}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             />
           ))}
         </Panel>

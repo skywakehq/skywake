@@ -3,7 +3,7 @@
 export type Lang = "ts" | "python" | "curl";
 
 export type QueryBody = {
-  vector: { column: string; value: number[] };
+  vector: { column: string; value: number[] | string };
   topK: number;
   recall?: number;
   probe?: number;
@@ -54,7 +54,7 @@ function pythonCall(request: Request): string {
     const q = request.body;
     return `query(${[
       json(q.vector.column),
-      python(q.vector.value),
+      typeof q.vector.value === "string" ? json(q.vector.value) : python(q.vector.value),
       ...kwargs([
         ["top_k", q.topK],
         ["recall", q.recall],

@@ -19,16 +19,16 @@ import { type Condition, FilterBuilder, toFilter } from "./filter-builder";
 import { type Lang, type QueryBody, type Request, type SearchBody, snippet } from "./snippets";
 
 /** `[0.1, 0.2]`, or numbers split by commas or spaces. */
-function parseVector(text: string): number[] {
+function parseVector(text: string, embeds: boolean): number[] | string {
   const trimmed = text.trim();
-  if (!trimmed) throw new Error("Paste a vector first");
+  if (!trimmed)
+    throw new Error(embeds ? "Type text or paste a vector first" : "Paste a vector first");
   const numbers = trimmed.startsWith("[")
     ? (JSON.parse(trimmed) as unknown[])
     : trimmed.split(/[\s,]+/).map(Number);
-  if (!numbers.every((n) => typeof n === "number" && Number.isFinite(n))) {
-    throw new Error("The vector holds something that is not a number");
-  }
-  return numbers as number[];
+  if (numbers.every((n) => typeof n === "number" && Number.isFinite(n))) return numbers as number[];
+  if (embeds && !trimmed.startsWith("[")) return trimmed;
+  throw new Error("The vector holds something that is not a number");
 }
 
 type Kind = "vector" | "text" | "hybrid";
@@ -82,7 +82,9 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   const [error, setError] = useState<{ message: string; path?: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [lang, setLang] = useState<Lang>("ts");
-  const dims = schema.vectors.find((v) => v.name === column)?.dims;
+  const picked = schema.vectors.find((v) => v.name === column);
+  const dims = picked?.dims;
+  const embed = picked?.embed;
   // Text is long, so hits show its highlighted fragment instead.
   const include = others.map((a) => a.name);
   const highlight = texts.map((a) => a.name);
@@ -97,7 +99,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   function vectorBody(): QueryBody {
     const f = filter();
     return {
-      vector: { column, value: parseVector(vector) },
+      vector: { column, value: parseVector(vector, !!embed) },
       topK,
       ...(probe ? { probe: Number(probe) } : recall !== null ? { recall } : {}),
       ...(f === undefined ? {} : { filter: f }),
@@ -184,11 +186,15 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   const vectorFields = (
     <div className="grid gap-3">
       <label className="grid gap-1.5">
-        <Label>{`Vector · ${dims ?? "?"} numbers`}</Label>
+        <Label>
+          {embed
+            ? `Text or vector · embedded by ${embed.model}`
+            : `Vector · ${dims ?? "?"} numbers`}
+        </Label>
         <TextArea
           value={vector}
           onChange={(e) => setVector(e.target.value)}
-          placeholder="[0.12, -0.03, 0.88, …]"
+          placeholder={embed ? "What to find, in your own words" : "[0.12, -0.03, 0.88, …]"}
           className="min-h-20"
         />
       </label>
@@ -393,7 +399,9 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {kind === "text"
               ? "Type a query, and a valid filter if any, to see the code."
-              : "Paste a vector, and a valid filter if any, to see the code."}
+              : embed
+                ? "Type text or paste a vector, and a valid filter if any, to see the code."
+                : "Paste a vector, and a valid filter if any, to see the code."}
           </p>
         )}
       </Panel>
