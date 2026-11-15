@@ -37,11 +37,34 @@ export type Request =
 
 const json = (value: unknown) => JSON.stringify(value);
 
-/** Python literals: JSON with True, False and None. */
-const python = (value: unknown): string =>
-  JSON.stringify(value)
-    .replace(/\btrue\b/g, "True")
-    .replace(/\bfalse\b/g, "False");
+type Style = "ts" | "python";
+
+const WIDTH = 64;
+
+const keyOf = (key: string, style: Style) =>
+  style === "ts" && /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+
+function literal(value: unknown, style: Style, depth = 0): string {
+  if (value === null || value === undefined) return style === "python" ? "None" : "null";
+  if (typeof value === "boolean")
+    return style === "python" ? (value ? "True" : "False") : `${value}`;
+  if (typeof value !== "object") return JSON.stringify(value);
+  const list = Array.isArray(value);
+  const items = list
+    ? value.map((item) => literal(item, style, depth + 1))
+    : Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => `${keyOf(key, style)}: ${literal(item, style, depth + 1)}`);
+  const [open, close] = list ? ["[", "]"] : ["{", "}"];
+  if (!items.length) return open + close;
+  const gap = list || style === "python" ? "" : " ";
+  const inline = `${open}${gap}${items.join(", ")}${gap}${close}`;
+  if (!inline.includes("\n") && inline.length + depth * 2 <= WIDTH) return inline;
+  const pad = "  ".repeat(depth + 1);
+  return `${open}\n${items.map((item) => `${pad}${item},`).join("\n")}\n${"  ".repeat(depth)}${close}`;
+}
+
+const python = (value: unknown) => literal(value, "python");
 
 /** Python keyword arguments, leaving out what is not set. */
 const kwargs = (pairs: [string, unknown][]) =>
@@ -54,7 +77,7 @@ function pythonCall(request: Request): string {
     const q = request.body;
     return `query(${[
       json(q.vector.column),
-      typeof q.vector.value === "string" ? json(q.vector.value) : python(q.vector.value),
+      python(q.vector.value),
       ...kwargs([
         ["top_k", q.topK],
         ["recall", q.recall],
@@ -122,7 +145,7 @@ export function snippet(lang: Lang, index: string, branch: string, request: Requ
   if (lang === "ts") {
     return [
       ...TS_CLIENT(api),
-      `const hits = await ${target}.${request.route}(${JSON.stringify(request.body, null, 2)});`,
+      `const hits = await ${target}.${request.route}(${literal(request.body, "ts")});`,
     ].join("\n");
   }
   if (lang === "python") {
@@ -140,10 +163,7 @@ export function writeSnippet(
 ) {
   const target = handle(index, branch);
   if (lang === "ts") {
-    return [
-      ...TS_CLIENT(api),
-      `await ${target}.upsert(${JSON.stringify(documents, null, 2)});`,
-    ].join("\n");
+    return [...TS_CLIENT(api), `await ${target}.upsert(${literal(documents, "ts")});`].join("\n");
   }
   if (lang === "python") {
     return [...PYTHON_CLIENT(api), `${target}.upsert(${python(documents)})`].join("\n");
