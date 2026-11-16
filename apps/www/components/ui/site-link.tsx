@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { localizePath, type Locale } from "@/lib/i18n";
+import { isSitePath, localizePath, type Locale } from "@/lib/i18n";
 
 export function SiteLink({
   href,
@@ -14,7 +14,7 @@ export function SiteLink({
   children: ReactNode;
   locale?: Locale;
 }) {
-  if (href.startsWith("/")) {
+  if (isSitePath(href)) {
     const localized = locale ? localizePath(locale, href) : href;
     return (
       <Link href={localized} className={className}>
