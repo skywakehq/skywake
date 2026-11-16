@@ -197,6 +197,8 @@ pub(crate) async fn materialize(
     write_tree(objects, trees, tree, dir).await
 }
 
+const TRUSTED_AFTER: Duration = Duration::from_secs(2);
+
 fn is_unchanged(entry: &Entry, metadata: &Metadata) -> bool {
     matches!(
         entry,
@@ -204,7 +206,16 @@ fn is_unchanged(entry: &Entry, metadata: &Metadata) -> bool {
             if *size == metadata.len()
                 && *modified_ns == modified_ns_of(metadata)
                 && *mode == mode_of(metadata)
+                && settled(metadata)
     )
+}
+
+fn settled(metadata: &Metadata) -> bool {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.elapsed().ok())
+        .is_some_and(|age| age >= TRUSTED_AFTER)
 }
 
 pub async fn store_file(objects: &Objects, path: PathBuf, size: u64) -> Result<Data> {
