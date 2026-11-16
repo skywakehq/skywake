@@ -96,14 +96,20 @@ export class Writer {
       return;
     }
     const rows = this.#rowsOf(doc);
-    const bytes = rows.reduce((sum, row) => sum + sizeOf(row), 0);
-    const full =
-      this.#rows.length + rows.length > BATCH_ROWS || this.#bytes + bytes > BATCH_BYTES;
-    if (this.#rows.length > 0 && full) await this.flush();
-    this.#rows.push(...rows);
+    const sizes = rows.map(sizeOf);
+    const bytes = sizes.reduce((sum, size) => sum + size, 0);
+    if (this.#rows.length > 0 && !this.#fits(rows.length, bytes)) await this.flush();
     this.#paths.add(doc.path);
-    this.#bytes += bytes;
+    for (const [i, row] of rows.entries()) {
+      if (this.#rows.length > 0 && !this.#fits(1, sizes[i]!)) await this.flush();
+      this.#rows.push(row);
+      this.#bytes += sizes[i]!;
+    }
     this.#last = doc.path;
+  }
+
+  #fits(rows: number, bytes: number) {
+    return this.#rows.length + rows <= BATCH_ROWS && this.#bytes + bytes <= BATCH_BYTES;
   }
 
   remove(path: string) {
@@ -132,7 +138,7 @@ export class Writer {
     }));
     const done = await this.#index.write(this.#branch, {
       upserts: upserts.length > 0 ? upserts : undefined,
-      deleteBy: filters.length === 1 ? filters[0] : { or: filters },
+      deleteBy: filters.length <= 1 ? filters[0] : { or: filters },
     });
     bill.count("writes", done.upserted);
     bill.count("deletes", done.deleted);

@@ -10,6 +10,7 @@ import { chunks, junk } from "../src/features/links/chunks.ts";
 import { headers, prefixed, request } from "../src/features/indexes/providers.ts";
 import { route } from "../src/features/indexes/vendors.ts";
 import { merged } from "../src/features/links/partial.ts";
+import { docxOf, pdfOf, pptxOf, xlsxOf } from "./documents.ts";
 import { server, skip, type Server } from "./helpers.ts";
 
 const NS = "/namespaces/prod%2Fapp";
@@ -121,7 +122,7 @@ function paragraphs(count: number, last = "") {
   return [...Array.from({ length: count }, (_, i) => filler(i)), last].join("\n\n");
 }
 
-test("chunks cut at paragraphs, overlap, and stop at the cap", () => {
+test("chunks cut at paragraphs, overlap, and cover all of a long text", () => {
   const text = paragraphs(40);
   const pieces = chunks(text);
   assert.ok(pieces.length > 5);
@@ -129,7 +130,9 @@ test("chunks cut at paragraphs, overlap, and stop at the cap", () => {
   assert.ok(pieces[0]!.includes(pieces[1]!.slice(0, 40)), "chunks overlap");
   assert.equal(chunks("short").length, 1);
   assert.deepEqual(chunks(""), []);
-  assert.equal(chunks("word ".repeat(400_000)).length, 512);
+  const long = chunks(`${"word ".repeat(400_000)}last`);
+  assert.ok(long.length > 1_000);
+  assert.ok(long.at(-1)!.endsWith("last"));
   assert.equal(junk("A".repeat(1_000)), true);
   assert.equal(junk(paragraphs(1)), false);
 });
@@ -230,7 +233,7 @@ test("a failed first sync resumes where it stopped", { skip }, async () => {
   const resumed = await status(s, key);
   assert.equal(resumed.error, null);
   assert.equal(resumed.files, 3);
-  assert.ok(state.embedded <= 520, `embedded ${state.embedded} again`);
+  assert.ok(state.embedded <= first, `embedded ${state.embedded} again`);
 });
 
 test("an edit re-embeds only the chunk it changed", { skip }, async () => {
@@ -338,6 +341,55 @@ test("an index names the namespace that keeps it up to date", { skip }, async ()
   assert.equal(found.status, 200, JSON.stringify(found.body));
   assert.equal(found.body.namespace, "prod/app");
   assert.equal(found.body.index, "prod/files");
+});
+
+test("PDFs and Office files are searched by their text", { skip }, async () => {
+  const { s, key } = await started();
+  await link(s, key, { embed: { model: "tiny" } });
+  const base64 = (bytes: Buffer) => bytes.toString("base64");
+  await commit(s, key, [
+    { path: "docs/terms.pdf", base64: base64(pdfOf(["Refunds", "A giraffe may return goods."])) },
+    { path: "docs/memo.docx", base64: base64(docxOf(["The invoice is due Friday."])) },
+    { path: "docs/deck.pptx", base64: base64(pptxOf([["Launch"], ["A sunset over the bay"]])) },
+    { path: "docs/seats.xlsx", base64: base64(xlsxOf([["Customer", "Seats"], ["Dogwood", 9]])) },
+    { path: "docs/old.doc", base64: base64(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 1])) },
+    { path: "docs/broken.pdf", base64: base64(Buffer.from("%PDF-1.4 nothing here")) },
+  ]);
+  await s.services.syncer.drain();
+  const synced = await status(s, key);
+  assert.equal(synced.error, null);
+  assert.deepEqual(synced.skipped, [
+    { path: "docs/broken.pdf", reason: "not a readable PDF" },
+    { path: "docs/old.doc", reason: "an old Office format; save it as .docx, .pptx or .xlsx" },
+  ]);
+  assert.equal((await meaning(s, key, "giraffe"))[0]!.attributes.path, "docs/terms.pdf");
+  assert.equal((await meaning(s, key, "invoice"))[0]!.attributes.path, "docs/memo.docx");
+  assert.equal((await meaning(s, key, "sunset"))[0]!.attributes.path, "docs/deck.pptx");
+  assert.deepEqual(await words(s, key, "dogwood"), ["docs/seats.xlsx"]);
+});
+
+test("a file larger than one write is searchable to its last line", { skip }, async () => {
+  const { s, key } = await started({ bodyLimit: 8 << 20 });
+  await link(s, key, { embed: { model: "tiny" } });
+  const huge = paragraphs(9_000, "The final line mentions a giraffe.");
+  assert.ok(huge.length > 2_500_000);
+  await commit(s, key, [{ path: "huge.md", text: huge }]);
+  await s.services.syncer.drain();
+  const synced = await status(s, key);
+  assert.equal(synced.error, null);
+  assert.ok(synced.chunks > 1_500, `${synced.chunks} passages`);
+  const hit = (await meaning(s, key, "giraffe"))[0]!;
+  assert.equal(hit.attributes.path, "huge.md");
+  assert.ok(Number(hit.attributes.chunk) > 1_000, `passage ${hit.attributes.chunk}`);
+
+  await commit(s, key, [{ path: "huge.md", text: paragraphs(3, "Now short.") }]);
+  await s.services.syncer.drain();
+  const left = await s.call("POST", `${INDEX}/order`, key, {
+    by: "chunk",
+    topK: 10,
+    filter: { path: { eq: "huge.md" } },
+  });
+  assert.equal(left.body.rows.length, 1);
 });
 
 test("a link that can't read images says so for each one", { skip }, async () => {

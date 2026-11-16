@@ -1569,9 +1569,9 @@
           "maxBytes": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 4194304,
-            "default": 1048576,
-            "description": "Larger files are left out. 1 MiB when not given."
+            "maximum": 67108864,
+            "default": 16777216,
+            "description": "Larger files are left out, at most 64 MiB. 16 MiB when not given. All of a file's text is searchable, and documents are measured by the text taken from them."
           },
           "embed": {
             "anyOf": [

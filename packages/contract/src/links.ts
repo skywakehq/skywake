@@ -4,7 +4,8 @@ import { body, errors, json, noContent, signedIn } from "./http.ts";
 import { IndexParams } from "./indexes/routes.ts";
 import { BranchParams, Name, NamespaceParams, Time, z } from "./schemas.ts";
 
-export const MAX_BYTES_DEFAULT = 1 << 20;
+export const MAX_BYTES_DEFAULT = 16 << 20;
+export const MAX_BYTES_MAX = 64 << 20;
 
 export const NewIndexLink = z
   .object({
@@ -28,9 +29,13 @@ export const NewIndexLink = z
       .number()
       .int()
       .min(1)
-      .max(4 << 20)
+      .max(MAX_BYTES_MAX)
       .default(MAX_BYTES_DEFAULT)
-      .openapi({ description: "Larger files are left out. 1 MiB when not given." }),
+      .openapi({
+        description:
+          "Larger files are left out, at most 64 MiB. 16 MiB when not given. All of a file's " +
+          "text is searchable, and documents are measured by the text taken from them.",
+      }),
     embed: z
       .union([
         z

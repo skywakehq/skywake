@@ -51,6 +51,9 @@ function useDefaults() {
   return loaded.state === "done" ? loaded.value.embed : null;
 }
 
+const sizeOf = (bytes: number) =>
+  bytes >= 1 << 20 ? `${Math.round(bytes / (1 << 20))} MB` : `${Math.round(bytes / 1024)} KB`;
+
 /** How often the page reads the link again while a branch is behind. */
 const BEHIND_POLL_MS = 5_000;
 
@@ -203,9 +206,10 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
           )}
           <span className="text-xs text-muted-foreground">
             {mode === "words"
-              ? "Exact words and parts of words, nothing more."
+              ? "Exact words and parts of words in text, PDFs and Office files."
               : "Every file is split into passages and each one is embedded, so a question finds " +
-                "the right part of a long file. Images are embedded too when the model takes them."}
+                "the right part of a long file. PDFs and Office files are read for their text, " +
+                "and images are embedded too when the model takes them."}
           </span>
         </div>
         <Button
@@ -281,7 +285,7 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
           <dt className="text-muted-foreground">Exclude</dt>
           <dd className="font-mono">{link.exclude.length ? link.exclude.join("  ") : "nothing"}</dd>
           <dt className="text-muted-foreground">Largest file</dt>
-          <dd className="tabular-nums">{Math.round(link.maxBytes / 1024)} KB</dd>
+          <dd className="tabular-nums">{sizeOf(link.maxBytes)}</dd>
           <dt className="text-muted-foreground">Search by</dt>
           <dd className="flex flex-wrap items-center gap-3">
             {link.embed ? (

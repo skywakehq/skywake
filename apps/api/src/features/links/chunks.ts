@@ -2,7 +2,6 @@ import { blake3 } from "@skywake/engine";
 
 export const CHUNK_CHARS = 2_000;
 export const OVERLAP_CHARS = 200;
-export const CHUNKS_MAX = 512;
 const ID_MAX = 256;
 const BREAKS = ["\n\n", "\n", ". ", " "];
 const JUNK_SHARE = 0.8;
@@ -20,7 +19,7 @@ export function chunkId(path: string, chunk: number) {
 export function chunks(text: string): string[] {
   const found: string[] = [];
   let start = 0;
-  while (start < text.length && found.length < CHUNKS_MAX) {
+  while (start < text.length) {
     const end = cut(text, start);
     const piece = text.slice(start, end).trim();
     if (piece) found.push(piece);

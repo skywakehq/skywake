@@ -1,7 +1,10 @@
 import { matchesGlob } from "node:path";
 
+import { links as contract } from "@skywake/contract";
 import type { Engine } from "@skywake/engine";
 
+import { documentKind, extractor, OLD_OFFICE_SKIPPED, oldOffice } from "./documents.ts";
+import type { DocumentKind } from "./extract.ts";
 import type * as links from "./queries.ts";
 
 const LIST_PAGE = 1_000;
@@ -25,6 +28,12 @@ export type FileDoc =
 export interface ReaderOptions {
   images: boolean;
   after?: string | null;
+}
+
+const skipped = (path: string, reason: string): FileDoc => ({ kind: "skipped", path, reason });
+
+function sizeText(bytes: number) {
+  return bytes >= 1 << 20 ? `${Math.round(bytes / (1 << 20))} MiB` : `${Math.round(bytes / 1024)} KiB`;
 }
 
 export function walkOrder(a: string, b: string) {
@@ -127,20 +136,35 @@ export class Reader {
   async #read(path: string, size: number): Promise<FileDoc | null> {
     if (!this.wanted(path)) return null;
     const type = imageType(path);
-    if (type && !this.#images) return { kind: "skipped", path, reason: IMAGE_SKIPPED };
-    const limit = type ? Math.max(this.#link.maxBytes, IMAGE_BYTES_MAX) : this.#link.maxBytes;
-    if (size > limit) {
-      return { kind: "skipped", path, reason: `larger than ${Math.round(limit / 1024)} KiB` };
-    }
+    const document = documentKind(path);
+    if (type && !this.#images) return skipped(path, IMAGE_SKIPPED);
+    if (oldOffice(path)) return skipped(path, OLD_OFFICE_SKIPPED);
+    const limit = type
+      ? Math.max(this.#link.maxBytes, IMAGE_BYTES_MAX)
+      : document
+        ? contract.MAX_BYTES_MAX
+        : this.#link.maxBytes;
+    if (size > limit) return skipped(path, `larger than ${sizeText(limit)}`);
     const bytes = await this.#engine.read(this.#branch, path, null, null, this.#at);
     if (type) {
       return { kind: "image", path, image: `data:${type};base64,${bytes.toString("base64")}` };
     }
-    if (bytes.includes(0)) return { kind: "skipped", path, reason: "binary" };
+    if (document) return this.#document(path, document, bytes);
+    if (bytes.includes(0)) return skipped(path, "binary");
     try {
       return { kind: "text", path, text: utf8.decode(bytes) };
     } catch {
-      return { kind: "skipped", path, reason: "not UTF-8 text" };
+      return skipped(path, "not UTF-8 text");
     }
+  }
+
+  async #document(path: string, kind: DocumentKind, bytes: Buffer): Promise<FileDoc> {
+    const found = await extractor.read(kind, bytes);
+    if ("reason" in found) return skipped(path, found.reason);
+    const { maxBytes } = this.#link;
+    if (Buffer.byteLength(found.text) > maxBytes) {
+      return skipped(path, `its text is larger than ${sizeText(maxBytes)}`);
+    }
+    return { kind: "text", path, text: found.text };
   }
 }
