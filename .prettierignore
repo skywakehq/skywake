@@ -11,3 +11,5 @@ vendor/
 # Helm templates are Go templates, not YAML.
 deploy/helm/*/templates/
 sdks/typescript/src/generated/
+sdks/csharp/**/bin/
+sdks/csharp/**/obj/

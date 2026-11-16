@@ -32,7 +32,8 @@ export function indexTools(server: McpServer, sky: Skywake, write: boolean) {
   server.registerTool(
     "index_upsert",
     {
-      description: "Writes rows; each replaces any row with its id. The first write makes the index.",
+      description:
+        "Writes rows; each replaces any row with its id. The first write makes the index.",
       inputSchema: { index, rows: z.array(z.record(z.string(), z.unknown())) },
       annotations: { ...WRITE, idempotentHint: true },
     },

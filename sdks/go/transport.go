@@ -5,106 +5,145 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
-	"strconv"
-	"time"
+	"strings"
 )
 
-// The server asks for at most 60 seconds; waiting less would only be refused again.
-const maxWait = 60 * time.Second
+type params map[string]string
 
-// Sending these again has the same effect as sending them once.
-var idempotent = map[string]bool{"GET": true, "HEAD": true, "PUT": true, "DELETE": true, "OPTIONS": true}
+func (p params) with(name, value string) params {
+	out := params{name: value}
+	for k, v := range p {
+		out[k] = v
+	}
+	return out
+}
 
-// send sends a request, and again when that is safe (see Retries). A
-// DELETE that failed may still have landed, so if a retry of it then finds
-// nothing (404), it answers 204: what it deleted is gone either way.
-func (c *Client) send(ctx context.Context, method, path string, query url.Values, body any) (*http.Response, error) {
-	var payload []byte
-	if body != nil {
-		var err error
-		if payload, err = json.Marshal(body); err != nil {
-			return nil, err
+type call struct {
+	method string
+	path   string
+	query  params
+	json   any
+	bytes  []byte
+}
+
+type transport struct {
+	base    string
+	headers http.Header
+	retrier retrier
+}
+
+func newTransport(c config) *transport {
+	headers := http.Header{}
+	headers.Set("authorization", "Bearer "+c.key)
+	if c.environment != "" {
+		headers.Set("skywake-environment", c.environment)
+	}
+	client := c.httpClient
+	if client == nil {
+		pool := http.DefaultTransport.(*http.Transport).Clone()
+		pool.ResponseHeaderTimeout = c.timeout
+		client = &http.Client{Transport: pool}
+	}
+	return &transport{
+		base:    c.url + "/v2",
+		headers: headers,
+		retrier: retrier{client: client, retries: c.retries, backoff: c.backoff},
+	}
+}
+
+func (t *transport) in(environment string) *transport {
+	headers := t.headers.Clone()
+	headers.Set("skywake-environment", environment)
+	return &transport{base: t.base, headers: headers, retrier: t.retrier}
+}
+
+func segment(name string) string { return url.PathEscape(name) }
+
+func filePath(path string) string {
+	parts := strings.Split(strings.TrimLeft(path, "/"), "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
+}
+
+func (t *transport) address(c call) string {
+	query := url.Values{}
+	for name, value := range c.query {
+		if value != "" {
+			query.Set(name, value)
 		}
 	}
-	target := c.base + path
+	address := t.base + c.path
 	if len(query) > 0 {
-		target += "?" + query.Encode()
+		address += "?" + query.Encode()
 	}
-	mayHaveLanded := false
-	for attempt := 0; ; attempt++ {
-		last := attempt >= c.Retries
+	return address
+}
+
+func (t *transport) open(ctx context.Context, c call) (*http.Response, error) {
+	body, kind := c.bytes, "application/octet-stream"
+	if c.json != nil {
+		encoded, err := json.Marshal(c.json)
+		if err != nil {
+			return nil, err
+		}
+		body, kind = encoded, "application/json"
+	}
+	address := t.address(c)
+	response, err := t.retrier.send(ctx, func() (*http.Request, error) {
 		var reader io.Reader
-		if payload != nil {
-			reader = bytes.NewReader(payload)
+		if body != nil {
+			reader = bytes.NewReader(body)
 		}
-		req, err := http.NewRequestWithContext(ctx, method, target, reader)
+		request, err := http.NewRequestWithContext(ctx, c.method, address, reader)
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("Authorization", "Bearer "+c.key)
-		if payload != nil {
-			req.Header.Set("Content-Type", "application/json")
+		request.Header = t.headers.Clone()
+		if body != nil {
+			request.Header.Set("content-type", kind)
 		}
-		resp, err := c.HTTP.Do(req)
-		if err != nil {
-			if last || !idempotent[method] || ctx.Err() != nil {
-				return nil, err
-			}
-			mayHaveLanded = true
-			if err := sleep(ctx, c.backoff(attempt)); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		if mayHaveLanded && method == http.MethodDelete && resp.StatusCode == http.StatusNotFound {
-			resp.Body.Close()
-			return &http.Response{StatusCode: http.StatusNoContent, Header: http.Header{}, Body: http.NoBody, Request: req}, nil
-		}
-		again := resp.StatusCode == http.StatusTooManyRequests || (idempotent[method] && resp.StatusCode >= 500)
-		if last || !again {
-			return resp, nil
-		}
-		mayHaveLanded = mayHaveLanded || resp.StatusCode >= 500
-		wait := retryAfter(resp)
-		if wait == 0 {
-			wait = c.backoff(attempt)
-		}
-		io.Copy(io.Discard, resp.Body)
-		resp.Body.Close()
-		if err := sleep(ctx, min(wait, maxWait)); err != nil {
-			return nil, err
-		}
+		return request, nil
+	})
+	if err != nil {
+		return nil, err
 	}
+	if response.StatusCode < 300 {
+		return response, nil
+	}
+	defer response.Body.Close()
+	raw, _ := io.ReadAll(response.Body)
+	return nil, errorOf(response, raw)
 }
 
-// backoff has full jitter, so many clients that failed together do not
-// retry together.
-func (c *Client) backoff(attempt int) time.Duration {
-	ceiling := min(maxWait, c.Backoff<<attempt)
-	if ceiling <= 0 {
-		ceiling = maxWait
+func (t *transport) do(ctx context.Context, c call, out any) error {
+	response, err := t.open(ctx, c)
+	if err != nil {
+		return err
 	}
-	return time.Duration(rand.Int64N(int64(ceiling) + 1))
+	defer response.Body.Close()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil || out == nil || len(raw) == 0 {
+		return err
+	}
+	return json.Unmarshal(raw, out)
 }
 
-func retryAfter(resp *http.Response) time.Duration {
-	seconds, err := strconv.ParseFloat(resp.Header.Get("Retry-After"), 64)
-	if err != nil || seconds <= 0 {
-		return 0
-	}
-	return time.Duration(seconds * float64(time.Second))
+func (t *transport) get(ctx context.Context, path string, query params, out any) error {
+	return t.do(ctx, call{method: http.MethodGet, path: path, query: query}, out)
 }
 
-func sleep(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+func (t *transport) post(ctx context.Context, path string, body any, query params, out any) error {
+	return t.do(ctx, call{method: http.MethodPost, path: path, json: body, query: query}, out)
+}
+
+func (t *transport) patch(ctx context.Context, path string, body any, query params, out any) error {
+	return t.do(ctx, call{method: http.MethodPatch, path: path, json: body, query: query}, out)
+}
+
+func (t *transport) delete(ctx context.Context, path string) error {
+	return t.do(ctx, call{method: http.MethodDelete, path: path}, nil)
 }

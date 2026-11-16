@@ -3,52 +3,56 @@ package skywake
 import (
 	"context"
 	"iter"
-	"net/url"
-	"strconv"
 )
 
-// pageSize is the most items a page of a list holds.
-const pageSize = 1000
-
-// page is the query of one page of a list: at most limit items, after the key after.
-func page(limit int, after string) url.Values {
-	return pageQuery(limit, "after", after)
+type page[T any] struct {
+	Data []T    `json:"data"`
+	Next string `json:"next"`
 }
 
-// pageQuery asks for at most limit items, starting from the key named name.
-// A zero limit or an empty key leaves that part to the server.
-func pageQuery(limit int, name, from string) url.Values {
-	query := url.Values{}
-	if limit > 0 {
-		query.Set("limit", strconv.Itoa(limit))
-	}
-	if from != "" {
-		query.Set(name, from)
-	}
-	return query
-}
-
-// every yields every item of a list, asking for one page at a time until a
-// short one.
-func every[T any](ctx context.Context, list func(context.Context, int, string) ([]T, error), key func(T) string) iter.Seq2[T, error] {
+func pages[T any](load func(cursor string) (page[T], error)) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
-		after := ""
-		for {
-			items, err := list(ctx, pageSize, after)
+		for cursor := ""; ; {
+			loaded, err := load(cursor)
 			if err != nil {
 				var zero T
 				yield(zero, err)
 				return
 			}
-			for _, item := range items {
+			for _, item := range loaded.Data {
 				if !yield(item, nil) {
 					return
 				}
 			}
-			if len(items) < pageSize {
+			if loaded.Next == "" {
 				return
 			}
-			after = key(items[len(items)-1])
+			cursor = loaded.Next
 		}
 	}
+}
+
+func listing[T any](ctx context.Context, t *transport, path string, query params) iter.Seq2[T, error] {
+	return pages(func(cursor string) (page[T], error) {
+		var loaded page[T]
+		err := t.get(ctx, path, query.with("cursor", cursor), &loaded)
+		return loaded, err
+	})
+}
+
+func onePage[T any](ctx context.Context, t *transport, path string, body any) ([]T, error) {
+	var loaded page[T]
+	err := t.post(ctx, path, body, nil, &loaded)
+	return loaded.Data, err
+}
+
+func Collect[T any](items iter.Seq2[T, error]) ([]T, error) {
+	all := []T{}
+	for item, err := range items {
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, item)
+	}
+	return all, nil
 }

@@ -13,7 +13,12 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
     "read",
     {
       description: "Reads a file as text.",
-      inputSchema: { path: z.string(), offset: z.number().int().optional(), length: z.number().int().optional(), disk },
+      inputSchema: {
+        path: z.string(),
+        offset: z.number().int().optional(),
+        length: z.number().int().optional(),
+        disk,
+      },
       annotations: READ,
     },
     guarded(async ({ path, offset, length, disk }) =>
@@ -47,7 +52,9 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
       annotations: READ,
     },
     guarded(async ({ pattern, path, glob, ignore_case, disk }) =>
-      json(await (await places.reading(disk)).grep(pattern, { path, glob, ignoreCase: ignore_case })),
+      json(
+        await (await places.reading(disk)).grep(pattern, { path, glob, ignoreCase: ignore_case }),
+      ),
     ),
   );
 
@@ -71,8 +78,14 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
   server.registerTool(
     "query",
     {
-      description: "Searches the disk's files by meaning and keywords; the best file first, with a snippet.",
-      inputSchema: { text: z.string(), limit: z.number().int().optional(), path: z.string().optional(), disk },
+      description:
+        "Searches the disk's files by meaning and keywords; the best file first, with a snippet.",
+      inputSchema: {
+        text: z.string(),
+        limit: z.number().int().optional(),
+        path: z.string().optional(),
+        disk,
+      },
       annotations: READ,
     },
     guarded(async ({ text: words, limit, path, disk }) =>
@@ -100,7 +113,9 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
       inputSchema: { against: z.string().optional(), disk },
       annotations: READ,
     },
-    guarded(async ({ against, disk }) => json(await (await places.reading(disk)).diff(against ?? "main"))),
+    guarded(async ({ against, disk }) =>
+      json(await (await places.reading(disk)).diff(against ?? "main")),
+    ),
   );
 
   server.registerTool(
@@ -121,11 +136,18 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
   server.registerTool(
     "write",
     {
-      description: "Writes files, as one commit. Without SKYWAKE_BRANCH it writes to this session's own branch.",
-      inputSchema: { files: z.record(z.string(), z.string()), message: z.string().optional(), disk },
+      description:
+        "Writes files, as one commit. Without SKYWAKE_BRANCH it writes to this session's own branch.",
+      inputSchema: {
+        files: z.record(z.string(), z.string()),
+        message: z.string().optional(),
+        disk,
+      },
       annotations: WRITE,
     },
-    guarded(async ({ files, message, disk }) => json(await (await places.writing(disk)).write(files, { message }))),
+    guarded(async ({ files, message, disk }) =>
+      json(await (await places.writing(disk)).write(files, { message })),
+    ),
   );
 
   server.registerTool(
@@ -135,7 +157,9 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
       inputSchema: { paths: z.array(z.string()), message: z.string().optional(), disk },
       annotations: DESTROY,
     },
-    guarded(async ({ paths, message, disk }) => json(await (await places.writing(disk)).delete(paths, { message }))),
+    guarded(async ({ paths, message, disk }) =>
+      json(await (await places.writing(disk)).delete(paths, { message })),
+    ),
   );
 
   server.registerTool(
@@ -155,7 +179,8 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
   server.registerTool(
     "merge",
     {
-      description: "Merges the branch in use into another, main by default. Conflicts are listed, not guessed.",
+      description:
+        "Merges the branch in use into another, main by default. Conflicts are listed, not guessed.",
       inputSchema: {
         into: z.string().optional(),
         message: z.string().optional(),
@@ -166,7 +191,11 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
       annotations: WRITE,
     },
     guarded(async ({ into, message, prefer, dry_run, disk }) =>
-      json(await (await places.writing(disk)).mergeInto(into ?? "main", { message, prefer, dryRun: dry_run })),
+      json(
+        await (
+          await places.writing(disk)
+        ).mergeInto(into ?? "main", { message, prefer, dryRun: dry_run }),
+      ),
     ),
   );
 }

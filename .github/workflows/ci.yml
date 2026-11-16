@@ -113,6 +113,21 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: sdks/go/go.mod
+          cache-dependency-path: sdks/go/go.mod
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: "3.3"
       - name: Start Postgres and S3
         run: |
           docker compose -f docker/dev/compose.yaml up -d
@@ -125,10 +140,22 @@ jobs:
       # above; a skipped test fails in CI), the TypeScript SDK and the npm
       # wrapper of the CLI.
       - run: pnpm test
-      - name: Scenario list, TypeScript and Python SDKs
+      - name: Scenario list, every SDK
         run: scripts/scenarios.sh
       - name: Python SDK
         run: uv run --isolated --with pytest --with-editable ./sdks/python pytest -q sdks/python/tests
+      - name: Go SDK
+        working-directory: sdks/go
+        run: go vet ./... && go test ./...
+      - name: Java SDK
+        working-directory: sdks/java
+        run: mvn -q test
+      - name: C# SDK
+        working-directory: sdks/csharp
+        run: dotnet test --nologo
+      - name: Ruby SDK
+        working-directory: sdks/ruby
+        run: ruby -Ilib -Itest -e 'Dir["test/*_test.rb"].each { |f| require File.expand_path(f) }'
       - name: Start the API on S3
         env:
           SKYWAKE_STORE: s3://skywake/ci

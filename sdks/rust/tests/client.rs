@@ -1,57 +1,93 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use axum::body::Bytes;
-use axum::http::{Method, StatusCode, Uri};
+use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use futures::TryStreamExt;
 use serde_json::{Value, json};
-use skywake::{Client, Document, Error, Options, Order, Pinned, Query, Rank, Request, Search};
+use skywake::{ErrorKind, Mode, Order, Skywake};
 
-/// A request the fake API saw.
 #[derive(Clone, Debug)]
 struct Seen {
     method: Method,
-    uri: String,
-    body: Value,
+    path: String,
+    query: HashMap<String, String>,
+    headers: HeaderMap,
+    body: Bytes,
+}
+
+impl Seen {
+    fn json(&self) -> Value {
+        serde_json::from_slice(&self.body).unwrap()
+    }
 }
 
 type Log = Arc<Mutex<Vec<Seen>>>;
 
-/// A client of a fake API that answers each request with `answer(request,
-/// how many came before it)`.
-async fn fake(answer: impl Fn(&Seen, usize) -> Response + Send + Sync + 'static) -> (Client, Log) {
-    let log = Log::default();
-    let seen = log.clone();
-    let answer = Arc::new(answer);
-    let app = axum::Router::new().fallback(move |method: Method, uri: Uri, body: Bytes| {
-        let (seen, answer) = (seen.clone(), answer.clone());
-        async move {
-            let body = serde_json::from_slice(&body).unwrap_or(Value::Null);
-            let request = Seen {
-                method,
-                uri: uri.to_string(),
-                body,
-            };
-            let before = {
-                let mut seen = seen.lock().unwrap();
-                seen.push(request.clone());
-                seen.len() - 1
-            };
-            answer(&request, before)
-        }
-    });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}/v1/", listener.local_addr().unwrap());
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    let options = Options {
-        backoff: Duration::from_millis(1),
-        ..Options::default()
-    };
-    (Client::with_options(&url, "sw_key", options).unwrap(), log)
+struct Api {
+    url: String,
+    log: Log,
 }
 
-fn json(status: StatusCode, body: Value) -> Response {
+impl Api {
+    fn sky(&self) -> skywake::Builder {
+        Skywake::builder()
+            .url(&self.url)
+            .key("k")
+            .backoff(Duration::from_millis(1))
+    }
+
+    fn seen(&self) -> Vec<Seen> {
+        self.log.lock().unwrap().clone()
+    }
+}
+
+async fn fake(answer: impl Fn(&Seen, usize) -> Response + Send + Sync + 'static) -> Api {
+    let log = Log::default();
+    let kept = log.clone();
+    let answer = Arc::new(answer);
+    let app = axum::Router::new()
+        .fallback(
+            move |method: Method, uri: Uri, headers: HeaderMap, body: Bytes| {
+                let (kept, answer) = (kept.clone(), answer.clone());
+                async move {
+                    let query = uri
+                        .query()
+                        .map(|query| {
+                            query
+                                .split('&')
+                                .filter_map(|pair| pair.split_once('='))
+                                .map(|(name, value)| (name.to_string(), value.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let seen = Seen {
+                        method,
+                        path: uri.path().to_string(),
+                        query,
+                        headers,
+                        body,
+                    };
+                    let count = {
+                        let mut log = kept.lock().unwrap();
+                        log.push(seen.clone());
+                        log.len()
+                    };
+                    answer(&seen, count)
+                }
+            },
+        )
+        .layer(axum::extract::DefaultBodyLimit::disable());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    Api { url, log }
+}
+
+fn reply(status: u16, body: Value) -> Response {
+    let status = StatusCode::from_u16(status).unwrap();
     (
         status,
         [("content-type", "application/json")],
@@ -60,325 +96,374 @@ fn json(status: StatusCode, body: Value) -> Response {
         .into_response()
 }
 
-fn seen(log: &Log) -> Vec<Seen> {
-    log.lock().unwrap().clone()
+fn ok(body: Value) -> Response {
+    reply(200, body)
 }
 
-fn index(name: &str) -> Value {
-    json!({
-        "name": name, "region": "local", "schema": {"vectors": [], "attributes": []},
-        "shards": 1, "encryption": null, "read_only": false, "created": "",
-    })
+fn failure(status: u16, code: &str, extra: Value) -> Response {
+    let mut error = json!({ "code": code, "message": "nope", "hint": null, "request_id": "req-1" });
+    if let (Some(error), Some(extra)) = (error.as_object_mut(), extra.as_object()) {
+        error.extend(extra.clone());
+    }
+    reply(status, json!({ "error": error }))
 }
 
 #[tokio::test]
-async fn an_upsert_is_sent_1000_documents_at_a_time_to_the_branch_picked() {
-    let (sky, log) = fake(|seen, _| {
-        let count = seen.body["documents"].as_array().unwrap().len();
-        json(StatusCode::OK, json!({ "count": count, "billing": {} }))
+async fn requests_go_to_v2_with_the_key_and_the_environment() {
+    let api =
+        fake(|_, _| ok(json!({ "organization": "acme", "environment": "prod", "role": "admin" })))
+            .await;
+    let me = api
+        .sky()
+        .environment("prod")
+        .build()
+        .unwrap()
+        .whoami()
+        .await
+        .unwrap();
+    assert_eq!(me.environment.as_deref(), Some("prod"));
+    let seen = &api.seen()[0];
+    assert_eq!(seen.path, "/v2/whoami");
+    assert_eq!(seen.headers["authorization"], "Bearer k");
+    assert_eq!(seen.headers["skywake-environment"], "prod");
+}
+
+#[tokio::test]
+async fn each_status_becomes_its_own_error_with_the_hint_in_the_message() {
+    let api = fake(|_, count| match count {
+        1 => failure(401, "unauthorized", json!({})),
+        2 => failure(403, "forbidden", json!({})),
+        3 => failure(
+            404,
+            "not_found",
+            json!({ "hint": "did you mean `products`?" }),
+        ),
+        _ => failure(500, "internal", json!({})),
     })
     .await;
-    let docs: Vec<Document> = (0..2500)
-        .map(|i| serde_json::from_value(json!({ "id": i, "vectors": { "v": [i, 0] } })).unwrap())
-        .collect();
-    let branch = sky.index("prod/products").at("agents/try");
-    assert_eq!(branch.upsert(&docs).await.unwrap(), 2500);
-    let sent: Vec<_> = (seen(&log).into_iter())
-        .map(|s| (s.uri, s.body["documents"].as_array().unwrap().len()))
-        .collect();
-    let uri = "/v1/indexes/prod%2Fproducts/branches/agents%2Ftry/documents".to_string();
-    assert_eq!(sent, [(uri.clone(), 1000), (uri.clone(), 1000), (uri, 500)]);
-}
-
-#[tokio::test]
-async fn a_query_sends_only_what_is_set_and_gives_performance_and_billing() {
-    let answer = json!({
-        "hits": [{ "id": "a", "distance": 0.1, "attributes": {} }],
-        "performance": { "server_ms": 3, "cache_temperature": "warm", "cache_hit_ratio": 0.5 },
-        "billing": { "queries": 1 },
-    });
-    let (sky, log) = fake(move |_, _| json(StatusCode::OK, answer.clone())).await;
-    let filter = json!({ "tag": { "eq": "billing" } });
-    let query = Query {
-        top_k: Some(5),
-        filter: Some(filter.clone()),
-        ..Query::new("v", [0.1, 0.2])
-    };
-    let hits = sky.index("products").query(&query).await.unwrap();
-    assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].id, "a".into());
-    assert_eq!(hits.performance.as_ref().unwrap().server_ms, 3);
-    assert_eq!(hits.billing.as_ref().unwrap().queries, 1);
-    let sent = &seen(&log)[0];
-    assert_eq!(sent.uri, "/v1/indexes/products/branches/main/query");
-    let vector = json!({ "column": "v", "value": [0.1, 0.2] });
+    let sky = api.sky().retries(0).build().unwrap();
     assert_eq!(
-        sent.body,
-        json!({ "vector": vector, "topK": 5, "filter": filter })
+        sky.whoami().await.unwrap_err().kind(),
+        Some(&ErrorKind::Auth)
+    );
+    assert_eq!(
+        sky.whoami().await.unwrap_err().kind(),
+        Some(&ErrorKind::Permission)
+    );
+    let error = sky.index("prodcts").info().await.unwrap_err();
+    let api_error = error.api().unwrap();
+    assert_eq!(api_error.kind, ErrorKind::NotFound);
+    assert_eq!(api_error.hint.as_deref(), Some("did you mean `products`?"));
+    assert!(error.to_string().contains("did you mean `products`?"));
+    assert_eq!(api_error.request_id.as_deref(), Some("req-1"));
+    assert_eq!(
+        sky.whoami().await.unwrap_err().kind(),
+        Some(&ErrorKind::Server)
     );
 }
 
 #[tokio::test]
-async fn a_429_is_tried_again_after_the_wait_asked_but_a_failed_post_is_not() {
-    let (sky, log) = fake(
-        |seen, before| match (seen.uri.ends_with("/order"), before) {
-            (true, 0) => ([("retry-after", "0.01")], StatusCode::TOO_MANY_REQUESTS).into_response(),
-            (true, _) => json(StatusCode::OK, json!({ "rows": [] })),
-            (false, _) => json(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                json!({ "error": "boom" }),
-            ),
+async fn a_429_is_retried_as_the_server_asks_then_reported_with_retry_after() {
+    let api = fake(|_, _| {
+        let mut response = failure(429, "rate_limited", json!({}));
+        response
+            .headers_mut()
+            .insert("retry-after", "1".parse().unwrap());
+        response
+    })
+    .await;
+    let error = api
+        .sky()
+        .retries(1)
+        .build()
+        .unwrap()
+        .whoami()
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        Some(&ErrorKind::RateLimited {
+            retry_after: Some(Duration::from_secs(1))
+        })
+    );
+    assert_eq!(api.seen().len(), 2);
+}
+
+#[tokio::test]
+async fn a_merge_that_cant_finish_is_a_merge_conflict_listing_what_conflicts() {
+    let api = fake(|_, _| failure(409, "conflict", json!({ "conflicts": ["README.md"] }))).await;
+    let sky = api.sky().build().unwrap();
+    let work = sky.disk("app").on("agent-1");
+    let error = work.merge_into("main").await.unwrap_err();
+    assert_eq!(
+        error.kind(),
+        Some(&ErrorKind::MergeConflict {
+            conflicts: vec!["README.md".into()]
+        })
+    );
+    assert_eq!(
+        api.seen()[0].json(),
+        json!({ "from": "agent-1", "into": "main" })
+    );
+}
+
+#[tokio::test]
+async fn lists_follow_next_until_the_last_page() {
+    let api = fake(
+        |seen, _| match seen.query.get("cursor").map(String::as_str) {
+            Some("b") => ok(json!({ "data": [{ "name": "c" }], "next": null })),
+            _ => ok(json!({ "data": [{ "name": "a" }, { "name": "b" }], "next": "b" })),
         },
     )
     .await;
-    let index = sky.index("products");
-    assert!(index.order(&Order::new("id")).await.unwrap().is_empty());
-    assert_eq!(seen(&log).len(), 2);
-    let failed = index.search(&Search::new("reset")).await.unwrap_err();
-    assert_eq!(failed.status(), Some(500));
-    assert_eq!(seen(&log).len(), 3, "a POST that failed may have landed");
-}
-
-#[tokio::test]
-async fn a_delete_whose_retry_finds_nothing_has_deleted_it() {
-    let (sky, log) = fake(|_, before| match before {
-        0 => StatusCode::BAD_GATEWAY.into_response(),
-        _ => json(StatusCode::NOT_FOUND, json!({ "error": "no such branch" })),
-    })
-    .await;
-    sky.index("products")
-        .at("old")
-        .delete_branch()
-        .await
-        .unwrap();
-    let methods: Vec<_> = seen(&log).into_iter().map(|s| s.method).collect();
-    assert_eq!(methods, [Method::DELETE, Method::DELETE]);
-}
-
-#[tokio::test]
-async fn an_error_answer_says_what_is_wrong_and_where() {
-    let (sky, log) = fake(|_, _| {
-        let body = json!({
-            "error": "must be a number", "code": "invalid",
-            "request_id": "req-1", "path": "filter.price.lt",
-        });
-        json(StatusCode::BAD_REQUEST, body)
-    })
-    .await;
-    let error = sky.index("products").get(7).await.unwrap_err();
-    let Error::Api {
-        status,
-        message,
-        code,
-        request_id,
-        path,
-    } = error
-    else {
-        panic!()
-    };
-    assert_eq!((status, message.as_str()), (400, "must be a number"));
-    assert_eq!(code.as_deref(), Some("invalid"));
-    assert_eq!(request_id.as_deref(), Some("req-1"));
-    assert_eq!(path.as_deref(), Some("filter.price.lt"));
-    assert_eq!(
-        seen(&log)[0].uri,
-        "/v1/indexes/products/branches/main/documents/7"
-    );
-}
-
-#[tokio::test]
-async fn rank_and_multi_send_their_scores_and_give_billing() {
-    let (sky, log) = fake(|seen, _| {
-        let hits = json!([{ "id": 1, "score": 2.0, "attributes": {} }]);
-        let body = match seen.uri.ends_with("/rank") {
-            true => json!({ "hits": hits, "billing": { "queries": 1 } }),
-            false => json!({ "results": [{ "rank": hits }, { "order": [] }], "billing": { "queries": 2 } }),
-        };
-        json(StatusCode::OK, body)
-    })
-    .await;
-    let index = sky.index("docs");
-    let score = json!({ "max_sim": { "attribute": "tokens", "vectors": [[1, 0]] } });
-    let rank = Rank {
-        top_k: Some(3),
-        ..Rank::new(score.clone())
-    };
-    let ranked = index.rank(&rank).await.unwrap();
-    assert_eq!(
-        (ranked[0].score, ranked.billing.as_ref().unwrap().queries),
-        (2.0, 1)
-    );
-
-    let requests = [
-        Request::Rank(Rank::new(score.clone())),
-        Request::Order(Order::new("id")),
-    ];
-    let results = index.multi(&requests, None).await.unwrap();
-    assert_eq!(results[0].rank.as_ref().unwrap()[0].id, 1.into());
-    assert_eq!(results[1].order.as_deref(), Some(&[][..]));
-    assert_eq!(results.billing.as_ref().unwrap().queries, 2);
-    let bodies: Vec<_> = seen(&log).into_iter().map(|s| s.body).collect();
-    assert_eq!(bodies[0], json!({ "score": score, "topK": 3 }));
-    let multi =
-        json!({ "requests": [{ "rank": { "score": score } }, { "order": { "by": "id" } }] });
-    assert_eq!(bodies[1], multi);
-}
-
-#[tokio::test]
-async fn an_export_streams_one_document_a_line() {
-    let (sky, _) = fake(|_, _| "{\"id\":1}\n\n{\"id\":\"a\",\"vectors\":{}}".into_response()).await;
-    let index = sky.index("docs");
-    let docs: Vec<Document> = index.export().try_collect().await.unwrap();
-    let ids: Vec<_> = docs.into_iter().map(|doc| doc.id).collect();
-    assert_eq!(ids, [1.into(), "a".into()]);
-}
-
-#[tokio::test]
-async fn lists_are_read_a_page_at_a_time_until_a_short_one() {
-    let names: Vec<String> = (0..1001).map(|i| format!("i{i:04}")).collect();
-    let all = names.clone();
-    let (sky, log) = fake(move |seen, _| {
-        let after = seen.uri.split("after=").nth(1).map(String::from);
-        let start = after.map_or(0, |after| all.iter().position(|n| *n == after).unwrap() + 1);
-        let page: Vec<_> = all[start..]
-            .iter()
-            .take(1000)
-            .map(|name| index(name))
-            .collect();
-        json(StatusCode::OK, Value::Array(page))
-    })
-    .await;
-    let indexes = sky.indexes();
-    let listed: Vec<_> = indexes
-        .all()
-        .map_ok(|index| index.name)
+    let disks: Vec<_> = api
+        .sky()
+        .build()
+        .unwrap()
+        .list_disks()
         .try_collect()
         .await
         .unwrap();
-    assert_eq!(listed, names);
-    let uris: Vec<_> = seen(&log).into_iter().map(|s| s.uri).collect();
+    let names: Vec<_> = disks.iter().map(|disk| disk.name.as_str()).collect();
+    assert_eq!(names, ["a", "b", "c"]);
+}
+
+#[tokio::test]
+async fn upsert_takes_any_number_of_rows_and_sends_them_in_batches() {
+    let api = fake(|seen, _| {
+        let rows = seen.json();
+        let ids: Vec<_> = rows
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["id"].clone())
+            .collect();
+        ok(json!({ "count": ids.len(), "ids": ids }))
+    })
+    .await;
+    let rows: Vec<Value> = (0..25_000)
+        .map(|id| json!({ "id": id, "text": format!("row {id}") }))
+        .collect();
+    let sky = api.sky().build().unwrap();
+    let done = sky.index("products").upsert(rows).await.unwrap();
+    assert_eq!(done.count, 25_000);
+    assert_eq!(done.ids.len(), 25_000);
+    let sizes: Vec<_> = api
+        .seen()
+        .iter()
+        .map(|seen| seen.json().as_array().unwrap().len())
+        .collect();
+    assert_eq!(sizes, [10_000, 10_000, 5_000]);
+    assert_eq!(api.seen()[0].query["branch"], "main");
+}
+
+#[tokio::test]
+async fn update_and_delete_take_an_id_ids_or_a_filter() {
+    let api = fake(|_, _| ok(json!({ "count": 1 }))).await;
+    let sky = api.sky().build().unwrap();
+    let products = sky.index("products");
+    products.update(7, json!({ "stock": 3 })).await.unwrap();
+    products
+        .update(json!({ "tag": { "eq": "sale" } }), json!({ "stock": 0 }))
+        .await
+        .unwrap();
+    products.delete(vec![1, 2]).await.unwrap();
+    products
+        .delete(json!({ "filter": { "stock": { "eq": 0 } } }))
+        .await
+        .unwrap();
+    let seen: Vec<_> = api
+        .seen()
+        .iter()
+        .map(|seen| (seen.method.to_string(), seen.path.clone(), seen.json()))
+        .collect();
+    let rows = "/v2/indexes/products/rows".to_string();
+    let delete = "/v2/indexes/products/rows/delete".to_string();
     assert_eq!(
-        uris,
+        seen,
         [
-            "/v1/indexes?limit=1000",
-            "/v1/indexes?limit=1000&after=i0999"
+            (
+                "PATCH".into(),
+                rows.clone(),
+                json!({ "id": 7, "fields": { "stock": 3 } })
+            ),
+            (
+                "PATCH".into(),
+                rows,
+                json!({ "filter": { "tag": { "eq": "sale" } }, "fields": { "stock": 0 } })
+            ),
+            ("POST".into(), delete.clone(), json!({ "ids": [1, 2] })),
+            (
+                "POST".into(),
+                delete,
+                json!({ "filter": { "stock": { "eq": 0 } } })
+            ),
         ]
     );
 }
 
 #[tokio::test]
-async fn a_write_asks_for_the_ids_it_changed() {
-    let (sky, log) = fake(|_, _| {
-        let body = json!({ "upserted": 0, "patched": 0, "deleted": 1, "deleted_ids": ["a"] });
-        json(StatusCode::OK, body)
-    })
-    .await;
-    let write = skywake::Write {
-        deletes: Some(vec!["a".into()]),
-        return_affected_ids: Some(true),
-        ..Default::default()
-    };
-    let counts = sky.index("docs").write(&write).await.unwrap();
-    assert_eq!(counts.deleted_ids, Some(vec!["a".into()]));
-    let body = json!({ "deletes": ["a"], "returnAffectedIds": true });
-    assert_eq!(seen(&log)[0].body, body);
-}
-
-#[tokio::test]
-async fn versions_restore_fork_at_collect_parquet_and_retention_go_to_their_routes() {
-    let version = "a".repeat(64);
-    let moment = json!({ "version": version, "time": "", "rows": 1 });
-    let (sky, log) = fake(move |seen, _| {
-        let path = seen.uri.split('?').next().unwrap();
-        match path.rsplit('/').next().unwrap() {
-            "versions" => json(StatusCode::OK, json!([moment])),
-            "restore" => json(StatusCode::OK, moment.clone()),
-            "collect" => json(
-                StatusCode::ACCEPTED,
-                json!({ "id": "op_2", "index": "products", "branch": null, "kind": "collect",
-                        "status": "running", "error": null, "started": "", "finished": null }),
-            ),
-            "export" => "PAR1".into_response(),
-            "products" => json(StatusCode::OK, index("products")),
-            _ => json(StatusCode::CREATED, json!({})),
+async fn get_gives_none_for_a_missing_row_but_fails_for_a_missing_index() {
+    let api = fake(|seen, _| {
+        if seen.path.contains("/rows/") {
+            failure(404, "not_found", json!({ "path": "id" }))
+        } else {
+            failure(
+                404,
+                "not_found",
+                json!({ "hint": "did you mean `products`?" }),
+            )
         }
     })
     .await;
-    let main = sky.index("products");
-    let versions = main.versions(Some(5), Some(&version)).await.unwrap();
-    assert_eq!(versions[0].rows, 1);
-    assert_eq!(main.restore(&version).await.unwrap().version, version);
-    assert_eq!(main.fork_at("past", &version).await.unwrap().branch, "past");
-    let collect = main.collect().await.unwrap();
-    assert_eq!((collect.id.as_str(), collect.branch), ("op_2", None));
-    let parts: Vec<Vec<u8>> = main.export_parquet().try_collect().await.unwrap();
-    assert_eq!(parts.concat(), b"PAR1");
-    let keep_all = skywake::UpdateIndex {
-        retention_days: Some(None),
-        ..Default::default()
-    };
-    sky.indexes().update("products", &keep_all).await.unwrap();
-    let seen = seen(&log);
-    let routes: Vec<String> = seen
-        .iter()
-        .map(|s| format!("{} {}", s.method, s.uri))
-        .collect();
-    assert_eq!(
-        routes,
-        [
-            format!("GET /v1/indexes/products/branches/main/versions?limit=5&after={version}"),
-            "POST /v1/indexes/products/branches/main/restore".to_string(),
-            "POST /v1/indexes/products/branches".to_string(),
-            "POST /v1/indexes/products/collect".to_string(),
-            "GET /v1/indexes/products/branches/main/export?format=parquet".to_string(),
-            "PATCH /v1/indexes/products".to_string(),
-        ]
-    );
-    assert_eq!(seen[1].body, json!({ "version": version }));
-    assert_eq!(
-        seen[2].body,
-        json!({ "name": "past", "from": "main", "at": version })
-    );
-    assert_eq!(seen[5].body, json!({ "retention_days": null }));
+    let sky = api.sky().build().unwrap();
+    assert_eq!(sky.index("products").get("a b").await.unwrap(), None);
+    assert_eq!(api.seen()[0].path, "/v2/indexes/products/rows/a%20b");
+    let error = sky.index("prodcts").info().await.unwrap_err();
+    assert_eq!(error.kind(), Some(&ErrorKind::NotFound));
 }
 
 #[tokio::test]
-async fn an_index_is_pinned_unpinned_and_says_where() {
-    let pinning = json!({ "replicas": [{ "server": "api-1", "warm": true, "in_flight": 2 }] });
-    let (sky, log) = fake(move |_, _| {
-        let mut answer = index("a");
-        answer["pinned"] = json!({ "replicas": 1 });
-        answer["pinning"] = pinning.clone();
-        json(StatusCode::OK, answer)
+async fn query_takes_text_first_and_options_on_their_own() {
+    let api = fake(|_, _| {
+        ok(json!({ "data": [{ "id": 1, "score": 0.9, "title": "mug" }], "next": null }))
     })
     .await;
-    let options = skywake::IndexOptions {
-        pinned: Some(Pinned { replicas: 2 }),
-        ..Default::default()
-    };
-    sky.indexes()
-        .create("a", json!({}), &options)
+    let sky = api.sky().build().unwrap();
+    let products = sky.index("products").on("draft");
+    let hits = products
+        .query("coffee")
+        .limit(3)
+        .mode(Mode::Keywords)
         .await
         .unwrap();
-    let pin = skywake::UpdateIndex {
-        pinned: Some(Some(Pinned { replicas: 3 })),
-        ..Default::default()
-    };
-    sky.indexes().update("a", &pin).await.unwrap();
-    let unpin = skywake::UpdateIndex {
-        pinned: Some(None),
-        ..Default::default()
-    };
-    sky.indexes().update("a", &unpin).await.unwrap();
-    let got = sky.indexes().get("a").await.unwrap();
-    assert_eq!(got.pinned, Some(Pinned { replicas: 1 }));
-    let replica = &got.pinning.unwrap().replicas[0];
+    assert_eq!(hits[0]["title"], "mug");
+    products
+        .query(None)
+        .filter(json!({ "price": { "lt": 10 } }))
+        .sort("price", Order::Asc)
+        .await
+        .unwrap();
+    let seen = api.seen();
     assert_eq!(
-        (replica.server.as_str(), replica.warm, replica.in_flight),
-        ("api-1", true, 2)
+        seen[0].json(),
+        json!({ "text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft" })
     );
-    let seen = seen(&log);
-    assert_eq!(seen[0].body["pinned"], json!({ "replicas": 2 }));
-    assert_eq!(seen[1].body, json!({ "pinned": { "replicas": 3 } }));
-    assert_eq!(seen[2].body, json!({ "pinned": null }));
+    assert_eq!(
+        seen[1].json(),
+        json!({ "filter": { "price": { "lt": 10 } }, "sort": { "price": "asc" }, "branch": "draft" })
+    );
+}
+
+#[tokio::test]
+async fn files_are_read_and_written_by_path_each_part_of_it_encoded() {
+    let api = fake(|seen, _| {
+        if seen.method == Method::GET {
+            (StatusCode::OK, "hello").into_response()
+        } else {
+            ok(json!({ "commit": "c1", "changed": true }))
+        }
+    })
+    .await;
+    let sky = api.sky().build().unwrap();
+    let app = sky.disk("app");
+    assert_eq!(app.read("/docs/a b.md").at("c0").await.unwrap(), "hello");
+    assert_eq!(app.read("x").bytes().await.unwrap(), b"hello");
+    app.write_files([
+        ("a.md", skywake::Content::from("one")),
+        ("b.bin", vec![0xff, 0x00].into()),
+    ])
+    .message("two")
+    .await
+    .unwrap();
+    let seen = api.seen();
+    assert_eq!(seen[0].path, "/v2/disks/app/files/docs/a%20b.md");
+    assert_eq!(seen[0].query["at"], "c0");
+    assert_eq!(
+        seen[2].json(),
+        json!({
+            "message": "two",
+            "branch": "main",
+            "changes": [{ "path": "a.md", "text": "one" }, { "path": "b.bin", "base64": "/wA=" }],
+        })
+    );
+}
+
+#[tokio::test]
+async fn a_large_file_goes_up_in_parts_before_its_commit() {
+    let api = fake(|seen, _| {
+        if seen.path.ends_with("/uploads") {
+            let size = seen.body.len();
+            reply(201, json!({ "part": format!("p{size}"), "size": size }))
+        } else {
+            ok(json!({ "commit": "c1", "changed": true }))
+        }
+    })
+    .await;
+    let sky = api.sky().build().unwrap();
+    sky.disk("app")
+        .write("big.bin", vec![0u8; 20 * 1024 * 1024])
+        .await
+        .unwrap();
+    let seen = api.seen();
+    let parts: Vec<_> = seen
+        .iter()
+        .filter(|seen| seen.path.ends_with("/uploads"))
+        .map(|seen| seen.body.len())
+        .collect();
+    assert_eq!(parts, [16 * 1024 * 1024, 4 * 1024 * 1024]);
+    assert_eq!(
+        seen.last().unwrap().json()["changes"],
+        json!([{ "path": "big.bin", "parts": [format!("p{}", 16 * 1024 * 1024), format!("p{}", 4 * 1024 * 1024)] }])
+    );
+}
+
+#[tokio::test]
+async fn a_fork_is_a_handle_on_the_new_branch_and_destroy_removes_just_the_branch() {
+    let api = fake(|seen, _| {
+        if seen.method == Method::DELETE {
+            StatusCode::NO_CONTENT.into_response()
+        } else {
+            reply(201, json!({ "name": "agent-1" }))
+        }
+    })
+    .await;
+    let sky = api.sky().build().unwrap();
+    let work = sky.disk("app").fork("agent-1").at("c3").await.unwrap();
+    assert_eq!(work.branch(), "agent-1");
+    work.destroy().await.unwrap();
+    let seen = api.seen();
+    assert_eq!(
+        seen[0].json(),
+        json!({ "name": "agent-1", "from": "main", "at": "c3" })
+    );
+    assert_eq!(
+        (seen[1].method.clone(), seen[1].path.as_str()),
+        (Method::DELETE, "/v2/disks/app/branches/agent-1")
+    );
+}
+
+#[tokio::test]
+async fn restore_to_a_time_picks_the_newest_commit_at_or_before_it() {
+    let api = fake(|seen, _| {
+        if seen.method == Method::GET {
+            ok(json!({
+                "data": [
+                    { "id": "c3", "message": "", "created": "2026-01-03T00:00:00Z", "merged": null },
+                    { "id": "c2", "message": "", "created": "2026-01-02T00:00:00Z", "merged": null },
+                ],
+                "next": null,
+            }))
+        } else {
+            ok(json!({ "commit": "c4", "changed": true }))
+        }
+    })
+    .await;
+    let sky = api.sky().build().unwrap();
+    let noon = SystemTime::UNIX_EPOCH + Duration::from_secs(1_767_355_200);
+    sky.disk("app").restore(noon).await.unwrap();
+    assert_eq!(
+        api.seen()[1].json(),
+        json!({ "to": "c2", "branch": "main" })
+    );
 }

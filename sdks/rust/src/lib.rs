@@ -1,24 +1,23 @@
-//! A client for Skywake search indexes.
-//!
-//! ```no_run
-//! # async fn run() -> skywake::Result<()> {
-//! use skywake::{Client, Query};
-//!
-//! let sky = Client::new("https://api.skywake.dev", "sw_...")?;
-//! let hits = sky.index("products").query(&Query::new("embedding", [0.1, 0.2])).await?;
-//! for hit in hits.iter() {
-//!     println!("{} {}", hit.id, hit.distance);
-//! }
-//! # Ok(())
-//! # }
-//! ```
-
 mod client;
+mod disk;
 mod error;
 mod index;
-mod types;
+mod place;
+mod shared;
 
-pub use client::{Client, Options};
-pub use error::{Error, Result};
-pub use index::{Indexes, SearchIndex};
-pub use types::*;
+pub use client::{
+    Builder, CreateDisk, CreateIndex, CreateKey, CreatedKey, Environment, Key, Role, Skywake,
+    Whoami,
+};
+pub use disk::{
+    Change, Commit, Committed, Content, Disk, DiskConfigure, DiskInfo, DiskSummary, Download, Edit,
+    Entry, FileHit, FileQuery, Find, FindKind, Found, Grep, Kind, ListFiles, Log, Match, Merge,
+    Merged, Prefer, Read, Revert, Stat, Upload, Visibility,
+};
+pub use error::{ApiError, Error, ErrorKind, Result};
+pub use index::{
+    Aggregate, CopyIndex, Count, Group, Index, IndexConfigure, IndexInfo, IndexMerged,
+    IndexSummary, Mode, Names, Order, Query, Row, RowList, Rows, Target, Upserted, Version,
+};
+pub use place::{At, Branch, Fork};
+pub use shared::paging::List;

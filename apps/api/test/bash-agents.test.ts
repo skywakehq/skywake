@@ -99,13 +99,23 @@ async function sharedServer(url: string, key: string, exists: (path: string) => 
       text: "./src/app.ts\n\nexit 0",
       isError: false,
     });
-    assert.deepEqual(await mcp.call("bash", { command: "mkdir docs && echo hi > docs/a.md && cat docs/a.md" }), {
-      text: "hi\n\nexit 0",
-      isError: false,
-    });
-    assert.equal(await exists("docs/a.md"), false, "the session writes to its own branch, not main");
+    assert.deepEqual(
+      await mcp.call("bash", { command: "mkdir docs && echo hi > docs/a.md && cat docs/a.md" }),
+      {
+        text: "hi\n\nexit 0",
+        isError: false,
+      },
+    );
+    assert.equal(
+      await exists("docs/a.md"),
+      false,
+      "the session writes to its own branch, not main",
+    );
     assert.equal((await mcp.call("read", { path: "docs/a.md" })).text, "hi\n");
-    assert.equal((await mcp.call("write", { files: { "b.md": "bee" }, message: "b" })).isError, false);
+    assert.equal(
+      (await mcp.call("write", { files: { "b.md": "bee" }, message: "b" })).isError,
+      false,
+    );
     const diff = JSON.parse((await mcp.call("diff", {})).text);
     assert.deepEqual(diff.map((change: { path: string }) => change.path).sort(), ["b.md", "docs"]);
     assert.equal((await mcp.call("merge", {})).isError, false);
@@ -115,8 +125,13 @@ async function sharedServer(url: string, key: string, exists: (path: string) => 
     assert.equal(missing.isError, true);
     assert.match(missing.text, /No such file/);
 
-    await mcp.call("index_upsert", { index: "notes", rows: [{ id: "a", text: "shoes for running" }] });
-    const hits = JSON.parse((await mcp.call("index_query", { index: "notes", text: "shoes" })).text);
+    await mcp.call("index_upsert", {
+      index: "notes",
+      rows: [{ id: "a", text: "shoes for running" }],
+    });
+    const hits = JSON.parse(
+      (await mcp.call("index_query", { index: "notes", text: "shoes" })).text,
+    );
     assert.equal(hits[0].id, "a");
     const gone = await mcp.call("index_query", { index: "nots", text: "shoes" });
     assert.equal(gone.isError, true);
