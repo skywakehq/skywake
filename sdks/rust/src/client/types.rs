@@ -9,7 +9,7 @@ pub enum Role {
     Admin,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Whoami {
     pub organization: String,
     pub environment: Option<String>,
@@ -26,7 +26,7 @@ pub struct Whoami {
     pub expires: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Key {
     pub id: String,
     pub name: String,
@@ -46,13 +46,13 @@ pub struct Key {
     pub created_by_email: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreatedKey {
     pub id: String,
     pub key: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Environment {
     pub name: String,
     #[serde(default)]

@@ -14,7 +14,7 @@ bin=${CARGO_TARGET_DIR:-target}/debug
 work=$(mktemp -d)
 export SKYWAKE_STORE="$work/store" SKYWAKE_ROOT="$work/root" SKYWAKE_LOG=warn
 mkdir -p "$SKYWAKE_STORE" "$work/mnt"
-"$bin/skywake" new crash >/dev/null
+"$bin/skywake" --local create disk @crash >/dev/null
 
 daemon=
 start_daemon() {
@@ -22,7 +22,7 @@ start_daemon() {
   "$bin/skywaked" 2>>"$work/daemon.log" &
   daemon=$!
   while [ ! -S "$SKYWAKE_ROOT/skywaked.sock" ]; do sleep 0.05; done
-  "$bin/skywake" mount crash "$work/mnt"
+  "$bin/skywake" mount @crash "$work/mnt"
 }
 
 round=1
@@ -58,7 +58,7 @@ EOF
   kill "$daemon"
   wait "$daemon" 2>/dev/null || true
   rm -rf "$work/check"
-  "$bin/skywake" checkout crash "$work/check"
+  "$bin/skywake" --local download @crash "$work/check"
   python3 - "$work/check" "$work" "$round" "$killed" <<'EOF'
 import os, sys
 check, work, last, killed = sys.argv[1], sys.argv[2], int(sys.argv[3]), float(sys.argv[4])

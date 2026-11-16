@@ -5,7 +5,7 @@ import { retryingFetch, type RetryOptions } from "./core/retry.js";
 import { resolveSettings, type Asked } from "./core/settings.js";
 import { Disk, MAIN, type Visibility } from "./disks/disk-handle.js";
 import { Index } from "./indexes/index-handle.js";
-import type { Fields, IndexSummary, NewIndexOptions } from "./indexes/types.js";
+import type { Fields, IndexSummary, NewIndexOptions, RowsOf } from "./indexes/types.js";
 
 export interface Options extends RetryOptions, Asked {
   fetch?: typeof fetch;
@@ -55,7 +55,10 @@ export class Skywake {
     return new Disk(this.#http, name, options.branch ?? MAIN);
   }
 
-  index<R extends Fields = Fields>(name: string, options: { branch?: string } = {}): Index<R> {
+  index<N extends string, R extends Fields = RowsOf<N>>(
+    name: N,
+    options: { branch?: string } = {},
+  ): Index<R> {
     return new Index<R>(this.#http, name, options.branch ?? MAIN);
   }
 
@@ -69,7 +72,7 @@ export class Skywake {
     options: NewIndexOptions = {},
   ): Promise<Index<R>> {
     await this.#http.post("/indexes", { name, ...options });
-    return this.index<R>(name);
+    return new Index<R>(this.#http, name, MAIN);
   }
 
   listDisks(): AsyncGenerator<DiskSummary> {

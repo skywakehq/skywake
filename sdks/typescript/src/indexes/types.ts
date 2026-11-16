@@ -1,6 +1,10 @@
 import type { Schemas } from "../core/api.js";
 
 export type Fields = Record<string, any>;
+
+export interface IndexRows {}
+
+export type RowsOf<N extends string> = N extends keyof IndexRows ? IndexRows[N] & Fields : Fields;
 export type DocId = Schemas["DocId"];
 export type Filter = Schemas["Filter"];
 export type Mode = Schemas["Mode"];

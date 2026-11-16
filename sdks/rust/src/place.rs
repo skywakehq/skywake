@@ -10,7 +10,7 @@ use crate::shared::paging::{collect, pages};
 
 pub(crate) const MAIN: &str = "main";
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Branch {
     pub name: String,
     #[serde(default)]

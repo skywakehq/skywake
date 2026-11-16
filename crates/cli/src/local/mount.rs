@@ -1,16 +1,15 @@
-//! Commands on mounts, through skywaked.
-
 use std::path::Path;
 
 use anyhow::Result;
 use skywake_daemon::{Request, Response};
 
-use crate::{Command, daemon};
+use super::{branch_of, daemon};
+use crate::cli::Command;
 
 pub(crate) async fn run(root: &Path, command: Command) -> Result<()> {
     match command {
         Command::Mount {
-            branch,
+            target,
             mountpoint,
             vm,
             read_only,
@@ -19,6 +18,7 @@ pub(crate) async fn run(root: &Path, command: Command) -> Result<()> {
             allow_other,
         } => {
             let path = std::path::absolute(&mountpoint)?;
+            let branch = branch_of(&target);
             let branch = match fork {
                 Some(fork) => {
                     let request = Request::Create {

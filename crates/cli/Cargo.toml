@@ -14,15 +14,14 @@ metrics.workspace = true
 tracing.workspace = true
 skywake-core.workspace = true
 skywake-daemon.workspace = true
+skywake-client = { path = "../../sdks/rust" }
+futures.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 tokio.workspace = true
 bytes.workspace = true
-base64 = "0.22.1"
-blake3.workspace = true
 csv.workspace = true
 parquet = { workspace = true, features = ["json"] }
-reqwest = { workspace = true, features = ["json", "rustls"] }
 serde.workspace = true
 serde_json.workspace = true
 

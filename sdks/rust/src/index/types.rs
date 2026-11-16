@@ -18,13 +18,13 @@ pub enum Order {
     Desc,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Upserted {
     pub ids: Vec<Value>,
     pub count: u64,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexSummary {
     pub name: String,
     #[serde(default)]
@@ -33,7 +33,7 @@ pub struct IndexSummary {
     pub created: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexInfo {
     pub name: String,
     pub region: String,
@@ -46,19 +46,19 @@ pub struct IndexInfo {
     pub branches: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexMerged {
     pub rows: u64,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Version {
     pub id: String,
     pub created: String,
     pub rows: Option<u64>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Group {
     pub group: Row,
     pub count: Option<u64>,

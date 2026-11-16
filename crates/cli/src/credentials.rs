@@ -3,26 +3,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
-pub(crate) const DEFAULT_URL: &str = "https://api.skywake.dev";
 const FIELDS: [&str; 3] = ["key", "url", "environment"];
 
 pub(crate) type Profile = BTreeMap<String, String>;
 pub(crate) type Profiles = BTreeMap<String, Profile>;
-
-#[derive(Debug, Default, Clone)]
-pub(crate) struct Asked {
-    pub(crate) key: Option<String>,
-    pub(crate) url: Option<String>,
-    pub(crate) environment: Option<String>,
-    pub(crate) profile: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Settings {
-    pub(crate) key: Option<String>,
-    pub(crate) url: String,
-    pub(crate) environment: Option<String>,
-}
 
 pub(crate) fn path() -> Option<PathBuf> {
     if cfg!(windows) {
@@ -123,40 +107,11 @@ fn write_private(path: &std::path::Path, text: &str) -> std::io::Result<()> {
     std::fs::write(path, text)
 }
 
-pub(crate) fn profile_name(asked: &Asked) -> String {
+pub(crate) fn profile_name(asked: Option<&str>) -> String {
     asked
-        .profile
-        .clone()
+        .map(String::from)
         .or_else(|| var("SKYWAKE_PROFILE"))
         .unwrap_or_else(|| "default".to_string())
-}
-
-pub(crate) fn resolve(asked: &Asked, profiles: &Profiles) -> Settings {
-    let given = asked
-        .key
-        .clone()
-        .filter(|key| !key.is_empty())
-        .or_else(|| var("SKYWAKE_API_KEY"))
-        .or_else(|| var("SKYWAKE_KEY"));
-    let stored = match given {
-        Some(_) => None,
-        None => profiles.get(&profile_name(asked)),
-    };
-    let from = |field: &str| stored.and_then(|profile| profile.get(field).cloned());
-    Settings {
-        key: given.or_else(|| from("key")),
-        url: asked
-            .url
-            .clone()
-            .or_else(|| var("SKYWAKE_URL"))
-            .or_else(|| from("url"))
-            .unwrap_or_else(|| DEFAULT_URL.to_string()),
-        environment: asked
-            .environment
-            .clone()
-            .or_else(|| var("SKYWAKE_ENV"))
-            .or_else(|| from("environment")),
-    }
 }
 
 #[cfg(test)]
@@ -180,28 +135,5 @@ mod tests {
     fn ignores_comments_and_unknown_fields() {
         let parsed = profiles("# hi\n[default]\nkey = \"sw_a\"\ncolor = \"red\"\n");
         assert_eq!(parsed["default"].len(), 1);
-    }
-
-    #[test]
-    fn a_given_key_ignores_the_profile() {
-        let stored = profiles(
-            "[default]\nkey = \"sw_file\"\nurl = \"http://file\"\nenvironment = \"prod\"\n",
-        );
-        let asked = Asked {
-            key: Some("sw_flag".into()),
-            ..Asked::default()
-        };
-        let settings = resolve(&asked, &stored);
-        assert_eq!(settings.key.as_deref(), Some("sw_flag"));
-        assert_eq!(settings.environment, None);
-        let from_file = resolve(&Asked::default(), &stored);
-        if var("SKYWAKE_API_KEY").is_none()
-            && var("SKYWAKE_KEY").is_none()
-            && var("SKYWAKE_URL").is_none()
-        {
-            assert_eq!(from_file.key.as_deref(), Some("sw_file"));
-            assert_eq!(from_file.url, "http://file");
-            assert_eq!(from_file.environment.as_deref(), Some("prod"));
-        }
     }
 }

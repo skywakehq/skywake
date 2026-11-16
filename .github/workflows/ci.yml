@@ -183,11 +183,6 @@ jobs:
           SKYWAKE_URL: http://localhost:8080
           SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
         run: uv run --isolated --with ./sdks/python --with mcp python e2e/swarm/orchestrator.py
-      - name: CLI index commands
-        env:
-          SKYWAKE_URL: http://localhost:8080
-          SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
-        run: cargo test -p skywake-cli --test index
       - name: API log
         if: always()
         run: cat api.log || true

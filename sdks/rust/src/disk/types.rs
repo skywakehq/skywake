@@ -30,7 +30,7 @@ pub enum Prefer {
     Theirs,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub path: String,
     pub kind: Kind,
@@ -44,7 +44,7 @@ pub struct Entry {
     pub target: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Commit {
     pub id: String,
     pub message: String,
@@ -52,26 +52,26 @@ pub struct Commit {
     pub merged: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Committed {
     pub commit: String,
     pub changed: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Change {
     pub path: String,
     pub change: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Match {
     pub path: String,
     pub line: u64,
     pub text: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Found {
     pub path: String,
     pub kind: Kind,
@@ -79,14 +79,14 @@ pub struct Found {
     pub size: u64,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileHit {
     pub path: String,
     pub score: f64,
     pub snippet: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DiskSummary {
     pub name: String,
     #[serde(default)]
@@ -96,7 +96,7 @@ pub struct DiskSummary {
     pub created: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DiskInfo {
     pub name: String,
     pub region: String,
@@ -106,7 +106,7 @@ pub struct DiskInfo {
     pub branches: Vec<String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Merged {
     pub commit: Option<String>,
     #[serde(default)]

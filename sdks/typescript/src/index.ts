@@ -55,6 +55,8 @@ export type {
   AggregateOptions,
   DocId,
   Fields,
+  IndexRows,
+  RowsOf,
   Filter,
   Group,
   Hit,

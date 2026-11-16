@@ -42,7 +42,10 @@ class Context:
         env = {**self.env, **(env or {})}
         if root is not None:
             env["SKYWAKE_ROOT"] = str(root)
-        result = subprocess.run([str(BIN / "skywake"), *map(str, command)], env=env, capture_output=True, text=True)
+        local = [] if env.get("SKYWAKE_STORE") else ["--local"]
+        result = subprocess.run(
+            [str(BIN / "skywake"), *local, *map(str, command)], env=env, capture_output=True, text=True
+        )
         if check and result.returncode != 0:
             raise RuntimeError(f"skywake {' '.join(map(str, command))}: {result.stderr.strip()}")
         return result.stdout
@@ -181,7 +184,7 @@ class Daemon:
         except OSError as error:
             if error.errno != errno.ENOTCONN:  # dead mount from a killed daemon; skywaked clears it
                 raise
-        self.call("mount", branch, path)
+        self.call("mount", f"@{branch}", path)
 
     def kill(self):
         self.process.send_signal(signal.SIGKILL)

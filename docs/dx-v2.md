@@ -316,8 +316,10 @@ skywake types                        # write TypeScript types
 - Every command takes `--json`, `--env` and `--profile`.
 - Destructive commands ask first unless `--yes`.
 - Linux (glibc and musl) and macOS (x86_64 and arm64) binaries.
-- `--local [DIR]` (or a profile with `store = "s3://…"`) runs disk commands
-  against a bucket with no server, as `skywake new`/`commit` do today.
+- `--local[=DIR]` (or `SKYWAKE_STORE`) runs disk commands against a bucket or
+  folder with no server: `fork`, `merge`, `branches`, `log`, `diff`,
+  `destroy NAME@BRANCH`, `upload` and `download`, plus `gc` and `recover`. The
+  store is one disk, so only the branch in `NAME@BRANCH` is used.
 
 ## MCP server
 

@@ -1,9 +1,7 @@
-//! A filter in words, such as `tag = billing and price < 10`, as the API's JSON.
-
 use anyhow::{Result, bail};
 use serde_json::{Value, json};
 
-pub(super) fn parse(text: &str) -> Result<Value> {
+pub(crate) fn parse(text: &str) -> Result<Value> {
     let text = text.trim();
     if text.starts_with('{') {
         return Ok(serde_json::from_str(text)?);
