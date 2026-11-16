@@ -235,6 +235,13 @@ export async function progress(
     .where(and(...key(row), eq(indexLinkBranches.claimedBy, server)));
 }
 
+export async function release(db: Db, row: LinkedBranchRow, server: string) {
+  await db
+    .update(indexLinkBranches)
+    .set({ checked: sql`now()`, claimedBy: null, claimedUntil: null })
+    .where(and(...key(row), eq(indexLinkBranches.claimedBy, server)));
+}
+
 /** The branch's index now matches `head`. A save since the claim left it dirty. */
 export async function synced(
   db: Db,

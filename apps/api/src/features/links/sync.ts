@@ -149,8 +149,8 @@ export class Syncer {
       head = await engine.head(row.branch);
     } catch (error) {
       if (!isMissing(error)) throw error;
-      // The files branch is gone: stop following it.
-      await links.removeBranch(db, row.org, row.namespace, row.branch);
+      if (row.branch === MAIN) await links.release(db, row, this.#id);
+      else await links.removeBranch(db, row.org, row.namespace, row.branch);
       return;
     }
     if (head === row.synced) {
