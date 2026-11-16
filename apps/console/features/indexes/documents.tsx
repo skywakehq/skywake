@@ -22,6 +22,7 @@ import {
   type Document,
   type DocumentPage,
   type IndexInfo,
+  INTERNAL,
   branchUrl,
   call,
   useApi,
@@ -58,7 +59,10 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
 
   const documents = page?.documents ?? [];
   const firstRow = (cursors.length - 1) * size + 1;
-  const attributes = index.schema.attributes.map((a) => a.name);
+  const linked = index.schema.attributes.some((a) => a.name === "chunk");
+  const attributes = index.schema.attributes
+    .map((a) => a.name)
+    .filter((name) => !(linked && INTERNAL.has(name)));
   // A text-only index has no vector to preview.
   const vector = index.schema.vectors[0];
   const allSelected = documents.length > 0 && documents.every((d) => selected.has(keyOf(d.id)));
@@ -88,7 +92,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-1 gap-6">
       <div className="flex flex-wrap items-center gap-2">
         <Lookup index={index} branch={branch} onFound={setOpen} />
         <span className="ml-auto" />
