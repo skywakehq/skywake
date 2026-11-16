@@ -208,7 +208,7 @@ jobs:
           helm push "dist/skywake-$version.tgz" "oci://ghcr.io/$owner/charts"
 
   npm:
-    name: npm (CLI and SDK)
+    name: npm (skywake and SDK)
     needs: binaries
     runs-on: ubuntu-24.04
     environment: release
@@ -231,26 +231,31 @@ jobs:
           node-version: 24
       # Trusted publishing needs npm 11.5.1 or newer.
       - run: npm install -g npm@11.21.2
-      - name: Stage the CLI packages
-        working-directory: packages/skywake-cli
-        run: node scripts/stage.mjs "${GITHUB_REF_NAME#v}" ../../dist/skywake-linux-x64 ../../dist/skywake-linux-arm64
+      - run: pnpm install --frozen-lockfile --ignore-scripts --filter skywake...
+      # pnpm packs each package so workspace: versions are replaced; npm publishes it.
       - name: Build the TypeScript SDK
+        working-directory: sdks/typescript
         run: |
-          pnpm install --frozen-lockfile --ignore-scripts --filter @skywake/sdk...
-          cd sdks/typescript
           npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
           pnpm build
-          # pnpm packs it so workspace: versions are replaced; npm publishes it.
           pnpm pack --pack-destination ../../dist-npm
-      - name: Publish the CLI, platform packages first
-        working-directory: packages/skywake-cli
+      - name: Build the skywake package
+        working-directory: packages/skywake
         run: |
-          for package in npm/linux-x64 npm/linux-arm64 .; do
+          node scripts/stage.mjs "${GITHUB_REF_NAME#v}" ../../dist/skywake-linux-x64 ../../dist/skywake-linux-arm64
+          pnpm build
+          pnpm pack --pack-destination ../../dist-npm
+      - name: Publish the platform packages
+        working-directory: packages/skywake
+        run: |
+          for package in npm/linux-x64 npm/linux-arm64; do
             (cd "$package" && npm publish --access public --ignore-scripts)
           done
-      - name: Publish the TypeScript SDK
-        # The ./ matters: without it npm reads the path as a GitHub repository.
-        run: npm publish ./dist-npm/skywake-sdk-*.tgz --access public --ignore-scripts
+      # The ./ matters: without it npm reads the path as a GitHub repository.
+      - name: Publish the SDK, then skywake, which depends on it
+        run: |
+          npm publish ./dist-npm/skywake-sdk-*.tgz --access public --ignore-scripts
+          npm publish ./dist-npm/skywake-[0-9]*.tgz --access public --ignore-scripts
 
   pypi:
     name: PyPI (Python SDK)

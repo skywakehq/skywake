@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-const wrapper = fileURLToPath(new URL("../bin/skywake.js", import.meta.url));
+const wrapper = fileURLToPath(new URL("../bin/skywake.cjs", import.meta.url));
 
 test("the wrapper runs the binary with the same arguments and exit code", () => {
   const dir = mkdtempSync(join(tmpdir(), "skywake-cli-"));

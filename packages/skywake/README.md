@@ -1,13 +1,29 @@
 # skywake
 
-The `skywake` command, from npm:
+Skywake in one package:
+
+```bash
+npm install skywake
+```
+
+```ts
+import { Skywake } from "skywake"; // the SDK: branches and search indexes
+import { createShell } from "skywake/bash"; // a bash shell for agents over a branch
+import { bashTool } from "skywake/ai"; // that shell as a Vercel AI SDK tool
+```
+
+It also installs two commands: `skywake-bash-mcp`, an MCP server with one
+`bash` tool (it reads `SKYWAKE_URL`, `SKYWAKE_KEY`, `SKYWAKE_NAMESPACE` and
+`SKYWAKE_BRANCH`), and `skywake`, the CLI:
 
 ```bash
 npx skywake --help
 npm install -g skywake
 ```
 
-Prebuilt for Linux on x86_64 and arm64 (glibc). npm installs only the
+## The CLI
+
+The `skywake` command is prebuilt for Linux on x86_64 and arm64 (glibc). npm installs only the
 binary for your machine: it is in `@skywake/cli-linux-x64` or
 `@skywake/cli-linux-arm64`, optional dependencies of this package. Elsewhere,
 build the `skywake-cli` crate from source with cargo.
@@ -85,8 +101,9 @@ agents the same indexes as tools: `list_indexes`, `describe_index`,
 
 The release workflow (`.github/workflows/release.yml`) builds the binaries,
 then runs `node scripts/stage.mjs <version> <x64 binary> <arm64 binary>`,
-which sets every version and the repository (from `GITHUB_REPOSITORY`, as
-npm provenance needs), copies each binary into its package under `npm/`,
-and publishes the platform packages before this one.
+which sets every version, adds the platform packages as optional
+dependencies, sets the repository (from `GITHUB_REPOSITORY`, as npm
+provenance needs) and copies each binary into its package under `npm/`. It
+then publishes the platform packages and `@skywake/sdk` before this one.
 
 `SKYWAKE_BINARY` points the wrapper at another binary, for testing.

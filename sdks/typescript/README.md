@@ -3,11 +3,14 @@
 A client for Skywake: branches of a filesystem, and search indexes.
 
 ```bash
-npm install @skywake/sdk
+npm install skywake
 ```
 
+The `skywake` package holds this SDK, `skywake/bash` and the `skywake` command.
+`@skywake/sdk` is the SDK alone, for when you want nothing else.
+
 ```ts
-import { Skywake } from "@skywake/sdk";
+import { Skywake } from "skywake";
 
 const sky = new Skywake({ url: "https://api.skywake.dev", key: process.env.SKYWAKE_KEY! });
 

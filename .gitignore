@@ -19,5 +19,5 @@ benchmarks/cloud/r2/r2.env
 !.env.example
 
 # Binaries the release copies into the npm packages.
-packages/skywake-cli/npm/*/bin/
+packages/skywake/npm/*/bin/
 *.tsbuildinfo

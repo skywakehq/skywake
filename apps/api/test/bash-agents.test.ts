@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { createShell, type Ran } from "@skywake/bash";
-import { bashTool } from "@skywake/bash/ai";
+import { createShell, type Ran } from "skywake/bash";
+import { bashTool } from "skywake/ai";
 import { Skywake } from "@skywake/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -11,7 +11,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { listen, server, shut, skip } from "./helpers.ts";
 
 const NS = "/namespaces/prod%2Fapp";
-const MCP = fileURLToPath(import.meta.resolve("@skywake/bash")).replace(/index\.js$/, "mcp.js");
+const MCP = fileURLToPath(import.meta.resolve("skywake/bash")).replace(/bash\.js$/, "mcp.js");
 
 async function seeded() {
   const s = await server();

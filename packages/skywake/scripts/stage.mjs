@@ -1,5 +1,6 @@
-// Sets the release version, names the repository for npm provenance, and copies
-// each prebuilt binary into its platform package.
+// Sets the release version, adds the platform packages as optional dependencies,
+// names the repository for npm provenance, and copies each prebuilt binary into
+// its platform package.
 import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const [version, x64, arm64] = process.argv.slice(2);
@@ -19,15 +20,18 @@ const update = (path, change) => {
   writeFileSync(file, JSON.stringify(json, null, 2) + "\n");
 };
 
-update("package.json", (json) => {
-  json.version = version;
-  for (const name of Object.keys(json.optionalDependencies))
-    json.optionalDependencies[name] = version;
-});
-for (const [platform, binary] of [
+const platforms = [
   ["linux-x64", x64],
   ["linux-arm64", arm64],
-]) {
+];
+
+update("package.json", (json) => {
+  json.version = version;
+  json.optionalDependencies = Object.fromEntries(
+    platforms.map(([platform]) => [`@skywake/cli-${platform}`, version]),
+  );
+});
+for (const [platform, binary] of platforms) {
   update(`npm/${platform}/package.json`, (json) => (json.version = version));
   const bin = new URL(`npm/${platform}/bin/`, root);
   mkdirSync(bin, { recursive: true });

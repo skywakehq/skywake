@@ -58,7 +58,7 @@ Every number, with its full report: [docs/benchmarks.md](docs/benchmarks.md)
 | ------------------ | --------------------------------------------- |
 | CLI                | `npm install -g skywake`                      |
 | Python, MCP server | `pip install skywake skywake-mcp`             |
-| TypeScript         | `npm install @skywake/sdk`                    |
+| TypeScript, bash   | `npm install skywake`                         |
 | Go                 | `go get github.com/skywakehq/skywake/sdks/go` |
 
 Java, C#, Ruby and Rust SDKs are in [`sdks/`](sdks). Any S3 with conditional writes works: AWS S3,

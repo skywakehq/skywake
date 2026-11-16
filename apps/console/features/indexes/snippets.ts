@@ -115,7 +115,7 @@ function pythonCall(request: Request): string {
 }
 
 const TS_CLIENT = (api: string) => [
-  `import { Skywake } from "@skywake/sdk";`,
+  `import { Skywake } from "skywake";`,
   ``,
   `const sky = new Skywake({ url: ${json(api)}, key: process.env.SKYWAKE_KEY! });`,
 ];
