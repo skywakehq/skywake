@@ -330,6 +330,16 @@ test("images are embedded beside text, and found by what they show", { skip }, a
   assert.deepEqual(await words(s, key, "beach"), ["photos/beach.png"]);
 });
 
+test("an index names the namespace that keeps it up to date", { skip }, async () => {
+  const { s, key } = await started();
+  assert.equal((await s.call("GET", "/indexes/prod%2Ffiles/link", key)).status, 404);
+  await link(s, key, { embed: false });
+  const found = await s.call("GET", "/indexes/prod%2Ffiles/link", key);
+  assert.equal(found.status, 200, JSON.stringify(found.body));
+  assert.equal(found.body.namespace, "prod/app");
+  assert.equal(found.body.index, "prod/files");
+});
+
 test("a link that can't read images says so for each one", { skip }, async () => {
   const { s, key } = await started();
   await link(s, key, { embed: false });

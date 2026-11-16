@@ -178,6 +178,13 @@ export const linksFeature: Feature = {
       return c.json(await shown(c, link), 200);
     });
 
+    api.openapi(routes.getLinkOfIndex, async (c) => {
+      const { index } = await indexFor(c, c.req.valid("param").index, "read");
+      const link = await links.ofIndex(c.var.services.db, index.org, index.name);
+      if (!link) throw notFound(`a link to \`${index.name}\``);
+      return c.json(await shown(c, link), 200);
+    });
+
     api.openapi(routes.unlinkIndex, async (c) => {
       const { ns } = await changeable(c, c.req.valid("param").namespace, "admin");
       const { db } = c.var.services;

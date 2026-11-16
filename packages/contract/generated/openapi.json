@@ -8174,6 +8174,85 @@
         }
       }
     },
+    "/indexes/{index}/link": {
+      "get": {
+        "operationId": "getLinkOfIndex",
+        "tags": [
+          "links"
+        ],
+        "summary": "The namespace whose files keep this index up to date, if one does.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "An index of your organization, such as `prod/products`. Encode `/` as `%2F`.",
+              "example": "prod%2Fproducts"
+            },
+            "required": true,
+            "description": "An index of your organization, such as `prod/products`. Encode `/` as `%2F`.",
+            "name": "index",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexLink"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/namespaces/{namespace}/branches/{branch}/index": {
       "get": {
         "operationId": "getBranchIndex",

@@ -13,7 +13,9 @@ import {
   type SearchHit,
   branchUrl,
   call,
+  useApi,
 } from "./api";
+import { apiPath, indexApi } from "@/lib/paths";
 import { CodeBlock, LangChoice } from "./code";
 import { Label, Select, TextArea, TextField } from "./fields";
 import { ImagePick, type Picked, SHOWN_IMAGE } from "./image-pick";
@@ -69,6 +71,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   const linked = schema.attributes.some((a) => a.name === "chunk");
   const preferred = linked && kinds.some((k) => k.value === "hybrid") ? "hybrid" : kinds[0]!.value;
   const [kind, setKind] = useState<Kind>(preferred);
+  const thumb = useThumbnails(index.name, branch, linked);
   const [column, setColumn] = useState(schema.vectors[0]?.name ?? "");
   const [vector, setVector] = useState("");
   const [image, setImage] = useState<Picked | null>(null);
@@ -390,7 +393,9 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
         </div>
       </form>
 
-      {hits && <Results hits={hits.hits} ms={hits.ms} kind={kind} attributes={include} />}
+      {hits && (
+        <Results hits={hits.hits} ms={hits.ms} kind={kind} attributes={include} thumb={thumb} />
+      )}
 
       <Panel title="As code" action={<LangChoice value={lang} onChange={setLang} />}>
         {code ? (
@@ -459,17 +464,31 @@ function Recall({
 }
 
 type AnyHit = Hit | SearchHit | FusedHit;
+type Thumb = ((path: string) => string) | null;
+
+function useThumbnails(index: string, branch: string, linked: boolean): Thumb {
+  const { loaded } = useApi<{ namespace: string }>(linked ? indexApi(index, "link") : null);
+  if (loaded.state !== "done") return null;
+  const disk = loaded.value.namespace;
+  return (path) =>
+    apiPath(
+      disk,
+      `branches/${encodeURIComponent(branch)}/files/content?path=${encodeURIComponent(path)}`,
+    );
+}
 
 function Results({
   hits,
   ms,
   kind,
   attributes,
+  thumb,
 }: {
   hits: AnyHit[];
   ms: number;
   kind: Kind;
   attributes: string[];
+  thumb: Thumb;
 }) {
   const span = 2 + (kind === "hybrid" ? 2 : 0) + attributes.length;
   return (
@@ -534,11 +553,23 @@ function Results({
                       )}
                       {attributes.map((name) => (
                         <td key={name} className="px-4 text-muted-foreground">
-                          <span
-                            title={format(hit.attributes[name])}
-                            className="line-clamp-2 max-w-md break-words"
-                          >
-                            {format(hit.attributes[name])}
+                          <span className="flex items-center gap-3 py-1">
+                            {name === "path" && thumb && hit.attributes.kind === "image" && (
+                              <span
+                                role="img"
+                                aria-label={format(hit.attributes.path)}
+                                style={{
+                                  backgroundImage: `url("${thumb(String(hit.attributes.path))}")`,
+                                }}
+                                className="size-12 shrink-0 rounded-md bg-muted bg-cover bg-center"
+                              />
+                            )}
+                            <span
+                              title={format(hit.attributes[name])}
+                              className="line-clamp-2 max-w-md break-words"
+                            >
+                              {format(hit.attributes[name])}
+                            </span>
                           </span>
                         </td>
                       ))}

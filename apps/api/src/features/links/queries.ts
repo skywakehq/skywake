@@ -23,6 +23,16 @@ export async function find(db: Db, org: string, namespace: string) {
   return row ?? null;
 }
 
+export async function ofIndex(db: Db, org: string, index: string) {
+  const [row] = await db
+    .select()
+    .from(indexLinks)
+    .where(and(eq(indexLinks.org, org), eq(indexLinks.index, index)))
+    .orderBy(indexLinks.namespace)
+    .limit(1);
+  return row ?? null;
+}
+
 export async function save(db: Db, link: typeof indexLinks.$inferInsert) {
   await db
     .insert(indexLinks)

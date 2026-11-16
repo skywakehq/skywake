@@ -1,6 +1,7 @@
 import { createRoute } from "@hono/zod-openapi";
 
 import { body, errors, json, noContent, signedIn } from "./http.ts";
+import { IndexParams } from "./indexes/routes.ts";
 import { BranchParams, Name, NamespaceParams, Time, z } from "./schemas.ts";
 
 export const MAX_BYTES_DEFAULT = 1 << 20;
@@ -148,6 +149,17 @@ export const getIndexLink = createRoute({
   tags: ["links"],
   security: signedIn,
   request: { params: NamespaceParams },
+  responses: { 200: json(IndexLink, "The link."), ...errors(401, 403, 404) },
+});
+
+export const getLinkOfIndex = createRoute({
+  method: "get",
+  path: "/indexes/{index}/link",
+  operationId: "getLinkOfIndex",
+  tags: ["links"],
+  summary: "The namespace whose files keep this index up to date, if one does.",
+  security: signedIn,
+  request: { params: IndexParams },
   responses: { 200: json(IndexLink, "The link."), ...errors(401, 403, 404) },
 });
 
