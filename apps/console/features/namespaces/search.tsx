@@ -65,9 +65,10 @@ const lines = (text: string) =>
 
 /** Reads the namespace's link; null when it has none. `reload` reads it again. */
 function useIndexLink(ns: string) {
-  const [state, setState] = useState<{ link: IndexLink | null; loading: boolean; error?: string }>(
-    { link: null, loading: true },
-  );
+  const [state, setState] = useState<{ link: IndexLink | null; loading: boolean; error?: string }>({
+    link: null,
+    loading: true,
+  });
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -181,7 +182,9 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
             className="min-h-16"
             aria-label="Paths to include"
           />
-          <span className="text-xs text-muted-foreground">One glob a line. Every file when empty.</span>
+          <span className="text-xs text-muted-foreground">
+            One glob a line. Every file when empty.
+          </span>
         </label>
         <label className="grid gap-1.5">
           <Label>Exclude</Label>
@@ -199,7 +202,9 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
             <TextField
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder={fallback?.model ?? "Embedding model, such as voyage/voyage-multimodal-3.5"}
+              placeholder={
+                fallback?.model ?? "Embedding model, such as voyage/voyage-multimodal-3.5"
+              }
               className="mt-1 font-mono"
               aria-label="Embedding model"
             />
@@ -281,7 +286,9 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
       >
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 px-4 py-4 text-sm">
           <dt className="text-muted-foreground">Include</dt>
-          <dd className="font-mono">{link.include.length ? link.include.join("  ") : "every file"}</dd>
+          <dd className="font-mono">
+            {link.include.length ? link.include.join("  ") : "every file"}
+          </dd>
           <dt className="text-muted-foreground">Exclude</dt>
           <dd className="font-mono">{link.exclude.length ? link.exclude.join("  ") : "nothing"}</dd>
           <dt className="text-muted-foreground">Largest file</dt>

@@ -10,7 +10,9 @@ import { holdsData } from "../src/features/environments/queries.ts";
 import { server, skip } from "./helpers.ts";
 
 const files = (dir: string) =>
-  existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()) : [];
+  existsSync(dir)
+    ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile())
+    : [];
 
 async function pending(s: Awaited<ReturnType<typeof server>>, org: string) {
   const rows = await s.services.db.execute<{ kind: string; folder: string; attempts: number }>(

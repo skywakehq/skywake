@@ -151,7 +151,8 @@ async function served(
       if (asked.filesOnly) {
         if (!listed.has(shown)) out.push(shown);
         listed.add(shown);
-      } else out.push(asked.lines ? `${shown}:${match.line}:${match.text}` : `${shown}:${match.text}`);
+      } else
+        out.push(asked.lines ? `${shown}:${match.line}:${match.text}` : `${shown}:${match.text}`);
     }
   }
   const warning = stopped ? `${name}: stopped after ${LIMIT} matches; narrow the search\n` : "";

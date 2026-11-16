@@ -45,7 +45,11 @@ function understood(args: string[]): Asked | null {
   return asked;
 }
 
-async function served(fs: SkywakeFs, asked: Asked, ctx: CommandContext): Promise<ExecResult | null> {
+async function served(
+  fs: SkywakeFs,
+  asked: Asked,
+  ctx: CommandContext,
+): Promise<ExecResult | null> {
   const scopes = [];
   for (const start of asked.starts) {
     const scope = await fs.served(fs.resolvePath(ctx.cwd, start));

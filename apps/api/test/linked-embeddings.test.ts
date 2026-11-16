@@ -146,7 +146,10 @@ test("partial hits follow whole-word hits, once each", () => {
     highlights: marked,
   });
   const both = merged([hit("a"), hit("b")], [hit("b"), hit("c")], 10);
-  assert.deepEqual(both.map((one) => one.id), ["a", "b", "c"]);
+  assert.deepEqual(
+    both.map((one) => one.id),
+    ["a", "b", "c"],
+  );
   assert.deepEqual(both[2]!.highlights, {});
   assert.equal(merged([hit("a")], [hit("c")], 1).length, 1);
 });
@@ -351,7 +354,15 @@ test("PDFs and Office files are searched by their text", { skip }, async () => {
     { path: "docs/terms.pdf", base64: base64(pdfOf(["Refunds", "A giraffe may return goods."])) },
     { path: "docs/memo.docx", base64: base64(docxOf(["The invoice is due Friday."])) },
     { path: "docs/deck.pptx", base64: base64(pptxOf([["Launch"], ["A sunset over the bay"]])) },
-    { path: "docs/seats.xlsx", base64: base64(xlsxOf([["Customer", "Seats"], ["Dogwood", 9]])) },
+    {
+      path: "docs/seats.xlsx",
+      base64: base64(
+        xlsxOf([
+          ["Customer", "Seats"],
+          ["Dogwood", 9],
+        ]),
+      ),
+    },
     { path: "docs/old.doc", base64: base64(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0, 1])) },
     { path: "docs/broken.pdf", base64: base64(Buffer.from("%PDF-1.4 nothing here")) },
   ]);
@@ -395,7 +406,9 @@ test("a file larger than one write is searchable to its last line", { skip }, as
 test("a link that can't read images says so for each one", { skip }, async () => {
   const { s, key } = await started();
   await link(s, key, { embed: false });
-  await commit(s, key, [{ path: "photos/beach.png", base64: Buffer.from("PNG").toString("base64") }]);
+  await commit(s, key, [
+    { path: "photos/beach.png", base64: Buffer.from("PNG").toString("base64") },
+  ]);
   await s.services.syncer.drain();
   assert.deepEqual((await status(s, key)).skipped, [
     {

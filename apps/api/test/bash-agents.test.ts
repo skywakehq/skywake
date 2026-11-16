@@ -17,7 +17,10 @@ async function seeded() {
   const s = await server();
   const { key } = await s.ready();
   const changes = [{ path: "src/app.ts", text: "export function greet() {}\n" }];
-  const done = await s.call("POST", `${NS}/branches/main/commits`, key, { message: "seed", changes });
+  const done = await s.call("POST", `${NS}/branches/main/commits`, key, {
+    message: "seed",
+    changes,
+  });
   assert.equal(done.status, 201, JSON.stringify(done.body));
   const exists = async (path: string) =>
     (await s.call("GET", `${NS}/branches/main/files?path=${encodeURIComponent(path)}`, key))
@@ -77,7 +80,10 @@ test("the MCP server offers bash over stdio", { skip }, async () => {
         isError: result.isError,
       };
     };
-    assert.deepEqual(await text("find . -name '*.ts'"), { text: "./src/app.ts\n\nexit 0", isError: false });
+    assert.deepEqual(await text("find . -name '*.ts'"), {
+      text: "./src/app.ts\n\nexit 0",
+      isError: false,
+    });
     assert.deepEqual(await text("mkdir docs && echo hi > docs/a.md && cat docs/a.md"), {
       text: "hi\n\nexit 0",
       isError: false,

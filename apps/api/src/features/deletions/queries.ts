@@ -61,9 +61,7 @@ export async function claim(db: Db, server: string, limit: number): Promise<Dele
 }
 
 export async function done(db: Db, row: DeletionRow, server: string) {
-  await db
-    .delete(deletions)
-    .where(and(eq(deletions.id, row.id), eq(deletions.claimedBy, server)));
+  await db.delete(deletions).where(and(eq(deletions.id, row.id), eq(deletions.claimedBy, server)));
 }
 
 /** Try again later, longer each time, up to an hour. */

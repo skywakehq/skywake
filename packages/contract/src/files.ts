@@ -162,7 +162,10 @@ export const findFiles = createRoute({
       limit: count("The most paths to return. 1,000 by default, at most 100,000."),
     }),
   },
-  responses: { 200: json(z.array(FoundPath), "The paths, in name order."), ...errors(400, 401, 403, 404) },
+  responses: {
+    200: json(z.array(FoundPath), "The paths, in name order."),
+    ...errors(400, 401, 403, 404),
+  },
 });
 
 export const FileChange = z

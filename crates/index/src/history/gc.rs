@@ -9,8 +9,8 @@ use futures::{StreamExt, TryStreamExt, stream};
 use object_store::path::Path;
 use object_store::prefix::PrefixStore;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
-use skywake_core::lock::{self, Lease};
 use skywake_core::kind::{Kind, require};
+use skywake_core::lock::{self, Lease};
 use skywake_core::{Hash, Objects};
 
 pub use skywake_core::Collected;

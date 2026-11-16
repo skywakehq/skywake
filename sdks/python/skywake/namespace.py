@@ -73,9 +73,7 @@ class Namespace:
         with `with_index`. Each save is searchable about 30 seconds later, a
         commit at once. The index is made when missing; `embed` is
         `{"model", "dims"}` to embed each file too."""
-        body = compact(
-            {"index": index, "include": include, "exclude": exclude, "maxBytes": max_bytes, "embed": embed}
-        )
+        body = compact({"index": index, "include": include, "exclude": exclude, "maxBytes": max_bytes, "embed": embed})
         return self.sky.call("PUT", f"{self.path}/index", json=body).json()
 
     def index_link(self):

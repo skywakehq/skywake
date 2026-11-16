@@ -149,7 +149,12 @@ export class Buckets {
         this.#renew(id, access, assumed.life);
       } catch (error) {
         // Keep the old keys; try again in a minute, well before they run out.
-        this.#log({ level: "warn", msg: "bucket keys not renewed", region: id, error: String(error) });
+        this.#log({
+          level: "warn",
+          msg: "bucket keys not renewed",
+          region: id,
+          error: String(error),
+        });
         this.#renew(id, access, 75_000);
       }
     }, life * RENEW_AT);

@@ -60,7 +60,6 @@ async function timed<T>(work: () => Promise<T>) {
 /** `""` as unset, else the number. */
 const optional = (text: string) => (text.trim() ? Number(text) : undefined);
 
-
 /** Runs queries by hand, and shows them as code to paste. */
 export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: string }) {
   const { schema } = index;
@@ -486,9 +485,7 @@ function FileCell({ hit, thumb }: { hit: AnyHit; thumb: Thumb }) {
       )}
       <span className="min-w-0">
         <span className="block truncate font-medium">{path}</span>
-        {chunk > 0 && (
-          <span className="text-xs text-faint tabular-nums">passage {chunk + 1}</span>
-        )}
+        {chunk > 0 && <span className="text-xs text-faint tabular-nums">passage {chunk + 1}</span>}
       </span>
     </span>
   );

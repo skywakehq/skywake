@@ -26,9 +26,18 @@ test("Word, PowerPoint and Excel files give their text", async () => {
   assert.deepEqual(await read("d.pptx", pptxOf([["Launch"], ["Pricing", "2 cents"]])), {
     text: "Slide 1\nLaunch\n\nSlide 2\nPricing\n2 cents",
   });
-  assert.deepEqual(await read("s.xlsx", xlsxOf([["Customer", "Seats"], ["Acme", 250]])), {
-    text: "Sheet 1\nCustomer\tSeats\nAcme\t250",
-  });
+  assert.deepEqual(
+    await read(
+      "s.xlsx",
+      xlsxOf([
+        ["Customer", "Seats"],
+        ["Acme", 250],
+      ]),
+    ),
+    {
+      text: "Sheet 1\nCustomer\tSeats\nAcme\t250",
+    },
+  );
 });
 
 test("a broken or empty document says why it can't be read", async () => {

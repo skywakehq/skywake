@@ -79,14 +79,16 @@ class Branch:
 
     def search(self, pattern, path="", limit=100, glob=None, ignore_case=False, at=None):
         """Lines that match a regular expression, like `grep -rn`."""
-        params = compact({
-            "pattern": pattern,
-            "path": path,
-            "limit": limit,
-            "glob": glob,
-            "ignoreCase": "true" if ignore_case else None,
-            "at": at,
-        })
+        params = compact(
+            {
+                "pattern": pattern,
+                "path": path,
+                "limit": limit,
+                "glob": glob,
+                "ignoreCase": "true" if ignore_case else None,
+                "at": at,
+            }
+        )
         return self._call("GET", "/search", params=params).json()
 
     def find(self, glob, path="", kind="any", limit=1000, at=None):

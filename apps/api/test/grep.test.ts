@@ -14,9 +14,10 @@ const hex = (text: string) => gramsOf(text).split(" ");
 test("a pattern needs the trigrams of the text every match holds", () => {
   assert.deepEqual(neededGrams("hello"), [hex("hello")]);
   assert.deepEqual(neededGrams("HeLLo"), [hex("hello")]);
-  assert.deepEqual(neededGrams("foo.*barbaz")!.map((g) => g.sort()), [
-    [...hex("foo"), ...hex("barbaz")].sort(),
-  ]);
+  assert.deepEqual(
+    neededGrams("foo.*barbaz")!.map((g) => g.sort()),
+    [[...hex("foo"), ...hex("barbaz")].sort()],
+  );
   assert.deepEqual(neededGrams("alpha|omega"), [hex("alpha"), hex("omega")]);
   assert.deepEqual(neededGrams("colou?r"), [hex("colo")]);
   assert.deepEqual(neededGrams("a\\.b\\.c"), [hex("a.b.c")]);
@@ -67,7 +68,11 @@ async function commit(s: Server, key: string, changes: object[]) {
 }
 
 async function grep(s: Server, key: string, query: Record<string, string>) {
-  const found = await s.call("GET", `${NS}/branches/main/search?${new URLSearchParams(query)}`, key);
+  const found = await s.call(
+    "GET",
+    `${NS}/branches/main/search?${new URLSearchParams(query)}`,
+    key,
+  );
   assert.equal(found.status, 200, JSON.stringify(found.body));
   const lines = found.body.map((m: { path: string; line: number }) => `${m.path}:${m.line}`);
   return { lines: lines.sort(), searched: found.headers.get("skywake-searched") };
@@ -114,48 +119,53 @@ test("search scans a branch with no index, with globs and any case", { skip }, a
     lines: ["a.ts:1", "b.md:1"],
     searched: "scan",
   });
-  assert.deepEqual((await grep(s, key, { pattern: "needle", glob: "*.ts", ignoreCase: "true" })).lines, [
-    "a.ts:1",
-  ]);
+  assert.deepEqual(
+    (await grep(s, key, { pattern: "needle", glob: "*.ts", ignoreCase: "true" })).lines,
+    ["a.ts:1"],
+  );
 });
 
-test("search on a linked branch reads only files that can match, and sees unsynced changes", { skip }, async () => {
-  const s = await server();
-  const { key } = await linked(s);
-  const old = await commit(s, key, [
-    { path: "src/server.ts", text: "export function handleRequest() {}\n// giraffe" },
-    { path: "src/client.ts", text: "export function sendRequest() {}" },
-    { path: "docs/guide.md", text: "the giraffe guide" },
-  ]);
-  await s.services.syncer.drain();
+test(
+  "search on a linked branch reads only files that can match, and sees unsynced changes",
+  { skip },
+  async () => {
+    const s = await server();
+    const { key } = await linked(s);
+    const old = await commit(s, key, [
+      { path: "src/server.ts", text: "export function handleRequest() {}\n// giraffe" },
+      { path: "src/client.ts", text: "export function sendRequest() {}" },
+      { path: "docs/guide.md", text: "the giraffe guide" },
+    ]);
+    await s.services.syncer.drain();
 
-  assert.deepEqual(await grep(s, key, { pattern: "giraffe" }), {
-    lines: ["docs/guide.md:1", "src/server.ts:2"],
-    searched: "index",
-  });
-  assert.deepEqual(await grep(s, key, { pattern: "function \\w+Request" }), {
-    lines: ["src/client.ts:1", "src/server.ts:1"],
-    searched: "index",
-  });
-  assert.deepEqual((await grep(s, key, { pattern: "giraffe", path: "src" })).lines, [
-    "src/server.ts:2",
-  ]);
-  assert.equal((await grep(s, key, { pattern: "\\w+" })).searched, "scan");
+    assert.deepEqual(await grep(s, key, { pattern: "giraffe" }), {
+      lines: ["docs/guide.md:1", "src/server.ts:2"],
+      searched: "index",
+    });
+    assert.deepEqual(await grep(s, key, { pattern: "function \\w+Request" }), {
+      lines: ["src/client.ts:1", "src/server.ts:1"],
+      searched: "index",
+    });
+    assert.deepEqual((await grep(s, key, { pattern: "giraffe", path: "src" })).lines, [
+      "src/server.ts:2",
+    ]);
+    assert.equal((await grep(s, key, { pattern: "\\w+" })).searched, "scan");
 
-  await commit(s, key, [
-    { path: "docs/guide.md", delete: true },
-    { path: "notes/new.txt", text: "a fresh giraffe" },
-    { path: "src/server.ts", text: "export function handleRequest() {}" },
-  ]);
-  assert.deepEqual(await grep(s, key, { pattern: "giraffe" }), {
-    lines: ["notes/new.txt:1"],
-    searched: "index",
-  });
-  const then = { lines: ["docs/guide.md:1", "src/server.ts:2"], searched: "index" };
-  assert.deepEqual(await grep(s, key, { pattern: "giraffe", at: old }), then);
-  await s.services.syncer.drain();
-  assert.deepEqual(await grep(s, key, { pattern: "giraffe", at: old }), then);
-});
+    await commit(s, key, [
+      { path: "docs/guide.md", delete: true },
+      { path: "notes/new.txt", text: "a fresh giraffe" },
+      { path: "src/server.ts", text: "export function handleRequest() {}" },
+    ]);
+    assert.deepEqual(await grep(s, key, { pattern: "giraffe" }), {
+      lines: ["notes/new.txt:1"],
+      searched: "index",
+    });
+    const then = { lines: ["docs/guide.md:1", "src/server.ts:2"], searched: "index" };
+    assert.deepEqual(await grep(s, key, { pattern: "giraffe", at: old }), then);
+    await s.services.syncer.drain();
+    assert.deepEqual(await grep(s, key, { pattern: "giraffe", at: old }), then);
+  },
+);
 
 test("search on a linked branch also sees what was written around the API", { skip }, async () => {
   const s = await server();

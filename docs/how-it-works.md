@@ -104,7 +104,7 @@ bucket, never a folder:
 ```
 
 - **Each folder says its kind.** `skywake.json` (`{"kind": "filesystem" |
-  "index"}`) is written when the folder is made: by the first branch made
+"index"}`) is written when the folder is made: by the first branch made
   from nothing, or by the index's creation. Both garbage collectors read it
   first and stop on a folder of the other kind, or one holding both. A GC
   sweeps what no root it knows reaches, and it knows only its own kind's

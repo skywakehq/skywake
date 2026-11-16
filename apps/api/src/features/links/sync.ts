@@ -28,7 +28,6 @@ const PRUNE_MS = 60 * 60_000;
 const STAMP_DAYS = 30;
 const PAGE = 1_000;
 
-
 export interface SyncerOptions {
   /** Branches this server syncs at once. */
   concurrency?: number;
@@ -131,7 +130,6 @@ export class Syncer {
     }
   }
 
-
   async #syncOnce(row: links.LinkedBranchRow) {
     const db = this.#db;
     const link = await links.find(db, row.org, row.namespace);
@@ -142,7 +140,11 @@ export class Syncer {
     await this.#stores.ready(ns.region);
     await this.#stores.ready(indexRow.region);
     const engine = this.#stores.engine(ns.region, ns.folder);
-    const index = this.#stores.index(indexRow.region, indexRow.folder, indexes.openOptions(indexRow));
+    const index = this.#stores.index(
+      indexRow.region,
+      indexRow.folder,
+      indexes.openOptions(indexRow),
+    );
 
     let head: string;
     try {

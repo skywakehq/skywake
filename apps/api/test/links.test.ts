@@ -95,7 +95,10 @@ test("a disk linked before its first commit is indexed once files arrive", { ski
     query: "investors",
   });
   assert.equal(hits.status, 200, JSON.stringify(hits.body));
-  assert.deepEqual(hits.body.hits.map((hit: { id: string }) => hit.id), ["deck.md"]);
+  assert.deepEqual(
+    hits.body.hits.map((hit: { id: string }) => hit.id),
+    ["deck.md"],
+  );
 });
 
 test("a link indexes only the files its globs and size let in", { skip }, async () => {

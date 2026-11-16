@@ -33,7 +33,9 @@ export interface ReaderOptions {
 const skipped = (path: string, reason: string): FileDoc => ({ kind: "skipped", path, reason });
 
 function sizeText(bytes: number) {
-  return bytes >= 1 << 20 ? `${Math.round(bytes / (1 << 20))} MiB` : `${Math.round(bytes / 1024)} KiB`;
+  return bytes >= 1 << 20
+    ? `${Math.round(bytes / (1 << 20))} MiB`
+    : `${Math.round(bytes / 1024)} KiB`;
 }
 
 export function walkOrder(a: string, b: string) {
@@ -98,11 +100,7 @@ export class Reader {
     return found;
   }
 
-  async #visit(
-    path: string,
-    each: (path: string, size: number) => Promise<void>,
-    resume = true,
-  ) {
+  async #visit(path: string, each: (path: string, size: number) => Promise<void>, resume = true) {
     const listing = await this.#engine.list(this.#branch, path, this.#at, null, LIST_PAGE);
     if (listing.info.kind === "file") {
       if (!resume || this.#due(path)) await each(path, listing.info.size);

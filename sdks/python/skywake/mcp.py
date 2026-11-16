@@ -36,7 +36,18 @@ from .errors import SkywakeError
 server = MCPServer("skywake")
 state = {}
 
-FILE_TOOLS = ["fork", "list_files", "read_file", "search", "find_files", "write_files", "delete_files", "diff", "log", "merge"]
+FILE_TOOLS = [
+    "fork",
+    "list_files",
+    "read_file",
+    "search",
+    "find_files",
+    "write_files",
+    "delete_files",
+    "diff",
+    "log",
+    "merge",
+]
 WRITE_TOOLS = [
     "fork",
     "write_files",
@@ -96,9 +107,7 @@ def read_file(path: str, offset: int = 0, length: int = 1_000_000, branch: str =
 
 @server.tool(annotations=READ)
 @_api_errors
-def search(
-    pattern: str, path: str = "", glob: str = "", ignore_case: bool = False, branch: str = ""
-) -> list:
+def search(pattern: str, path: str = "", glob: str = "", ignore_case: bool = False, branch: str = "") -> list:
     """Find lines that match a regular expression, like `rg -n`. `glob` keeps only
     matching paths: `*.ts` matches a name at any depth, `src/**/*.ts` a whole path."""
     return _branch(branch).search(pattern, path, glob=glob or None, ignore_case=ignore_case)

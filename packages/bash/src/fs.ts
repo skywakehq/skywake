@@ -125,11 +125,7 @@ export class SkywakeFs implements IFileSystem {
     return Buffer.from(await this.readFileBuffer(path)).toString(encoding);
   }
 
-  async writeFile(
-    path: string,
-    content: FileContent,
-    options?: WriteFileOptions,
-  ): Promise<void> {
+  async writeFile(path: string, content: FileContent, options?: WriteFileOptions): Promise<void> {
     const at = normalize(path);
     const existing = await this.#lookup(at);
     if (existing?.kind === "folder") fail("EISDIR", "open", at);
@@ -139,11 +135,7 @@ export class SkywakeFs implements IFileSystem {
     this.#changes.set(at, { kind: "file", bytes, mode, mtime: new Date() });
   }
 
-  async appendFile(
-    path: string,
-    content: FileContent,
-    options?: WriteFileOptions,
-  ): Promise<void> {
+  async appendFile(path: string, content: FileContent, options?: WriteFileOptions): Promise<void> {
     const at = normalize(path);
     const before = (await this.#lookup(at)) ? await this.readFileBuffer(at) : new Uint8Array();
     await this.writeFile(at, Buffer.concat([before, encode(content, options)]));
@@ -287,7 +279,8 @@ export class SkywakeFs implements IFileSystem {
 }
 
 function seenPending(entry: Held): Seen {
-  if (entry.kind === "folder") return { kind: "folder", size: 0, mode: entry.mode, mtime: entry.mtime };
+  if (entry.kind === "folder")
+    return { kind: "folder", size: 0, mode: entry.mode, mtime: entry.mtime };
   return { kind: "file", size: entry.bytes.length, mode: entry.mode, mtime: entry.mtime };
 }
 

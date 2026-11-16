@@ -250,7 +250,10 @@ export class Writer {
       const byId = new Map(
         rows.map((row) => [JSON.stringify(row.id), String(row.attributes.hash)]),
       );
-      for (const doc of await this.#index.getMany(this.#branch, rows.map((row) => row.id))) {
+      for (const doc of await this.#index.getMany(
+        this.#branch,
+        rows.map((row) => row.id),
+      )) {
         const hash = byId.get(JSON.stringify(doc.id));
         const vector = doc.vectors[name];
         if (hash && vector) found.set(hash, vector);

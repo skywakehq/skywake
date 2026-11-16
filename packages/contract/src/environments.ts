@@ -94,7 +94,10 @@ export const StoreAccess = z
     z.object({
       type: z.literal("keys"),
       accessKeyId: z.string().min(1),
-      secretAccessKey: z.string().min(1).openapi({ description: "Kept sealed; never shown again." }),
+      secretAccessKey: z
+        .string()
+        .min(1)
+        .openapi({ description: "Kept sealed; never shown again." }),
       endpoint: z.url().optional().openapi({
         description: "An S3 compatible endpoint, such as R2's or MinIO's. AWS when not given.",
       }),
@@ -118,7 +121,9 @@ export const StoreTrust = z
     principal: z.string().nullable().openapi({
       description: "The AWS principal to trust in the role's trust policy.",
     }),
-    externalId: z.string().openapi({ description: "The external ID the trust policy must require." }),
+    externalId: z
+      .string()
+      .openapi({ description: "The external ID the trust policy must require." }),
   })
   .openapi("StoreTrust");
 

@@ -126,7 +126,10 @@ export async function moved(
   const due = now ? sql`now()` : sql`now() + ${`${SAVE_DELAY_MS} milliseconds`}::interval`;
   await db
     .update(indexLinkBranches)
-    .set({ dirty: true, due: sql`CASE WHEN ${indexLinkBranches.dirty} THEN least(${indexLinkBranches.due}, ${due}) ELSE ${due} END` })
+    .set({
+      dirty: true,
+      due: sql`CASE WHEN ${indexLinkBranches.dirty} THEN least(${indexLinkBranches.due}, ${due}) ELSE ${due} END`,
+    })
     .where(
       and(
         eq(indexLinkBranches.org, org),
@@ -321,13 +324,7 @@ export async function stamps(db: Db, org: string, index: string, branch: string,
     .limit(limit);
 }
 
-export async function stampOf(
-  db: Db,
-  org: string,
-  index: string,
-  branch: string,
-  commit: string,
-) {
+export async function stampOf(db: Db, org: string, index: string, branch: string, commit: string) {
   const [row] = await db
     .select()
     .from(indexStamps)

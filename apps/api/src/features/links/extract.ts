@@ -96,7 +96,8 @@ function pptx(files: Files): Extracted {
 
 function xlsx(files: Files): Extracted {
   const shared = [...xmlOf(files["xl/sharedStrings.xml"]).matchAll(/<si>([\s\S]*?)<\/si>/g)].map(
-    (item) => [...item[1]!.matchAll(/<t(?:\s[^>]*)?>([^<]*)<\/t>/g)].map((t) => decoded(t[1]!)).join(""),
+    (item) =>
+      [...item[1]!.matchAll(/<t(?:\s[^>]*)?>([^<]*)<\/t>/g)].map((t) => decoded(t[1]!)).join(""),
   );
   const sheets = numbered(files, "xl/worksheets/sheet").map((name, i) => {
     const rows = [...xmlOf(files[name]).matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)].map((row) =>

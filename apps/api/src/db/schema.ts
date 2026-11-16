@@ -517,8 +517,14 @@ export const indexLinks = api.table(
     org: text("org").notNull(),
     namespace: text("namespace").notNull(),
     index: text("index").notNull(),
-    include: text("include").array().notNull().default(sql`'{}'`),
-    exclude: text("exclude").array().notNull().default(sql`'{}'`),
+    include: text("include")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
+    exclude: text("exclude")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     maxBytes: integer("max_bytes").notNull(),
     made: boolean("made").notNull().default(false),
     created: time("created").notNull().defaultNow(),

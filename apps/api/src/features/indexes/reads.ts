@@ -148,14 +148,7 @@ export const indexReadsFeature: Feature = {
         if (partial) partial.include = withField(partial.include, plan.field);
       }
       const requests = partial ? [{ search: words }, { search: partial }] : [{ search: words }];
-      const { results, ...meta } = await answer(
-        index,
-        branch,
-        requests,
-        body.consistency,
-        bill,
-        1,
-      );
+      const { results, ...meta } = await answer(index, branch, requests, body.consistency, bill, 1);
       const found = results[0]!.search!;
       const hits = partial ? merged(found, results[1]!.search!, words.topK) : found;
       if (!plan) return c.json({ hits, ...meta }, 200);
@@ -233,7 +226,10 @@ function withPartial(schema: Schema, hybrid: IndexHybrid): IndexHybrid {
     if (!one.text) return [one];
     const { words, partial } = planPartial(schema, one.text);
     return partial
-      ? [{ ...one, text: words }, { name: `${one.name}.partial`, text: partial }]
+      ? [
+          { ...one, text: words },
+          { name: `${one.name}.partial`, text: partial },
+        ]
       : [{ ...one, text: words }];
   });
   return { ...hybrid, searches, per: perFile(schema, hybrid.per) };

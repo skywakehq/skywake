@@ -35,7 +35,10 @@ class Extractor {
     const id = this.#next++;
     const copy = new Uint8Array(bytes);
     return new Promise((resolve) => {
-      const timer = setTimeout(() => this.#restart({ reason: "took too long to read" }), TIMEOUT_MS);
+      const timer = setTimeout(
+        () => this.#restart({ reason: "took too long to read" }),
+        TIMEOUT_MS,
+      );
       this.#pending.set(id, { resolve, timer });
       worker.ref();
       worker.postMessage({ id, kind, bytes: copy }, [copy.buffer]);

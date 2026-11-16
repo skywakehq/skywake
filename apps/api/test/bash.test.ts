@@ -30,7 +30,10 @@ async function seeded() {
     { path: "src/lib/util.ts", text: "const x = 1;\ngreet();\n" },
     { path: "docs/readme.md", text: "# Readme\n" },
   ];
-  const done = await s.call("POST", `${NS}/branches/main/commits`, key, { message: "seed", changes });
+  const done = await s.call("POST", `${NS}/branches/main/commits`, key, {
+    message: "seed",
+    changes,
+  });
   assert.equal(done.status, 201, JSON.stringify(done.body));
   return { s, key, ...shell(s, key) };
 }
@@ -54,7 +57,10 @@ test("rg, grep -r and find run on the server", { skip }, async () => {
     "src/lib/util.ts:2:greet();",
   ]);
   assert.equal((await out(sh, "cd src/lib && rg -l greet")).stdout, "util.ts\n");
-  assert.equal((await out(sh, "grep -rn 'greet()' src/lib")).stdout, "src/lib/util.ts:2:greet();\n");
+  assert.equal(
+    (await out(sh, "grep -rn 'greet()' src/lib")).stdout,
+    "src/lib/util.ts:2:greet();\n",
+  );
   assert.equal((await out(sh, "grep -rl 'func\\|nothing' .")).stdout, "./src/app.ts\n");
   assert.equal((await out(sh, "rg -g '*.md' -i README")).stdout, "docs/readme.md:# Readme\n");
   assert.equal((await out(sh, "rg absent")).code, 1);
