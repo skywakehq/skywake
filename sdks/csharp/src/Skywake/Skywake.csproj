@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Skywake</RootNamespace>
     <PackageId>Skywake</PackageId>
-    <Version>0.1.3</Version>
+    <Version>0.2.0</Version>
     <Authors>Skywake</Authors>
     <Description>Skywake for .NET: disks (files with branches) and search indexes, for AI agents.</Description>
     <PackageTags>skywake;vector-search;full-text-search;branches;files;rag;ai-agents</PackageTags>

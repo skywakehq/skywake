@@ -1,6 +1,6 @@
 {
   "name": "@skywake/cli-linux-x64",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "The skywake command, built for Linux on x64. Install `skywake` instead.",
   "homepage": "https://skywake.dev",
   "repository": {

@@ -3,7 +3,20 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
-## Unreleased
+## 0.2.0 (2026-11-17)
+
+### v2
+
+- `/v2` API: disks and indexes by short name, the environment taken from the
+  key, and one error shape, `{error: {code, message, hint, request_id}}`.
+- Every SDK (TypeScript, Python, Go, Rust, Java, C#, Ruby) moves to disk and
+  index handles with typed errors.
+- One CLI verb set with `NAME@BRANCH` and `--local`, plus `skywake mcp` and
+  `skywake types`. `skywake login` signs in through the browser.
+- The console addresses things by environment and short name, and Search is a
+  tab on a disk.
+- Every docs example and landing guide is a file that CI runs against a real
+  server.
 
 ### Breaking
 

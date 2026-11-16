@@ -7,7 +7,7 @@ filters), for AI agents. Java 17+, with Jackson for JSON.
 <dependency>
   <groupId>dev.skywake</groupId>
   <artifactId>skywake</artifactId>
-  <version>0.1.3</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
