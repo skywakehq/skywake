@@ -17,24 +17,24 @@ Skywake Cloud bills you for what you use. Every paid plan has a monthly minimum,
 
 ## Usage
 
-| Meter          | Price                     | Measured as                                                               |
-| -------------- | ------------------------- | ------------------------------------------------------------------------- |
-| Index storage  | $0.25 per GB-month        | Each index's size, sampled every hour.                                    |
-| Writes         | $1.50 per GB written      | The logical bytes of every upsert, patch and delete.                      |
-| Queries        | $0.75 per PB scanned      | The index's size for each read, so a query on a 10 GB index scans 10 GB.  |
-| Embeddings     | $0.01 per 1,000 texts     | Each text or image Skywake [embeds](./indexes/embeddings-and-rerank.mdx). |
-| Reranks        | $0.02 per 1,000 documents | Each document sent to a reranker.                                         |
-| Pinned         | $0.001 per GB-hour        | The size of a pinned index for each hour it stays pinned.                 |
-| Files storage  | $0.10 per GB-month        | The bytes a filesystem keeps in the bucket, after compression and dedupe. |
-| File downloads | $0.12 per GB              | The bytes of every file read through the API.                             |
+| Meter          | Price                 | Measured as                                                               |
+| -------------- | --------------------- | ------------------------------------------------------------------------- |
+| Index storage  | $0.25 per GB-month    | Each index's size, sampled every hour.                                    |
+| Writes         | $1.50 per GB written  | The logical bytes of every upsert, update and delete.                     |
+| Queries        | $0.75 per PB scanned  | The index's size for each read, so a query on a 10 GB index scans 10 GB.  |
+| Embeddings     | $0.01 per 1,000 texts | Each text or image Skywake [embeds](./indexes/embeddings-and-rerank.mdx). |
+| Reranks        | $0.02 per 1,000 rows  | Each row sent to a reranker.                                              |
+| Pinned         | $0.001 per GB-hour    | The size of a pinned index for each hour it stays pinned.                 |
+| Files storage  | $0.10 per GB-month    | The bytes a disk keeps in the bucket, after compression and dedupe.       |
+| File downloads | $0.12 per GB          | The bytes of every file read through the API.                             |
 
 A GB is 2³⁰ bytes. Usage is sent to Stripe every few minutes and shows up on your next invoice. Every response has a `billing` field that tells you what that request counted.
 
 ## Files
 
-Files and indexes are billed on the same invoice. If your organization uses only one of them, you pay only for that one.
+Disks and indexes are billed on the same invoice. If your organization uses only one of them, you pay only for that one.
 
-Writing, forking, branching and committing files cost nothing. Files storage counts each filesystem's bytes in the bucket, so if the same data is stored twice in one filesystem, you pay for it once. Skywake measures each filesystem once a day, and again within the hour after it changes. Reads that a mounted daemon makes straight from the bucket are not metered yet.
+Writing files, forking and merging cost nothing. Files storage counts each disk's bytes in the bucket, so if the same data is stored twice on one disk, you pay for it once. Skywake measures each disk once a day, and again within the hour after it changes. Reads that a mounted daemon makes straight from the bucket are not metered yet.
 
 ## Free
 
@@ -50,7 +50,7 @@ The Free plan's monthly limits reset on the first day of each calendar month.
 | Indexes                   | 3      |
 | Files stored              | 5 GB   |
 | File downloads each month | 10 GB  |
-| Filesystems               | 3      |
+| Disks                     | 3      |
 
 If a request would go past a limit, or needs a paid feature, it fails with `402`, the code `payment_required` and a link to upgrade. Nothing you stored is deleted, and the limits lift as soon as you upgrade.
 
@@ -86,7 +86,7 @@ You can't set `SKYWAKE_API_PRICES` together with Stripe billing, because Stripe 
 
 Next, create the products, prices, meters and portal settings in your Stripe account. Log in with the Stripe CLI first, then run the script below. Running it again changes nothing.
 
-```bash
+```bash norun
 node apps/api/scripts/stripe-catalog.ts
 ```
 
@@ -96,4 +96,4 @@ Then add a webhook endpoint at `https://<api>/billing/stripe` that sends these e
 - `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`
 - `invoice.finalized`, `invoice.paid`, `invoice.payment_failed`, `invoice.voided`, `invoice.marked_uncollectible`
 
-With the admin token, you can put an organization on Enterprise through `PUT /v1/orgs/{org}/billing/plan`. This turns on every feature, with no limits and no Stripe subscription.
+With the admin token, you can put an organization on Enterprise through `PUT /v1/orgs/{org}/billing/plan`. This turns on every feature, with no limits and no Stripe subscription. The route has no v2 version yet; `/v1` goes away one release after v2.

@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/ci";
 
 export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; title: string }) {
   return (
@@ -77,9 +78,8 @@ export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           />
         </div>
         <p>
-          You’ll need a Skywake API key and Node in your CI. Set <code>SKYWAKE_URL</code> and{" "}
-          <code>SKYWAKE_KEY</code> as CI secrets, then install the SDK with{" "}
-          <code>npm i @skywake/sdk</code>.
+          You’ll need a Skywake API key and Node in your CI. Set <code>SKYWAKE_API_KEY</code> as a
+          CI secret, then install the SDK with <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Save a warm workspace every night" />
@@ -101,40 +101,16 @@ export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           ]}
         />
         <p>
-          First, a one-time setup. We make a <b>namespace</b>, which is a repository of files, and a
-          branch in it called <code>warm</code>. A branch works like a Git branch for files: each
-          save is a commit, and older commits stay.
+          First, a one-time setup. We make a <b>disk</b>, which is a set of files with branches and
+          history, and fork its <code>main</code> branch into one called <code>warm</code>. A branch
+          works like a Git branch for files: each save is a commit, and older commits stay.
         </p>
-        <Code
-          file="setup.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const ci = await sky.createNamespace("ci/web-app");
-await ci.createBranch("warm");
-`}
-        />
+        <Code file="setup.ts" code={code["setup.ts"]} />
         <p>
           Then, every night, a scheduled job checks out <code>main</code> the way you do today,
-          builds it, and saves the whole folder, cache and all:
+          builds it, and uploads the whole folder, cache and all:
         </p>
-        <Code
-          file="nightly.ts"
-          code={`
-import { execSync } from "node:child_process";
-
-const warm = sky.namespace("ci/web-app").branch("warm");
-
-// Build main first, so the cache is full when we save it.
-execSync("npm run build", { cwd: "./web-app", stdio: "inherit" });
-await warm.commitFolder("./web-app", { message: "Nightly build" });
-`}
-        />
+        <Code file="nightly.ts" code={code["nightly.ts"]} />
         <p>
           Now <code>warm</code> holds last night’s source and the cache built from it, in one
           commit. The <code>.git</code> folder is left out; the branch keeps its own history.
@@ -145,13 +121,7 @@ await warm.commitFolder("./web-app", { message: "Nightly build" });
           When a CI job starts, it <b>forks</b> the warm branch. A fork is a new branch that starts
           at the same commit. It copies no files, so it is instant however big the cache is.
         </p>
-        <Code
-          file="job.ts"
-          code={`
-const id = process.env.CI_JOB_ID;
-const job = await warm.fork(\`jobs/\${id}\`);
-`}
-        />
+        <Code file="job.ts" code={code["job.ts"]} />
         <p>
           Each job now has a branch of its own, like <code>jobs/4812</code>. Whatever it writes
           stays there, so jobs never see each other’s files, and <code>warm</code> does not change.
@@ -164,36 +134,12 @@ const job = await warm.fork(\`jobs/\${id}\`);
           <code>git diff --name-only</code> lists what it changed. The source is usually the small
           part; the cache is the big one.
         </p>
-        <Code
-          file="pull-request.ts"
-          code={`
-import { readFileSync } from "node:fs";
-
-// The files this pull request changed, from its shallow fetch.
-const files = ["src/cart.ts"];
-await job.write(
-  Object.fromEntries(
-    files.map((f) => [f, readFileSync(\`./pr/\${f}\`, "utf8")]),
-  ),
-  \`Job \${id}: pull request files\`,
-);
-`}
-        />
+        <Code file="pull-request.ts" code={code["pull-request.ts"]} />
         <p>
-          Now write the job’s branch into a normal folder and run your build, exactly as you would
-          on a laptop:
+          Now download the job’s branch into a normal folder and run your build, exactly as you
+          would on a laptop:
         </p>
-        <Code
-          file="build.ts"
-          code={`
-await job.checkout("./work");
-const log = execSync("npm run build", {
-  cwd: "./work",
-  encoding: "utf8",
-});
-console.log(log);
-`}
-        />
+        <Code file="build.ts" code={code["build.ts"]} />
         <p>
           The build finds last night’s cache next to the source it came from. Only the file the pull
           request touched is compiled again:
@@ -201,7 +147,7 @@ console.log(log);
         <BuildLogs />
         <Note title="Tip: use a cache that checks contents">
           <p>
-            <code>checkout</code> writes every file fresh, so every file has a new modified time.
+            <code>download</code> writes every file fresh, so every file has a new modified time.
             Build tools that decide what to rebuild by comparing file contents, or hashes of them,
             reuse the cache well. Tools that only compare times may rebuild more than they need.
           </p>
@@ -209,17 +155,11 @@ console.log(log);
 
         <Chapter id="keep" step={4} title="Keep what the job made" />
         <p>
-          When the build is done, save the folder back to the job’s branch. Then ask what changed
-          compared to <code>warm</code>. With <code>{`against: "base"`}</code>, the diff shows only
-          what this job did, not what <code>warm</code> did since the fork.
+          When the build is done, upload the folder back to the job’s branch. Then ask what changed
+          compared to <code>warm</code>. Nothing writes to <code>warm</code> while the job runs, so
+          the diff shows only what this job did.
         </p>
-        <Code
-          file="save.ts"
-          code={`
-await job.commitFolder("./work", { message: \`Job \${id}: output\` });
-const changed = await job.diff("warm", { against: "base" });
-`}
-        />
+        <Code file="save.ts" code={code["save.ts"]} />
         <p>
           For our pull request, <code>changed</code> holds three paths and nothing else:
         </p>
@@ -228,36 +168,24 @@ const changed = await job.diff("warm", { against: "base" });
           items={[
             ["src/cart.ts", "modified: the pull request"],
             ["dist/cart.js", "modified: its build output"],
-            [".cache/55913ced090c339a.js", "added: one new cache entry"],
+            [".cache/832110c92aba50b7.js", "added: one new cache entry"],
           ]}
         />
         <p>
           This is handy when a job fails. The branch is the exact workspace the build saw, so anyone
-          can check it out later and look, instead of guessing from a log.
+          can download it later and look, instead of guessing from a log.
         </p>
 
         <Chapter id="clean" step={5} title="Clean up, and go back in time" />
         <p>When the job passes and you no longer need its workspace, delete its branch:</p>
-        <Code
-          file="cleanup.ts"
-          code={`
-await job.delete();
-`}
-        />
+        <Code file="cleanup.ts" code={code["cleanup.ts"]} />
         <p>
           The nightly job runs <code>nightly.ts</code> again, and each night that changed something
           becomes a new commit on <code>warm</code>. A night with no changes adds nothing. Old
           nights stay in the history. So when a build that passed yesterday fails today, you can
           fork yesterday’s workspace and build it again:
         </p>
-        <Code
-          file="yesterday.ts"
-          code={`
-const [, lastNight] = await warm.log(2);
-const old = await warm.fork("jobs/yesterday", lastNight.hash);
-await old.checkout("./old");
-`}
-        />
+        <Code file="yesterday.ts" code={code["yesterday.ts"]} />
         <p>
           <code>log</code> lists commits newest first, so the second one is the build before the
           latest. The folder you get has that night’s source and that night’s cache, and it builds
@@ -272,7 +200,7 @@ await old.checkout("./old");
             takes about 10 ms.
           </li>
           <li>
-            <b>Always clean up.</b> Put <code>job.delete()</code> in a <code>finally</code> block,
+            <b>Always clean up.</b> Put <code>job.destroy()</code> in a <code>finally</code> block,
             or delete old <code>jobs/</code> branches on a schedule. Keep the ones that failed until
             someone has looked.
           </li>
@@ -315,7 +243,7 @@ await old.checkout("./old");
             [
               "How do I see why a job failed last week?",
               <p key="a">
-                If you kept its branch, check it out: it holds the exact files the build saw. If you
+                If you kept its branch, download it: it holds the exact files the build saw. If you
                 deleted it, fork <code>warm</code> at that night’s commit and add the same pull
                 request files again.
               </p>,
@@ -334,7 +262,7 @@ function CiCover() {
   return (
     <div className="grid">
       <div className={`${row} text-muted-foreground`}>
-        <span className={mono}>ci/web-app</span>
+        <span className={mono}>web-app</span>
         <span className="ml-auto text-[12px]">Branches</span>
       </div>
       <div className={`${row} rounded-md border-transparent bg-foreground/[0.06] px-2`}>

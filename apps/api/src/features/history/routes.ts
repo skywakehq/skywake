@@ -18,6 +18,8 @@ import { covers, resetEdits, revertEdits } from "./undo.ts";
 
 type Resolve = NonNullable<z.output<typeof routes.NewMerge>["resolve"]>;
 
+const COMMIT = /^[0-9a-f]{64}$/;
+
 const addsData = (resolution: Resolve[number]) =>
   resolution.text !== undefined ||
   resolution.base64 !== undefined ||
@@ -124,6 +126,8 @@ export const historyFeature: Feature = {
         ]);
         if (!base) throw badRequest(`\`${branch}\` and \`${from}\` share no history`);
         changes = await ns.engine.diffCommits(base, head);
+      } else if (COMMIT.test(from)) {
+        changes = await ns.engine.diffCommits(from, await ns.engine.head(branch));
       } else {
         changes = await ns.engine.diff(from, branch);
       }

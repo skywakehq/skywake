@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/datasets";
 
 export function DatasetsGuide({
   locale,
@@ -86,8 +87,8 @@ export function DatasetsGuide({
           />
         </div>
         <p>
-          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_URL</code> y{" "}
-          <code>SKYWAKE_KEY</code>, y luego instala el SDK con <code>npm i @skywake/sdk</code>.
+          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_API_KEY</code> y luego
+          instala el SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Guarda el dataset como una versión" />
@@ -106,27 +107,11 @@ export function DatasetsGuide({
           ]}
         />
         <p>
-          La guardaremos en un namespace, un repositorio de archivos, en una rama llamada{" "}
-          <code>main</code>. Una rama funciona como una rama de Git: cada guardado es un commit, y
-          todos los commits se pueden seguir leyendo.
+          La guardaremos en un disco, un conjunto de archivos con ramas e historial, en su primera
+          rama, <code>main</code>. Una rama funciona como una rama de Git: cada guardado es un
+          commit, y todos los commits se pueden seguir leyendo.
         </p>
-        <Code
-          file="save-data.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const data = await sky.createNamespace("ml/tickets");
-const main = await data.createBranch("main");
-const v1 = await main.commitFolder("./tickets", {
-  message: "Support tickets, March export",
-});
-`}
-        />
+        <Code file="save-data.ts" code={code["save-data.ts"]} />
         <p>
           <code>v1</code> es el id del commit que acabamos de crear. Ese id identifica este conjunto
           exacto de archivos, para siempre, pase lo que pase después con <code>main</code>.
@@ -135,35 +120,14 @@ const v1 = await main.commitFolder("./tickets", {
         <Chapter id="train" step={2} title="Entrena desde una versión y anótala" />
         <p>
           Ahora, la parte que faltaba en la historia. Antes de entrenar, escribimos la rama en una
-          carpeta local. <code>checkout</code> lee todos los archivos de un único commit y nos dice
-          cuál. Luego guardamos ese id en una ficha del modelo.
+          carpeta local. <code>download</code> lee todos los archivos de un único commit y devuelve
+          su id. Luego guardamos ese id en una ficha del modelo.
         </p>
         <p>
-          Las fichas viven en su propio namespace, para que el historial del dataset muestre solo
+          Las fichas viven en su propio disco, para que el historial del dataset muestre solo
           cambios en los datos.
         </p>
-        <Code
-          file="train.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-const models = await sky.createNamespace("ml/models");
-const cards = await models.createBranch("main");
-
-async function train(branch: Branch, model: string) {
-  const commit = await branch.checkout(\`./runs/\${model}\`);
-  // Your training code reads ./runs/<model> here.
-  const card = { model, branch: branch.name, commit };
-  await cards.write(
-    { [\`\${model}.json\`]: JSON.stringify(card, null, 2) },
-    \`Trained \${model}\`,
-  );
-  return commit;
-}
-
-await train(main, "ticket-tagger-v7");
-`}
-        />
+        <Code file="train.ts" code={code["train.ts"]} />
         <p>
           La ficha de v7 indica ahora <code>main</code> y el id del commit. Si alguien hace commit
           en <code>main</code> un minuto después, la ficha sigue apuntando a los archivos que v7 vio
@@ -183,14 +147,7 @@ await train(main, "ticket-tagger-v7");
           cambiado desde que se entrenó. No hace falta adivinar. Leemos la ficha y luego el archivo
           de spam en el commit que indica:
         </p>
-        <Code
-          file="open-data.ts"
-          code={`
-const card = JSON.parse(await cards.readText("ticket-tagger-v7.json"));
-const bytes = await main.read("train/spam.jsonl", { at: card.commit });
-console.log(new TextDecoder().decode(bytes));
-`}
-        />
+        <Code file="open-data.ts" code={code["open-data.ts"]} />
         <p>
           La opción <code>at</code> lee un archivo tal como estaba en un commit anterior. La
           respuesta está ahí mismo: la misma línea de spam dos veces, y una solicitud de reembolso
@@ -205,28 +162,13 @@ console.log(new TextDecoder().decode(bytes));
           en su modelo.
         </p>
         <p>
-          Así que hacemos un fork. Un fork es una rama nueva que parte del commit que elijas. No
+          Así que hacemos un fork. Un fork es una rama nueva que parte como copia exacta de otra. No
           copia archivos, así que es rápido por grandes que sean los datos, y nada de lo que hagas
-          en él toca <code>main</code>. Lo haremos partir del commit de v7, los datos que estamos
-          corrigiendo.
+          en él toca <code>main</code>.
         </p>
-        <Code
-          file="fix.ts"
-          code={`
-const fix = await main.fork("fix/spam-labels", card.commit);
-
-const spam = {
-  text: "You won a free cruise, click here",
-  label: "spam",
-};
-await fix.commit("Fix spam labels, drop 2019 tickets", [
-  { path: "train/spam.jsonl", text: JSON.stringify(spam) + "\\n" },
-  { path: "train/old-2019.jsonl", delete: true },
-]);
-`}
-        />
+        <Code file="fix.ts" code={code["fix.ts"]} />
         <p>
-          Un solo commit hace las dos cosas: <code>spam.jsonl</code> conserva un ejemplo real de
+          Dos commits pequeños hacen el trabajo: <code>spam.jsonl</code> conserva un ejemplo real de
           spam, y el archivo obsoleto de 2019 desaparece. En <code>main</code>, los dos archivos
           siguen exactamente igual.
         </p>
@@ -236,18 +178,10 @@ await fix.commit("Fix spam labels, drop 2019 tickets", [
           Antes de que nadie entrene con la corrección, conviene mirar qué cambia de verdad. Un diff
           lista cada archivo que difiere entre dos ramas.
         </p>
-        <Code
-          file="diff.ts"
-          code={`
-for await (const change of fix.allDiff("main", { against: "base" })) {
-  console.log(change.kind, change.path);
-}
-`}
-        />
+        <Code file="diff.ts" code={code["diff.ts"]} />
         <p>
-          <code>{`against: "base"`}</code> compara con el último commit que comparten las dos ramas.
-          Así, aunque <code>main</code> haya recibido tickets de envíos nuevos desde entonces, el
-          diff muestra solo lo que cambió el fork:
+          Nadie ha cambiado <code>main</code> desde el fork, así que el diff muestra solo lo que
+          cambió el fork:
         </p>
         <Changes />
         <p>
@@ -262,20 +196,12 @@ for await (const change of fix.allDiff("main", { against: "base" })) {
           en los tickets de holdout, fusiona el fork en <code>main</code>, para que la próxima
           ejecución de todo el mundo parta de datos limpios.
         </p>
-        <Code
-          file="keep.ts"
-          code={`
-await train(fix, "ticket-tagger-v8");
-
-const merged = await fix.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  console.log("main now has the fix:", merged.head);
-}
-`}
-        />
+        <Code file="keep.ts" code={code["keep.ts"]} />
         <p>
-          El merge lleva la corrección a <code>main</code> y conserva los tickets de envíos que
-          alguien añadió ahí mientras tanto. Y ahora cada modelo tiene un origen claro:
+          El merge lleva la corrección a <code>main</code>. Si alguien cambió los mismos archivos en{" "}
+          <code>main</code> mientras tanto, <code>mergeInto</code> lanza un{" "}
+          <code>MergeConflict</code> que los lista, y no guarda nada. Y ahora cada modelo tiene un
+          origen claro:
         </p>
         <Lineage />
         <p>
@@ -290,32 +216,24 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>Protege main.</b> Haz que <code>main</code> solo cambie con un merge, para que cada
-            cambio en los datos pase antes por un fork y un diff.
+            <b>Dale al entrenamiento una key de lectura.</b> El entrenamiento solo descarga. Una key
+            con el rol <code>read</code>, limitada al disco <code>tickets</code>, no puede cambiar
+            los datos por error.
           </li>
           <li>
             <b>Los forks siguen siendo baratos.</b> Crear una rama tarda unos 13 ms y no copia
             archivos. Dale a cada experimento la suya.
           </li>
           <li>
-            <b>Cualquier modelo se puede volver a entrenar.</b> Haz checkout del commit de su ficha
-            y recuperas exactamente los mismos archivos, byte a byte.
+            <b>Cualquier modelo se puede volver a entrenar.</b> Descarga el commit de su ficha y
+            recuperas exactamente los mismos archivos, byte a byte.
           </li>
           <li>
             <b>Todo sigue siendo tuyo.</b> Los datos y su historial viven en tu propio bucket, no en
             copias repartidas por portátiles.
           </li>
         </ul>
-        <Code
-          file="protect.ts"
-          code={`
-// Needs an admin key. Direct commits to main now fail.
-await main.protect();
-
-// Rebuild v7's training folder, exactly as it was.
-await main.checkout("./runs/v7-again", { at: card.commit });
-`}
-        />
+        <Code file="rebuild.ts" code={code["rebuild.ts"]} />
 
         <Chapter id="questions" title="Preguntas" />
         <Questions
@@ -331,22 +249,22 @@ await main.checkout("./runs/v7-again", { at: card.commit });
               "¿Y si dos personas limpian el mismo archivo a la vez?",
               <p key="a">
                 Cada una trabaja en su propio fork. El primer merge entra. Si el segundo fork cambió
-                el mismo archivo, su merge no guarda nada y lista ese archivo como conflicto, para
-                que decidas qué versión conservar.
+                el mismo archivo, su merge lanza un <code>MergeConflict</code> que nombra ese
+                archivo y no guarda nada, para que decidas qué versión conservar.
               </p>,
             ],
             [
               "¿Cómo vuelvo a una versión anterior de los datos?",
               <p key="a">
-                Llama a <code>reset</code> con el commit que quieras. Deja los archivos como estaban
-                entonces, con un commit nuevo encima, así que el historial intermedio se conserva.
-                Si <code>main</code> está protegida, haz reset en un fork y luego merge.
+                Llama a <code>restore</code> con el commit que quieras. Deja los archivos como
+                estaban entonces, con un commit nuevo encima, así que el historial intermedio se
+                conserva.
               </p>,
             ],
             [
               "¿Puedo ver todos los modelos que hemos entrenado?",
               <p key="a">
-                Sí. Cada ficha es un commit en el namespace <code>ml/models</code>, así que{" "}
+                Sí. Cada ficha es un commit en el disco <code>models</code>, así que{" "}
                 <code>cards.log()</code> lista cada entrenamiento, y cada ficha indica sus datos.
               </p>,
             ],

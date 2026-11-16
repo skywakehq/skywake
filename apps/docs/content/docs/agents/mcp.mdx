@@ -1,85 +1,96 @@
 ---
 title: MCP server
 icon: Plug
-description: skywake-mcp gives an MCP-capable agent tools for its own branch of files and for search indexes.
+description: skywake mcp gives an MCP-capable agent tools for files on a disk, a bash shell, and search indexes.
 ---
 
-Use the MCP server when your agent speaks MCP and you want it to work on its own branch through tools, without a mount or a local folder. Add it to the agent's MCP config:
+Use the MCP server when your agent speaks MCP and you want it to work on a disk through tools, without a mount or a local folder. There is one server, started by `skywake mcp`, `npx skywake mcp` or `uvx skywake mcp`. Add it to the agent's MCP config:
 
 ```json
 {
   "mcpServers": {
     "skywake": {
-      "command": "uvx",
-      "args": ["skywake-mcp"],
+      "command": "npx",
+      "args": ["-y", "skywake", "mcp"],
       "env": {
-        "SKYWAKE_URL": "http://localhost:8080",
-        "SKYWAKE_KEY": "sw_...",
-        "SKYWAKE_NAMESPACE": "prod/app",
-        "SKYWAKE_BRANCH": "agents/42",
-        "SKYWAKE_FORK_FROM": "main"
+        "SKYWAKE_API_KEY": "sw_...",
+        "SKYWAKE_DISK": "app"
       }
     }
   }
 }
 ```
 
-`uvx` downloads and runs the server, so there is nothing to install first. To install it instead, run `pip install skywake-mcp` and use `"command": "skywake-mcp"` with no `args`.
+The server is written in TypeScript, so it needs Node.js in every case. `skywake mcp` and `uvx skywake mcp` start it through `npx`. If you installed the CLI, you can use it instead:
+
+```json
+{
+  "mcpServers": {
+    "skywake": {
+      "command": "skywake",
+      "args": ["mcp"],
+      "env": { "SKYWAKE_DISK": "app", "SKYWAKE_BRANCH": "agent-1" }
+    }
+  }
+}
+```
+
+With no `SKYWAKE_API_KEY`, the server uses the key that `skywake login` saved.
 
 ## Settings
 
-| Variable            | Meaning                                                                                                          |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_URL`       | The API. Required.                                                                                               |
-| `SKYWAKE_KEY`       | An [API key](../security/api-keys.mdx). Required.                                                                |
-| `SKYWAKE_NAMESPACE` | The namespace to work in. Without it, the server offers only the index tools.                                    |
-| `SKYWAKE_BRANCH`    | The branch the file tools use when a call doesn't name one. `main` by default.                                   |
-| `SKYWAKE_FORK_FROM` | Fork `SKYWAKE_BRANCH` from this branch when the server starts. If `SKYWAKE_BRANCH` already exists, it is reused. |
+The server reads the same settings as the SDKs and the CLI, plus two of its own.
 
-When you set a namespace, the server acts as one [session](/reference/api/sessions/startSession). It starts a session named `mcp:BRANCH` when it starts and keeps it alive, and every commit the server makes is recorded under that session.
+| Variable          | Meaning                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| `SKYWAKE_API_KEY` | An [API key](../security/api-keys.mdx). Defaults to the one `skywake login` saved.                           |
+| `SKYWAKE_URL`     | The API, for a self-hosted server. `https://api.skywake.dev` by default.                                     |
+| `SKYWAKE_ENV`     | The environment, for a key that may use every one.                                                           |
+| `SKYWAKE_PROFILE` | Which saved profile to use.                                                                                  |
+| `SKYWAKE_DISK`    | The disk the file tools use. Without it, each file tool call must name a `disk`.                             |
+| `SKYWAKE_BRANCH`  | The branch the file tools read and write. Without it, the server forks a branch for the session (see below). |
 
-If the key can only read, the server starts without a session and without the write tools.
+## Its own branch
 
-If the server can't start, for example because the key is wrong, it keeps running and every tool returns an error with the reason.
+Without `SKYWAKE_BRANCH`, the server never writes to `main`. The first write to a disk forks `main` into a branch named `mcp-` and a random suffix, and every later read and write in the session uses that branch. If the disk doesn't exist yet, the server makes it first. The agent calls `merge` when its work is ready, or you merge the branch yourself.
 
-## File tools
+With `SKYWAKE_BRANCH`, every tool works on that branch, which must exist. To give each agent its own fork, start one server per agent, each with its own branch.
 
-Each file tool takes an optional `branch`. Without it, the tool uses the working branch (`SKYWAKE_BRANCH`).
+## Tools
 
-| Tool           | What it does                                                                        |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `fork`         | Fork a branch as `name`. No data is copied.                                         |
-| `list_files`   | Describe a path; for a folder, what it holds.                                       |
-| `read_file`    | Read a text file, or part of it.                                                    |
-| `search`       | Find lines that match a regular expression, like `grep -rn`.                        |
-| `write_files`  | Write text files as one commit.                                                     |
-| `delete_files` | Delete files or folders as one commit.                                              |
-| `diff`         | Show what changed from another branch.                                              |
-| `log`          | List the newest commits.                                                            |
-| `merge`        | Merge into another branch. On a conflict nothing is saved and the paths are listed. |
+File tools take an optional `disk`, which defaults to `SKYWAKE_DISK`.
 
-## Index tools
+| Tool     | What it does                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------------ |
+| `read`   | Read a file as text, or part of it (`offset`, `length`).                                                     |
+| `write`  | Write files as one commit.                                                                                   |
+| `delete` | Delete files or folders as one commit.                                                                       |
+| `list`   | List a folder: each entry's path, kind, size and modified time.                                              |
+| `grep`   | Find lines that match a regular expression, on the server.                                                   |
+| `find`   | Find paths that match a glob, such as `**/*.md`.                                                             |
+| `query`  | Search the disk's files by meaning and keywords; the best file first, with a snippet.                        |
+| `bash`   | Run a command in a [bash shell](./bash.mdx) over the branch. Each command that changes files is one commit.  |
+| `fork`   | Fork the branch in use as `name`, and work there from then on.                                               |
+| `merge`  | Merge the branch in use into another, `main` by default. Takes `prefer` and `dry_run`. Conflicts are listed. |
+| `log`    | The newest commits of the branch, or of one path.                                                            |
+| `diff`   | What the branch changed compared with another, `main` by default.                                            |
 
-| Tool                  | What it does                                                                                                                |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `list_indexes`        | List the indexes the key can reach, with their columns.                                                                     |
-| `describe_index`      | Show an index's columns, branches and row counts.                                                                           |
-| `query_index`         | Find the nearest documents to a vector, or to text on an `embed` column, with an optional [filter](../indexes/filters.mdx). |
-| `search_index`        | Full-text search (BM25): `query`, with optional `fields`, `filter`, `highlight` and `top_k`.                                |
-| `hybrid_search_index` | Search by words and by meaning at once, and fuse the two rankings. Embeds `query` unless given a `vector`.                  |
-| `upsert_documents`    | Write up to 1,000 documents.                                                                                                |
-| `delete_documents`    | Delete up to 1,000 documents by id.                                                                                         |
-| `fork_index_branch`   | Fork an index branch. Nothing is copied.                                                                                    |
+Index tools take the index's name.
 
-When the API rejects a call, the agent gets the API's message as the tool's error, such as `filter.price.lt: must be number`. That lets the agent fix its call and try again.
+| Tool           | What it does                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `index_query`  | Search an index by `text` or `vector`, with `filter`, `limit`, `mode` and `fields`. No text lists rows. |
+| `index_upsert` | Write rows; each replaces any row with its id. The first write makes the index.                         |
+| `index_delete` | Delete rows by `ids`, or every row a `filter` matches.                                                  |
 
-To give each agent its own fork, start one server per agent, each with its own `SKYWAKE_BRANCH` and with `SKYWAKE_FORK_FROM=main`.
+A `read` key hides `write`, `delete`, `fork`, `merge`, `index_upsert` and `index_delete`. Its `bash` tool still runs, but commits nothing.
+
+When the API rejects a call, the agent gets the API's message and hint as the tool's error. That lets it fix the call and try again.
 
 ## Next
 
 <Cards>
+  <Card href="./bash.mdx" />
   <Card href="./cli.mdx" />
-  <Card href="../filesystem/branches.mdx" />
-  <Card href="../indexes/index.mdx" />
-  <Card href="/reference/sdk" />
+  <Card href="/reference/cli/mcp" />
 </Cards>

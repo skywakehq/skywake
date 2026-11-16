@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/datasets";
 
 export function DatasetsGuide({
   locale,
@@ -89,9 +90,8 @@ export function DatasetsGuide({
           />
         </div>
         <p>
-          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_URL</code> und{" "}
-          <code>SKYWAKE_KEY</code> und installieren Sie dann das SDK mit{" "}
-          <code>npm i @skywake/sdk</code>.
+          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_API_KEY</code> und
+          installieren Sie dann das SDK mit <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Das Dataset als Version speichern" />
@@ -110,27 +110,11 @@ export function DatasetsGuide({
           ]}
         />
         <p>
-          Wir speichern ihn in einem Namespace, also einem Repository für Dateien, auf einem Branch
-          namens <code>main</code>. Ein Branch funktioniert wie ein Git-Branch: Jedes Speichern ist
-          ein Commit, und jeder Commit bleibt lesbar.
+          Wir speichern ihn auf einer Disk, also einer Sammlung von Dateien mit Branches und
+          Historie, auf ihrem ersten Branch <code>main</code>. Ein Branch funktioniert wie ein
+          Git-Branch: Jedes Speichern ist ein Commit, und jeder Commit bleibt lesbar.
         </p>
-        <Code
-          file="save-data.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const data = await sky.createNamespace("ml/tickets");
-const main = await data.createBranch("main");
-const v1 = await main.commitFolder("./tickets", {
-  message: "Support tickets, March export",
-});
-`}
-        />
+        <Code file="save-data.ts" code={code["save-data.ts"]} />
         <p>
           <code>v1</code> ist die ID des gerade erstellten Commits. Diese eine ID bezeichnet genau
           diese Dateien, für immer, egal was später mit <code>main</code> passiert.
@@ -139,35 +123,14 @@ const v1 = await main.commitFolder("./tickets", {
         <Chapter id="train" step={2} title="Aus einer Version trainieren und sie notieren" />
         <p>
           Jetzt der Teil, der in der Geschichte gefehlt hat. Vor dem Training schreiben wir den
-          Branch in einen lokalen Ordner. <code>checkout</code> liest jede Datei aus einem einzigen
-          Commit und sagt uns, aus welchem. Dann speichern wir diese ID auf einer Model Card.
+          Branch in einen lokalen Ordner. <code>download</code> liest jede Datei aus einem einzigen
+          Commit und gibt dessen ID zurück. Dann speichern wir diese ID auf einer Model Card.
         </p>
         <p>
-          Die Karten liegen in einem eigenen Namespace, damit die Historie des Datasets nur
-          Änderungen an den Daten zeigt.
+          Die Karten liegen auf einer eigenen Disk, damit die Historie des Datasets nur Änderungen
+          an den Daten zeigt.
         </p>
-        <Code
-          file="train.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-const models = await sky.createNamespace("ml/models");
-const cards = await models.createBranch("main");
-
-async function train(branch: Branch, model: string) {
-  const commit = await branch.checkout(\`./runs/\${model}\`);
-  // Your training code reads ./runs/<model> here.
-  const card = { model, branch: branch.name, commit };
-  await cards.write(
-    { [\`\${model}.json\`]: JSON.stringify(card, null, 2) },
-    \`Trained \${model}\`,
-  );
-  return commit;
-}
-
-await train(main, "ticket-tagger-v7");
-`}
-        />
+        <Code file="train.ts" code={code["train.ts"]} />
         <p>
           Die Karte für v7 nennt jetzt <code>main</code> und die Commit-ID. Wenn jemand eine Minute
           später auf <code>main</code> committet, zeigt die Karte trotzdem auf die Dateien, die v7
@@ -187,14 +150,7 @@ await train(main, "ticket-tagger-v7");
           hat sich seit dem Training geändert. Wir müssen nicht raten. Wir lesen die Karte und dann
           die Spam-Datei bei dem Commit, den sie nennt:
         </p>
-        <Code
-          file="open-data.ts"
-          code={`
-const card = JSON.parse(await cards.readText("ticket-tagger-v7.json"));
-const bytes = await main.read("train/spam.jsonl", { at: card.commit });
-console.log(new TextDecoder().decode(bytes));
-`}
-        />
+        <Code file="open-data.ts" code={code["open-data.ts"]} />
         <p>
           Die Option <code>at</code> liest eine Datei so, wie sie bei einem älteren Commit war. Die
           Antwort liegt direkt vor uns: dieselbe Spam-Zeile zweimal und eine Erstattungsanfrage, die
@@ -209,30 +165,15 @@ console.log(new TextDecoder().decode(bytes));
           Modell landen.
         </p>
         <p>
-          Also forken wir stattdessen. Ein Fork ist ein neuer Branch, der bei einem Commit Ihrer
-          Wahl beginnt. Er kopiert keine Dateien, ist also schnell, egal wie groß die Daten sind,
-          und nichts, was Sie darauf tun, berührt <code>main</code>. Wir starten ihn beim Commit von
-          v7, also bei den Daten, die wir korrigieren.
+          Also forken wir stattdessen. Ein Fork ist ein neuer Branch, der als exakte Kopie eines
+          anderen beginnt. Er kopiert keine Dateien, ist also schnell, egal wie groß die Daten sind,
+          und nichts, was Sie darauf tun, berührt <code>main</code>.
         </p>
-        <Code
-          file="fix.ts"
-          code={`
-const fix = await main.fork("fix/spam-labels", card.commit);
-
-const spam = {
-  text: "You won a free cruise, click here",
-  label: "spam",
-};
-await fix.commit("Fix spam labels, drop 2019 tickets", [
-  { path: "train/spam.jsonl", text: JSON.stringify(spam) + "\\n" },
-  { path: "train/old-2019.jsonl", delete: true },
-]);
-`}
-        />
+        <Code file="fix.ts" code={code["fix.ts"]} />
         <p>
-          Ein Commit erledigt beides: <code>spam.jsonl</code> behält ein echtes Spam-Beispiel, und
-          die veraltete Datei von 2019 ist weg. Auf <code>main</code> sind beide Dateien genau so
-          wie vorher.
+          Zwei kleine Commits erledigen das: <code>spam.jsonl</code> behält ein echtes
+          Spam-Beispiel, und die veraltete Datei von 2019 ist weg. Auf <code>main</code> sind beide
+          Dateien genau so wie vorher.
         </p>
 
         <Chapter id="diff" step={5} title="Genau sehen, was sich geändert hat" />
@@ -240,18 +181,10 @@ await fix.commit("Fix spam labels, drop 2019 tickets", [
           Bevor jemand auf der Korrektur trainiert, lohnt sich ein Blick darauf, was sie wirklich
           ändert. Ein Diff listet jede Datei auf, die sich zwischen zwei Branches unterscheidet.
         </p>
-        <Code
-          file="diff.ts"
-          code={`
-for await (const change of fix.allDiff("main", { against: "base" })) {
-  console.log(change.kind, change.path);
-}
-`}
-        />
+        <Code file="diff.ts" code={code["diff.ts"]} />
         <p>
-          <code>{`against: "base"`}</code> vergleicht mit dem letzten Commit, den beide Branches
-          gemeinsam haben. Auch wenn <code>main</code> seitdem neue Versand-Tickets bekommen hat,
-          zeigt der Diff also nur, was der Fork geändert hat:
+          Seit dem Fork hat niemand <code>main</code> geändert, also zeigt der Diff nur, was der
+          Fork geändert hat:
         </p>
         <Changes />
         <p>
@@ -265,20 +198,12 @@ for await (const change of fix.allDiff("main", { against: "base" })) {
           den Holdout-Tickets besser ab, mergen Sie den Fork in <code>main</code>, damit der nächste
           Lauf aller auf sauberen Daten startet.
         </p>
-        <Code
-          file="keep.ts"
-          code={`
-await train(fix, "ticket-tagger-v8");
-
-const merged = await fix.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  console.log("main now has the fix:", merged.head);
-}
-`}
-        />
+        <Code file="keep.ts" code={code["keep.ts"]} />
         <p>
-          Der Merge bringt die Korrektur nach <code>main</code> und behält die Versand-Tickets, die
-          jemand dort inzwischen hinzugefügt hat. Und jetzt hat jedes Modell eine klare Quelle:
+          Der Merge bringt die Korrektur nach <code>main</code>. Hat jemand inzwischen dieselben
+          Dateien auf <code>main</code> geändert, wirft <code>mergeInto</code> einen{" "}
+          <code>MergeConflict</code>, der sie auflistet, und speichert nichts. Und jetzt hat jedes
+          Modell eine klare Quelle:
         </p>
         <Lineage />
         <p>
@@ -291,32 +216,24 @@ if (merged.conflicts.length === 0) {
         <p>Ein paar Gewohnheiten, mit denen das funktioniert, während Team und Daten wachsen:</p>
         <ul>
           <li>
-            <b>Schützen Sie main.</b> Lassen Sie <code>main</code> sich nur durch einen Merge
-            ändern, damit jede Änderung an den Daten zuerst durch einen Fork und einen Diff geht.
+            <b>Geben Sie dem Training einen Lese-Key.</b> Das Training lädt nur herunter. Ein Key
+            mit der Rolle <code>read</code>, beschränkt auf die Disk <code>tickets</code>, kann die
+            Daten nicht versehentlich ändern.
           </li>
           <li>
             <b>Forks bleiben günstig.</b> Einen Branch anzulegen dauert etwa 13 ms, und er kopiert
             keine Dateien. Geben Sie jedem Experiment einen eigenen.
           </li>
           <li>
-            <b>Jedes Modell lässt sich neu trainieren.</b> Checken Sie den Commit auf seiner Karte
-            aus, und Sie bekommen genau dieselben Dateien zurück, Byte für Byte.
+            <b>Jedes Modell lässt sich neu trainieren.</b> Laden Sie den Commit auf seiner Karte
+            herunter, und Sie bekommen genau dieselben Dateien zurück, Byte für Byte.
           </li>
           <li>
             <b>Alles bleibt bei Ihnen.</b> Die Daten und ihre Historie liegen in Ihrem eigenen
             Bucket, nicht in Kopien, die über Laptops verstreut sind.
           </li>
         </ul>
-        <Code
-          file="protect.ts"
-          code={`
-// Needs an admin key. Direct commits to main now fail.
-await main.protect();
-
-// Rebuild v7's training folder, exactly as it was.
-await main.checkout("./runs/v7-again", { at: card.commit });
-`}
-        />
+        <Code file="rebuild.ts" code={code["rebuild.ts"]} />
 
         <Chapter id="questions" title="Fragen" />
         <Questions
@@ -332,23 +249,23 @@ await main.checkout("./runs/v7-again", { at: card.commit });
               "Was, wenn zwei Personen gleichzeitig dieselbe Datei bereinigen?",
               <p key="a">
                 Jede arbeitet auf ihrem eigenen Fork. Der erste Merge geht durch. Hat der zweite
-                Fork dieselbe Datei geändert, speichert sein Merge nichts und führt die Datei als
-                Konflikt auf, sodass Sie entscheiden können, welche Version Sie behalten.
+                Fork dieselbe Datei geändert, wirft sein Merge einen <code>MergeConflict</code>, der
+                die Datei nennt, und speichert nichts, sodass Sie entscheiden können, welche Version
+                Sie behalten.
               </p>,
             ],
             [
               "Wie gehe ich zu einer älteren Version der Daten zurück?",
               <p key="a">
-                Rufen Sie <code>reset</code> mit dem gewünschten Commit auf. Damit werden die
+                Rufen Sie <code>restore</code> mit dem gewünschten Commit auf. Damit werden die
                 Dateien wieder so, wie sie damals waren, als ein neuer Commit obendrauf, sodass die
-                Historie dazwischen erhalten bleibt. Ist <code>main</code> geschützt, setzen Sie
-                einen Fork zurück und mergen ihn.
+                Historie dazwischen erhalten bleibt.
               </p>,
             ],
             [
               "Kann ich jedes Modell sehen, das wir trainiert haben?",
               <p key="a">
-                Ja. Jede Karte ist ein Commit im Namespace <code>ml/models</code>, also listet{" "}
+                Ja. Jede Karte ist ein Commit auf der Disk <code>models</code>, also listet{" "}
                 <code>cards.log()</code> jeden Trainingslauf auf, und jede Karte nennt ihre Daten.
               </p>,
             ],

@@ -1,7 +1,7 @@
 ---
 title: Skywake
 icon: House
-description: Versioned filesystems and search indexes for agents, on object storage.
+description: Disks of files and search indexes for agents, with branches, on object storage.
 full: true
 ---
 
@@ -13,15 +13,23 @@ full: true
     { label: "API reference", href: "/reference/api" },
   ]}
 >
-  Skywake keeps whole filesystems and search indexes in object storage, and gives every agent its
-  own branch. Forking a branch copies only a pointer, so no data is copied.
+  Skywake keeps disks of files and search indexes in object storage, and gives every agent its own
+  branch. A fork copies only a pointer, so no data is copied.
 </Hero>
 
-```bash title="Three commands"
-skywake new agent-37 --from main          # instant, whatever the size
-skywake mount agent-37 /work              # a live folder, saved every 2 seconds
-skywake merge agent-37 main               # three-way, conflicts per file
-```
+Set `SKYWAKE_API_KEY`, then:
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../examples/quickstart/quickstart.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../examples/quickstart/quickstart.py
+</include>
+
+<include lang="bash" meta='tab="CLI"'>
+  ../../examples/quickstart/quickstart.sh
+</include>
 
 <Section title="Start here">
   <Cards>
@@ -36,20 +44,20 @@ skywake merge agent-37 main               # three-way, conflicts per file
   <Cards wide>
     <Card
       href="./filesystem/branches.mdx"
-      title="Filesystem"
+      title="Disks"
       icon="FolderTree"
-      description="Branches, forks, mounts, autosave, merge and protection."
+      description="Files with branches: fork, merge, mount, autosave and protection."
     />
     <Card
       href="./indexes/index.mdx"
       title="Search indexes"
-      description="Vector, full-text and hybrid search, with branches."
+      description="Rows searched by meaning, keywords and filters, with branches."
     />
     <Card
       href="./agents/mcp.mdx"
       title="Agents"
       icon="Bot"
-      description="The MCP server, and the CLI from agents."
+      description="The MCP server, the bash tool, and the CLI from agents."
     />
     <Card
       href="./self-hosting/what-to-run.mdx"

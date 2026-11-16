@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/reference-data";
 
 export function ReferenceDataGuide({
   locale,
@@ -81,7 +82,7 @@ export function ReferenceDataGuide({
           <Checklist
             items={[
               "El conjunto de referencia guardado una vez en tu propio bucket, con todas sus versiones.",
-              "Una rama protegida y una key de solo lectura, para que ningún agente pueda cambiar los archivos.",
+              "Una key de solo lectura, limitada a este disco, para que ningún agente pueda cambiar los archivos.",
               "Lecturas de solo un trozo de un archivo grande, para los agentes que necesitan poco.",
               "Una copia local por máquina, compartida por todos sus agentes.",
               "Una forma de publicar una versión nueva que envía a las máquinas solo lo que cambió.",
@@ -89,8 +90,8 @@ export function ReferenceDataGuide({
           />
         </div>
         <p>
-          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_URL</code> y{" "}
-          <code>SKYWAKE_KEY</code>, y luego instala el SDK con <code>npm i @skywake/sdk</code>.
+          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_API_KEY</code> y luego
+          instala el SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Guarda el conjunto de referencia una vez" />
@@ -107,58 +108,30 @@ export function ReferenceDataGuide({
           ]}
         />
         <p>
-          Lo guardaremos en un <b>namespace</b>, que es un repositorio de archivos, en una rama
-          llamada <code>main</code>. Una rama funciona como una rama de Git para archivos: cada
-          guardado es un <b>commit</b>, una versión fija a la que siempre puedes volver.
+          Lo guardaremos en un <b>disco</b>, un conjunto de archivos con ramas e historial. Empieza
+          en una rama llamada <code>main</code>. Una rama funciona como una rama de Git para
+          archivos: cada guardado es un <b>commit</b>, una versión fija a la que siempre puedes
+          volver.
         </p>
-        <Code
-          file="save-refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const genome = await sky.createNamespace("refs/genome");
-const main = await genome.createBranch("main");
-const release = await main.commitFolder("./grch38", {
-  message: "GRCh38, first release",
-});
-`}
-        />
+        <Code file="save-refs.ts" code={code["save-refs.ts"]} />
         <p>
-          <code>commitFolder</code> sube todos los archivos y devuelve el commit nuevo. Los archivos
-          grandes se suben por partes automáticamente, así que no tienes que dividirlos. Guarda{" "}
-          <code>release</code>: identifica esta versión exacta del conjunto, y la volveremos a usar.
+          <code>upload</code> sube todos los archivos como un solo commit. Los archivos grandes se
+          suben por partes automáticamente, así que no tienes que dividirlos. Luego hacemos fork de{" "}
+          <code>main</code> en una rama con el nombre de la versión, <code>grch38</code>. Nadie
+          vuelve a escribir en ella, así que ese nombre siempre identifica esta versión exacta del
+          conjunto.
         </p>
 
         <Chapter id="lock" step={2} title="Hazlo de solo lectura para los agentes" />
         <p>
-          Los datos de referencia nunca deberían cambiar por accidente. Los bloquearemos de dos
-          formas. Primero, <b>protegemos</b> <code>main</code>. Una rama protegida solo cambia con
-          un merge, así que ni siquiera un administrador puede hacer commit directamente en ella.
+          Los datos de referencia nunca deberían cambiar por accidente, así que les damos a los
+          agentes su propia key. Tiene el rol <code>read</code> y solo llega a este disco.
         </p>
+        <Code file="lock.ts" code={code["lock.ts"]} />
         <p>
-          Segundo, les damos a los agentes su propia key. Tiene el rol <code>read</code> y solo
-          llega a este namespace.
-        </p>
-        <Code
-          file="lock.ts"
-          code={`
-await main.protect();
-
-const agents = await sky.keys.create("agents", "read", {
-  namespaces: "refs/genome",
-});
-`}
-        />
-        <p>
-          <code>agents.key</code> se muestra solo esta vez, así que guárdala como secreto enseguida.
-          A partir de ahora, una escritura con esta key falla con “this needs the <code>write</code>{" "}
-          role”. Un commit directo en <code>main</code> también falla, incluso con una key de
-          administrador.
+          <code>agents.key</code> se muestra solo esta vez, así que la guardamos como secreto
+          enseguida. <code>saveSecret</code> representa tu propio almacén de secretos. A partir de
+          ahora, una escritura con esta key falla con “this needs the <code>write</code> role”.
         </p>
         <Note title="Consejo: una key para cada uso">
           <p>
@@ -170,46 +143,20 @@ const agents = await sky.keys.create("agents", "read", {
 
         <Chapter id="read" step={3} title="Lee solo la parte que necesitas" />
         <p>
-          Todos los agentes se conectan con la key de lectura. Lo pondremos en un pequeño archivo,
-          para que el código del agente sea corto:
+          Todos los agentes se conectan con la key de lectura, en la versión que deben usar. La
+          versión sale de <code>REFS_RELEASE</code>, que defines una vez por máquina:
         </p>
-        <Code
-          file="refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.AGENT_KEY!,
-});
-
-export const refs = sky.namespace("refs/genome").branch("main");
-`}
-        />
+        <Code file="refs.ts" code={code["refs.ts"]} />
         <p>
           Algunos agentes solo necesitan un trozo pequeño de un archivo grande: un gen, una región.
           No necesitan el cromosoma entero. Una <b>lectura por rango</b> pide solo esos bytes, así
           que el agente puede empezar a trabajar enseguida.
         </p>
-        <Code
-          file="read.ts"
-          code={`
-import { refs } from "./refs.ts";
-
-const release = process.env.REFS_RELEASE!;
-
-// Only the bytes this agent needs, at the agreed release.
-const piece = await refs.read("chr1.fa", {
-  offset: 120_000,
-  length: 600,
-  at: release,
-});
-`}
-        />
+        <Code file="read.ts" code={code["read.ts"]} />
         <p>
-          La línea <code>at</code> fija la lectura a la primera versión. Aunque llegue una versión
-          nueva mientras el agente se ejecuta, sigue leyendo la misma. Todos los agentes que
-          arranques con el mismo <code>REFS_RELEASE</code> ven exactamente los mismos bytes.
+          <code>refs</code> lee la rama <code>grch38</code>, y nadie escribe en ella. Aunque llegue
+          una versión nueva mientras el agente se ejecuta, sigue leyendo la misma. Todos los agentes
+          que arranques con el mismo <code>REFS_RELEASE</code> ven exactamente los mismos bytes.
         </p>
 
         <Chapter id="machine" step={4} title="Una copia por máquina" />
@@ -219,69 +166,17 @@ const piece = await refs.read("chr1.fa", {
           una vez por máquina, en una carpeta, y haremos que todos los agentes lean de ella.
         </p>
         <p>
-          <code>syncRefs</code> hace el trabajo. En una máquina nueva, hace checkout del conjunto
-          completo. Escribe el commit que obtuvo en un pequeño archivo <code>.release</code>. La
-          próxima vez, si ese commit sigue siendo el más reciente, no hace nada.
+          <code>syncRefs</code> hace el trabajo. En una máquina nueva, descarga la versión completa.
+          Escribe el nombre de la versión en un pequeño archivo <code>.release</code>. La próxima
+          vez, si esa sigue siendo la versión que debe usar la máquina, no hace nada.
         </p>
-        <Code
-          file="sync-refs.ts"
-          code={`
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { refs } from "./refs.ts";
-
-export const REFS = process.env.REFS_DIR ?? "/srv/refs";
-
-export async function syncRefs(dir = REFS) {
-  const mark = join(dir, ".release");
-  const have = await readFile(mark, "utf8").catch(() => "");
-  const { head } = await refs.info();
-  if (have === head) return;
-
-  if (!have) {
-    await refs.checkout(dir, { at: head });
-  } else {
-    // Only the files that changed since this machine's release.
-    const changed = new Map<string, string>();
-    for (const commit of await refs.changes(have)) {
-      for (const change of commit.changes) {
-        changed.set(change.path, change.kind);
-      }
-    }
-    for (const [path, kind] of changed) {
-      const file = join(dir, path);
-      await rm(file, { force: true });
-      if (kind === "removed") continue;
-      await mkdir(dirname(file), { recursive: true });
-      await writeFile(file, await refs.readStream(path, { at: head }));
-    }
-  }
-  await writeFile(mark, head);
-}
-`}
-        />
+        <Code file="sync-refs.ts" code={code["sync-refs.ts"]} />
         <p>
           Ejecútalo una vez cuando arranca la máquina, antes que cualquier agente. Después, cada
           agente lee archivos normales de la carpeta, sin tocar la red:
         </p>
-        <Code
-          file="start.ts"
-          code={`
-import { syncRefs } from "./sync-refs.ts";
-
-// Once when the machine starts, before any agent runs.
-await syncRefs();
-`}
-        />
-        <Code
-          file="agent.ts"
-          code={`
-import { readFile } from "node:fs/promises";
-import { REFS } from "./sync-refs.ts";
-
-const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
-`}
-        />
+        <Code file="start.ts" code={code["start.ts"]} />
+        <Code file="agent.ts" code={code["agent.ts"]} />
         <p>
           Adiós a las veinte descargas. Arrancan veinte agentes, y la máquina ya ha descargado el
           conjunto una vez. Arranca la máquina otra vez mañana y <code>syncRefs</code> ve la misma
@@ -290,35 +185,28 @@ const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
 
         <Chapter id="release" step={5} title="Publica una nueva versión" />
         <p>
-          Sale un parche para el cromosoma 2, con un archivo nuevo para el cromosoma Y. Recuerda:{" "}
-          <code>main</code> solo cambia con un merge. Así que primero hacemos <b>fork</b>: un fork
-          es una rama nueva que empieza como una copia exacta, y no copia datos.
+          Sale un parche para el cromosoma 2, con un archivo nuevo para el cromosoma Y. Cada versión
+          tiene su propia rama, así que hacemos <b>fork</b> de <code>main</code> en{" "}
+          <code>grch38-p2</code>. Un fork es una rama nueva que empieza como una copia exacta, y no
+          copia datos.
         </p>
         <p>
-          Guardamos la carpeta nueva en el fork y luego la <b>fusionamos</b> en <code>main</code>.
-          Un merge lleva los cambios del fork a <code>main</code> como un único commit nuevo.
+          Subimos la carpeta nueva al fork y luego la <b>fusionamos</b> en <code>main</code>, para
+          que <code>main</code> tenga siempre la versión más reciente. Las máquinas en{" "}
+          <code>grch38</code> no notan ningún cambio.
         </p>
-        <Code
-          file="release.ts"
-          code={`
-const next = await main.fork("next");
-await next.commitFolder("./grch38-p2", { message: "GRCh38 patch 2" });
-
-const merged = await next.mergeInto("main");
-if (merged.conflicts.length === 0) await next.delete();
-`}
-        />
+        <Code file="release.ts" code={code["release.ts"]} />
         <p>
           Enviamos la carpeta nueva entera, pero Skywake solo registra los archivos que difieren:{" "}
-          <code>chr2.fa</code> cambió y <code>chrY.fa</code> es nuevo. La próxima vez que una
-          máquina ejecute <code>syncRefs</code>, pedirá los cambios desde su <code>.release</code> y
+          <code>chr2.fa</code> cambió y <code>chrY.fa</code> es nuevo. Define{" "}
+          <code>REFS_RELEASE</code> como <code>grch38-p2</code> en una máquina. La próxima vez que
+          ejecute <code>syncRefs</code>, pedirá los cambios desde su <code>.release</code> y
           descargará solo esos dos archivos:
         </p>
         <ReleaseUpdate />
         <p>
-          Los agentes fijados a la primera versión con <code>at</code> siguen leyendo el antiguo{" "}
-          <code>chr2.fa</code>. Todas las versiones se quedan en el historial, así que no desaparece
-          nada de lo que dependen.
+          Las máquinas que siguen en <code>grch38</code> leen el antiguo <code>chr2.fa</code>. Cada
+          versión se queda como su propia rama, así que no desaparece nada de lo que dependen.
         </p>
 
         <Chapter id="real" title="En producción" />
@@ -343,7 +231,7 @@ if (merged.conflicts.length === 0) await next.delete();
             como en el paso 3.
           </li>
           <li>
-            <b>Cada respuesta tiene una versión.</b> Registra el commit de <code>.release</code>{" "}
+            <b>Cada respuesta tiene una versión.</b> Registra el nombre de <code>.release</code>{" "}
             junto a cada resultado. Semanas después, puedes leer los archivos exactos de los que
             salió esa respuesta.
           </li>
@@ -359,39 +247,39 @@ if (merged.conflicts.length === 0) await next.delete();
             [
               "¿Puede un agente cambiar los archivos de referencia por error?",
               <p key="a">
-                No a través de Skywake. Su key tiene el rol de lectura, así que toda escritura
-                falla. Y <code>main</code> está protegida, así que incluso una key que puede
-                escribir tiene que pasar por un merge.
+                No a través de Skywake. Su key tiene el rol de lectura, así que toda escritura falla
+                con un <code>PermissionError</code>.
               </p>,
             ],
             [
               "¿Una versión nueva vuelve a subirlo todo?",
               <p key="a">
-                <code>commitFolder</code> envía la carpeta entera, pero solo cuentan como cambios
-                los archivos que difieren. Las máquinas descargan solo esos.
+                <code>upload</code> envía la carpeta entera, pero solo cuentan como cambios los
+                archivos que difieren. Las máquinas descargan solo esos.
               </p>,
             ],
             [
               "¿Cómo vuelvo a una versión anterior?",
               <p key="a">
-                Cada versión es un commit, y los commits se conservan. Lee cualquier archivo con{" "}
-                <code>at</code> apuntando a la versión que quieras, o haz checkout de ese commit en
-                su propia carpeta.
+                Cada versión es una rama, y las ramas se conservan. Vuelve a poner{" "}
+                <code>REFS_RELEASE</code> en la versión que quieras, y <code>syncRefs</code>{" "}
+                descarga solo los archivos que difieren.
               </p>,
             ],
             [
               "¿Y si un archivo es más grande que la memoria de la máquina?",
               <p key="a">
-                Checkout y <code>readStream</code> escriben los archivos a disco por streaming, así
-                que un archivo nunca tiene que caber entero en memoria.
+                <code>download</code> y <code>{`read(path, { as: "stream" })`}</code> escriben los
+                archivos a disco por streaming, así que un archivo nunca tiene que caber entero en
+                memoria.
               </p>,
             ],
             [
               "¿Y si una versión añade o quita carpetas enteras?",
               <p key="a">
                 <code>syncRefs</code> gestiona cambios en archivos sueltos, que es como cambian la
-                mayoría de las versiones de referencia. Para una reorganización mayor, haz checkout
-                de la versión nueva en una carpeta limpia.
+                mayoría de las versiones de referencia. Para una reorganización mayor, descarga la
+                versión nueva en una carpeta limpia.
               </p>,
             ],
           ]}

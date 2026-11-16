@@ -11,32 +11,59 @@ scripts/start.sh    # everything in Docker; the console on http://localhost:3100
 
 It installs what's missing first, and asks before each install. [Read the docs →](https://skywake.dev/docs)
 
-## Filesystem
+## Quickstart
+
+Set `SKYWAKE_API_KEY` (or run `skywake login`), then:
+
+```ts
+import { Skywake } from "skywake";
+
+const app = new Skywake().disk("app");
+await app.write("hello.txt", "hi");
+console.log(await app.read("hello.txt"));
+```
+
+```python
+from skywake import Skywake
+
+app = Skywake().disk("app")
+app.write("hello.txt", "hi")
+print(app.read("hello.txt"))
+```
 
 ```bash
-skywake new main
-skywake commit main ./project -m "base image"
-skywake new agent-37 --from main     # instant, at any size
-skywake mount agent-37 /work         # Linux; saves to the bucket every 2 s
-skywake merge agent-37 main          # three-way, conflicts per file
+echo hi | skywake write app/hello.txt
+skywake read app/hello.txt
+```
+
+## Disks
+
+A disk holds files, with branches and history. Fork one for each agent, then merge back.
+
+```bash
+skywake upload ./project app -m "base image"
+skywake fork app agent-37            # instant, at any size
+skywake mount app@agent-37 /work     # Linux; saves to the bucket every 2 s
+skywake merge app@agent-37           # three-way, conflicts per file
 ```
 
 - **Fork in milliseconds**, whatever the size
 - **Mount without downloading**: files stream in as they're read
 - **Lose at most 2 seconds** to `kill -9`; `fsync` means saved
-- **Merges, claims and sessions** for many agents on one codebase
+- **Search files** by meaning with `skywake query app "..."`, or with `grep` and `find`
 
-## Search index
+## Indexes
 
-Vector, full-text and hybrid search, kept in the same bucket and branched like files.
+An index holds rows you search by meaning, keywords and filters, kept in the same bucket and
+branched like files. The first upsert creates it, and text is embedded for you.
 
 ```bash
-skywake index create prod/products --vector embedding:768 --attr price:number
-skywake index upsert prod/products products.jsonl
-skywake index query prod/products --vector-file q.json -k 10 -f "price < 10"
+skywake upsert products products.jsonl
+skywake query products "shoes for running" --filter "price < 100"
+skywake fork products draft
 ```
 
-- **Filters, BM25, hybrid and rerank** in one query
+- **Meaning, keywords and filters** in one query
 - **Fork an index** to try writes without touching `main`
 - **Pin** hot indexes in memory, across replicas
 
@@ -54,14 +81,14 @@ Every number, with its full report: [docs/benchmarks.md](docs/benchmarks.md)
 
 ## Install
 
-| Use                | Install                                       |
-| ------------------ | --------------------------------------------- |
-| CLI                | `npm install -g skywake`                      |
-| Python, MCP server | `pip install skywake skywake-mcp`             |
-| TypeScript, bash   | `npm install skywake`                         |
-| Go                 | `go get github.com/skywakehq/skywake/sdks/go` |
+| Use                   | Install                                        |
+| --------------------- | ---------------------------------------------- |
+| CLI, MCP server       | `npm install -g skywake`, then `skywake login` |
+| Python                | `pip install skywake`                          |
+| TypeScript, bash tool | `npm install skywake`                          |
+| Go                    | `go get github.com/skywakehq/skywake/sdks/go`  |
 
-Java, C#, Ruby and Rust SDKs are in [`sdks/`](sdks). Any S3 with conditional writes works: AWS S3,
+Java, C#, Ruby and Rust SDKs are in [`sdks/`](sdks). `skywake mcp` runs the MCP server for agents. Any S3 with conditional writes works: AWS S3,
 Cloudflare R2, RustFS and more.
 
 ## Self-host

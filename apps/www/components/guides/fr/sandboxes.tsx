@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/sandboxes";
 
 export function SandboxesGuide({
   locale,
@@ -42,10 +43,9 @@ export function SandboxesGuide({
           ["plan", "Ce que nous allons construire"],
           ["base", "1. Enregistrer le workspace de base une fois"],
           ["fork", "2. Donner sa propre branche à la sandbox"],
-          ["session", "3. Dire qui travaille dessus"],
-          ["work", "4. Enregistrer après chaque étape"],
-          ["resume", "5. Reprendre le job sur une nouvelle machine"],
-          ["finish", "6. Garder le résultat, jeter la sandbox"],
+          ["work", "3. Enregistrer après chaque étape"],
+          ["resume", "4. Reprendre le job sur une nouvelle machine"],
+          ["finish", "5. Garder le résultat, jeter la sandbox"],
           ["scale", "Faire tourner beaucoup de sandboxes"],
           ["questions", "Questions"],
         ]}
@@ -81,14 +81,14 @@ export function SandboxesGuide({
               "Un workspace de base, enregistré une fois, dont part chaque sandbox.",
               "Une branche par sandbox, pour que chaque job travaille sur sa propre copie.",
               "Une sauvegarde après chaque étape, avec le fichier et la note d’avancement ensemble.",
-              "Un moyen de voir quelle sandbox est vivante, et laquelle s’est arrêtée.",
+              "Un historique de chaque étape, pour voir où un job s’est arrêté.",
               "Un job planté qui continue depuis sa dernière sauvegarde sur une nouvelle machine.",
             ]}
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="base" step={1} title="Enregistrer le workspace de base une fois" />
@@ -107,27 +107,13 @@ export function SandboxesGuide({
           ]}
         />
         <p>
-          Nous l’enregistrons une fois, sur une branche appelée <code>base</code>. Une branche est
-          une suite de versions enregistrées d’un dossier, comme une branche Git pour fichiers.
-          Chaque enregistrement est un commit.
+          Nous l’enregistrons une fois sur un <b>disque</b> : un ensemble de fichiers avec des
+          branches et un historique, comme un dépôt Git pour fichiers. Chaque disque commence avec
+          une branche appelée <code>main</code>. Chaque enregistrement est un commit.
         </p>
-        <Code
-          file="save-base.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const app = await sky.createNamespace("sandboxes/shop-app");
-const base = await app.createBranch("base");
-await base.commitFolder("./workspace", { message: "Base workspace" });
-`}
-        />
+        <Code file="save-base.ts" code={code["save-base.ts"]} />
         <p>
-          Le namespace <code>sandboxes/shop-app</code> contient les branches de ce projet. Cette
+          Le disque <code>shop-app</code> contient ce projet. La première écriture le crée. Cette
           étape se fait une seule fois, pas une fois par sandbox.
         </p>
 
@@ -135,80 +121,25 @@ await base.commitFolder("./workspace", { message: "Base workspace" });
         <p>
           Quand une sandbox démarre, elle reçoit sa propre branche, qui porte son nom. Nous la
           créons avec un <b>fork</b> : une nouvelle branche qui part exactement de là où se trouve{" "}
-          <code>base</code>. Un fork ne copie rien, il est donc prêt aussitôt, quelle que soit la
+          <code>main</code>. Un fork ne copie rien, il est donc prêt aussitôt, quelle que soit la
           taille du workspace.
         </p>
-        <Code
-          file="new-sandbox.ts"
-          code={`
-const sandbox = await base.fork("sb-1842");
-await sandbox.checkout("./sandbox");
-`}
-        />
+        <Code file="new-sandbox.ts" code={code["new-sandbox.ts"]} />
         <p>
-          <code>checkout</code> écrit les fichiers de la branche dans un dossier normal sur le
-          disque de la sandbox. L’agent y travaille avec ses outils habituels. Les autres sandboxes
-          ont leurs propres forks, elles ne touchent donc jamais aux fichiers des autres.
+          Le fork est créé une seule fois, par ce qui démarre vos sandboxes. La sandbox ouvre
+          ensuite la branche par son nom, et <code>download</code> écrit ses fichiers dans un
+          dossier normal sur la machine. L’agent y travaille avec ses outils habituels. Les autres
+          sandboxes ont leurs propres forks, elles ne touchent donc jamais aux fichiers des autres.
         </p>
 
-        <Chapter id="session" step={3} title="Dire qui travaille dessus" />
-        <p>
-          Plus tard, une nouvelle machine devra savoir une chose : l’ancienne sandbox a-t-elle
-          vraiment disparu, ou est-elle juste lente ? Deux petites idées répondent à cette question.
-        </p>
-        <p>
-          Une <b>session</b> est un battement de cœur. Tant que la sandbox est vivante, elle dit à
-          Skywake « toujours là » toutes les 20 secondes. Si une minute passe sans signal, la
-          session prend fin. Un <b>claim</b> est une note sur la branche qui indique quelle session
-          y travaille. Il prend fin avec la session.
-        </p>
-        <Code
-          file="session.ts"
-          code={`
-import { hostname } from "node:os";
-
-const session = await app.startSession(\`sb-1842 on \${hostname()}\`);
-session.keepAlive();
-await sandbox.claim("", session.id);
-`}
-        />
-        <p>
-          Le chemin vide réserve toute la branche. Chaque sauvegarde que nous ferons ensuite porte
-          aussi l’id de la session, si bien que l’historique montre quelle machine a fait quoi.
-        </p>
-
-        <Chapter id="work" step={4} title="Enregistrer après chaque étape" />
+        <Chapter id="work" step={3} title="Enregistrer après chaque étape" />
         <p>
           Passons au job lui-même. L’agent traite les fichiers de test dans l’ordre. Après chacun,
           nous enregistrons deux fichiers en un seul commit : le test qu’il vient de modifier, et{" "}
           <code>progress.json</code>, une toute petite note qui indique combien de fichiers sont
           faits.
         </p>
-        <Code
-          file="work.ts"
-          code={`
-import { readFile, readdir } from "node:fs/promises";
-
-const saved = await readFile("./sandbox/progress.json", "utf8")
-  .catch(() => \`{ "done": 0 }\`);
-const progress = JSON.parse(saved);
-const tests = (await readdir("./sandbox/tests")).sort();
-
-for (const name of tests.slice(progress.done)) {
-  const path = \`tests/\${name}\`;
-  await migrate(\`./sandbox/\${path}\`);
-  progress.done += 1;
-  await sandbox.write(
-    {
-      [path]: await readFile(\`./sandbox/\${path}\`, "utf8"),
-      "progress.json": JSON.stringify(progress),
-    },
-    \`Migrated \${path}\`,
-    session.id,
-  );
-}
-`}
-        />
+        <Code file="work.ts" code={code["work.ts"]} />
         <p>
           Ici, <code>migrate</code> représente votre agent : il réécrit un fichier sur place. La
           boucle part de <code>progress.done</code> : sur une sandbox neuve, elle commence au
@@ -228,72 +159,50 @@ for (const name of tests.slice(progress.done)) {
           </p>
         </Note>
 
-        <Chapter id="resume" step={5} title="Reprendre le job sur une nouvelle machine" />
+        <Chapter id="resume" step={4} title="Reprendre le job sur une nouvelle machine" />
         <p>
-          Imaginons maintenant que la machine soit reprise après le fichier 31. Ses battements de
-          cœur s’arrêtent, et environ une minute plus tard, sa session prend fin et le claim avec.
+          Imaginons maintenant que la machine soit reprise après le fichier 31. Tout ce qu’elle a
+          enregistré est toujours sur la branche.
         </p>
         <p>
-          Une nouvelle sandbox démarre sur une autre machine. Créez le client comme à l’étape 1,
-          puis ouvrez la même branche :
+          Une nouvelle sandbox démarre sur une autre machine. Créez le client comme à l’étape 1.
+          Avant de commencer, elle peut lire les derniers commits de la branche pour voir où le job
+          s’est arrêté :
         </p>
-        <Code
-          file="resume.ts"
-          code={`
-const app = sky.namespace("sandboxes/shop-app");
-const sandbox = app.branch("sb-1842");
-
-// The old machine's session ends a minute after its last heartbeat.
-while ((await sandbox.claims()).length > 0) {
-  await new Promise((wait) => setTimeout(wait, 5_000));
-}
-await sandbox.checkout("./sandbox");
-`}
-        />
+        <Code file="resume.ts" code={code["resume.ts"]} />
         <p>
-          Nous attendons que plus personne ne réserve la branche, pour que deux machines n’y
-          travaillent jamais en même temps. Ensuite, le checkout ramène chaque fichier enregistré,
-          et <code>progress.json</code> indique 31.
-        </p>
-        <p>
-          Relancez maintenant le code des étapes 3 et 4, sans rien changer. La nouvelle machine
-          démarre sa propre session, réserve la branche, et la boucle reprend au fichier 32.
+          Le commit le plus récent est <code>Migrated tests/t31.test.js</code>. Ouvrez maintenant la
+          branche et téléchargez-la comme à l’étape 2, puis relancez l’étape 3 sans rien changer.{" "}
+          <code>download</code> ramène chaque fichier enregistré, <code>progress.json</code> indique
+          31, et la boucle reprend au fichier 32.
         </p>
         <Timeline />
+        <Note title="Astuce : une machine par branche">
+          <p>
+            Ne démarrez la nouvelle sandbox qu’une fois l’ancienne arrêtée. Votre fournisseur de
+            sandboxes vous le dit. Deux machines sur une même branche referaient les mêmes fichiers.
+          </p>
+        </Note>
 
-        <Chapter id="finish" step={6} title="Garder le résultat, jeter la sandbox" />
+        <Chapter id="finish" step={5} title="Garder le résultat, jeter la sandbox" />
         <p>
           Quand le dernier fichier est fait, le job est terminé. La note d’avancement a rempli son
           rôle, nous la supprimons donc. Puis nous regardons ce qui a changé, et nous faisons un{" "}
-          <b>merge</b> de la sandbox dans <code>base</code>, ce qui apporte ses changements dans
+          <b>merge</b> de la sandbox dans <code>main</code>, ce qui apporte ses changements dans
           cette branche.
         </p>
-        <Code
-          file="finish.ts"
-          code={`
-await sandbox.commit(
-  "Job done",
-  [{ path: "progress.json", delete: true }],
-  session.id,
-);
-const changed = await sandbox.diff("base");
-console.log(\`\${changed.length} files changed\`);
-
-const merged = await sandbox.mergeInto("base");
-if (merged.conflicts.length === 0) {
-  await session.end();
-  await sandbox.delete();
-}
-`}
-        />
+        <Code file="finish.ts" code={code["finish.ts"]} />
         <p>
           Le diff liste les 40 tests, et rien d’autre. Après le merge, la prochaine sandbox qui
-          forke <code>base</code> démarre avec les nouveaux tests. La branche de la sandbox est
-          supprimée, et la machine peut être jetée sans rien à perdre dessus.
+          forke <code>main</code> démarre avec les nouveaux tests. <code>destroy</code> supprime la
+          branche de la sandbox, et la machine peut être jetée sans rien à perdre dessus.
         </p>
         <p>
-          Si le résultat du job n’est pas destiné à <code>base</code>, sautez le merge. Lisez ce
-          dont vous avez besoin sur la branche, puis supprimez-la.
+          Si <code>main</code> a changé les mêmes lignes entre-temps, <code>mergeInto</code> lève
+          une <code>MergeConflict</code> et n’enregistre rien. La branche reste alors là, pour que
+          vous puissiez la regarder. Si le résultat du job n’est pas destiné à <code>main</code>,
+          sautez le merge. Lisez ce dont vous avez besoin sur la branche, puis supprimez-la avec{" "}
+          <code>destroy</code>.
         </p>
 
         <Chapter id="scale" title="Faire tourner beaucoup de sandboxes" />
@@ -303,21 +212,20 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>Une base, beaucoup de forks.</b> Chaque sandbox forke la même base. Un fork ne copie
-            rien : environ 95 ms pour un workspace de n’importe quelle taille.
+            <b>Une base, beaucoup de forks.</b> Chaque sandbox forke le même <code>main</code>. Un
+            fork ne copie rien : environ 95 ms pour un workspace de n’importe quelle taille.
           </li>
           <li>
             <b>Enregistré veut dire enregistré.</b> Tuer une machine avec <code>kill -9</code> ne
             perd aucune écriture enregistrée. Seule l’étape en cours est rejouée.
           </li>
           <li>
-            <b>Voyez qui est vivant.</b> <code>app.sessions()</code> liste les sandboxes qui
-            envoient encore des battements de cœur. Une branche sans claim est libre pour qu’une
-            nouvelle machine la reprenne.
+            <b>Voyez où en est un job.</b> <code>{'sandbox.read("progress.json")'}</code> lit la
+            note sans télécharger la branche.
           </li>
           <li>
             <b>Nettoyez au fur et à mesure.</b> Supprimez la branche de chaque sandbox quand son job
-            est terminé. La base reste.
+            est terminé. <code>main</code> reste.
           </li>
           <li>
             <b>Tout reste chez vous.</b> Chaque sauvegarde arrive dans votre propre bucket, pas sur
@@ -344,20 +252,18 @@ if (merged.conflicts.length === 0) {
               </p>,
             ],
             [
-              "La nouvelle machine peut-elle démarrer en moins d’une minute ?",
+              "Deux sandboxes peuvent-elles travailler sur une même branche ?",
               <p key="a">
-                Oui. Passez un délai plus court au démarrage de la session, par exemple{" "}
-                <code>app.startSession(label, 15)</code>, et envoyez les battements de cœur plus
-                souvent en conséquence, par exemple <code>session.keepAlive(5_000)</code>. La
-                session prend alors fin 15 secondes après le dernier battement.
+                Gardez-en une seule. Donnez plutôt à chaque sandbox son propre fork. Un fork ne
+                copie rien, il n’y a donc aucune raison de partager.
               </p>,
             ],
             [
               "Puis-je annuler une étape qui a mal tourné ?",
               <p key="a">
                 Oui. Chaque sauvegarde est un commit, et <code>sandbox.log()</code> les liste.
-                Appelez <code>sandbox.reset(commit)</code> pour remettre les fichiers dans l’état de
-                ce commit, sous forme d’un nouveau commit par-dessus.
+                Appelez <code>sandbox.restore(commit)</code> pour remettre les fichiers dans l’état
+                de ce commit, sous forme d’un nouveau commit par-dessus.
               </p>,
             ],
           ]}
@@ -375,7 +281,7 @@ function SandboxCover() {
     <div className="grid">
       <div className={row}>
         <GitBranch className="size-3.5 text-muted-foreground" /> sb-1842
-        <span className={`ml-auto ${mono} text-muted-foreground`}>sandboxes/shop-app</span>
+        <span className={`ml-auto ${mono} text-muted-foreground`}>shop-app</span>
       </div>
       <div className={`${row} ${mono} text-muted-foreground`}>
         Migrated tests/t30.test.js

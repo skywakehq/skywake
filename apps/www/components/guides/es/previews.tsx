@@ -1,6 +1,6 @@
 // Guía: cómo ejecutar la preview de cada pull request sobre su propia copia
 // completa de los datos de la app, y luego publicar el cambio o tirar la copia.
-import { ArrowRight, GitBranch, Lock, X } from "lucide-react";
+import { ArrowRight, GitBranch, X } from "lucide-react";
 
 import type { HomeMessages } from "@/content/messages";
 import type { Locale } from "@/lib/i18n";
@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/previews";
 
 export function PreviewsGuide({
   locale,
@@ -80,7 +81,7 @@ export function PreviewsGuide({
         <div>
           <Checklist
             items={[
-              "Los datos de tu app guardados una vez, en una rama main que nada puede cambiar por accidente.",
+              "Los datos de tu app guardados una vez, en una rama main en la que ninguna preview escribe.",
               "Una copia completa de esos datos para cada pull request, creada en 10 ms.",
               "Una preview que se ejecuta sobre su copia y puede romperla sin riesgo.",
               "Una key de solo lectura, para que quien revisa pueda mirar sin tocar.",
@@ -89,9 +90,9 @@ export function PreviewsGuide({
           />
         </div>
         <p>
-          Necesitarás una API key de Skywake y Node. Usa una key de administrador: los pasos 1 y 5
-          la necesitan. Define <code>SKYWAKE_URL</code> y <code>SKYWAKE_KEY</code>, y luego instala
-          el SDK con <code>npm i @skywake/sdk</code>.
+          Necesitarás una API key de Skywake y Node. Usa una key de administrador: el paso 5 crea
+          una key nueva, y para eso hace falta. Define <code>SKYWAKE_API_KEY</code> y luego instala
+          el SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Guarda los datos de tu app en main" />
@@ -109,30 +110,15 @@ export function PreviewsGuide({
           ]}
         />
         <p>
-          La guardaremos en un namespace, un repositorio de archivos, como una rama llamada{" "}
-          <code>main</code>. Una rama es una versión con nombre de tus archivos, como una rama de
-          Git. Cada guardado es un commit, así que siempre puedes ver qué cambió y volver atrás.
+          La subiremos a un disco, un conjunto de archivos con ramas e historial. La primera subida
+          crea el disco y su rama <code>main</code>. Una rama es una versión con nombre de tus
+          archivos, como una rama de Git. Cada guardado es un commit, así que siempre puedes ver qué
+          cambió y volver atrás.
         </p>
-        <Code
-          file="save-data.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const shop = await sky.createNamespace("shop/data");
-const main = await shop.createBranch("main");
-await main.commitFolder("./shop-data", { message: "Shop data today" });
-await main.protect();
-`}
-        />
+        <Code file="save-data.ts" code={code["save-data.ts"]} />
         <p>
-          La última línea protege <code>main</code>. Una rama protegida solo cambia con un merge. Si
-          algún código intenta escribir en ella directamente, la escritura se rechaza, así que
-          ninguna preview puede tocar los datos reales por error.
+          A partir de aquí, ninguna preview escribe en <code>main</code>. Cada una tiene su propia
+          rama, y <code>main</code> solo cambia cuando se fusiona un pull request.
         </p>
 
         <Chapter id="fork" step={2} title="Dale al pull request su propia copia" />
@@ -141,13 +127,7 @@ await main.protect();
           nombre. Un fork es una rama nueva que empieza exactamente donde está otra. No copia nada:
           comparte los archivos de main hasta que el pull request cambia alguno.
         </p>
-        <Code
-          file="fork.ts"
-          code={`
-const pr = await main.fork("pr-512");
-const start = (await pr.info()).head;
-`}
-        />
+        <Code file="fork.ts" code={code["fork.ts"]} />
         <p>
           <code>pr-512</code> tiene ahora todos los archivos de <code>main</code>, con el mismo
           contenido. También guardamos <code>start</code>, el commit desde el que empezó la copia.
@@ -160,30 +140,9 @@ const start = (await pr.info()).head;
           sustituye cada <code>price</code> por <code>cents</code> y guarda el resultado. La
           ejecutamos sobre la copia, tal como está escrita en el pull request:
         </p>
-        <Code
-          file="preview.ts"
-          code={`
-type Product = { id: string; price: string; currency: string };
-const file = "catalog/products.json";
-
-async function migrate(toCents: (price: string) => number) {
-  const products: Product[] = JSON.parse(await pr.readText(file));
-  const moved = products.map(({ price, ...product }) => ({
-    ...product,
-    cents: toCents(price),
-  }));
-  await pr.write(
-    { [file]: JSON.stringify(moved, null, 2) },
-    "PR 512: store prices in cents",
-  );
-}
-
-await migrate((price) => Math.round(Number(price) * 100));
-await pr.checkout("./previews/pr-512");
-`}
-        />
+        <Code file="preview.ts" code={code["preview.ts"]} />
         <p>
-          <code>checkout</code> escribe los archivos de la rama en una carpeta local. Arranca la
+          <code>download</code> escribe los archivos de la rama en una carpeta local. Arranca la
           preview con esa carpeta como datos y abre la tienda.
         </p>
         <p>
@@ -202,20 +161,11 @@ await pr.checkout("./previews/pr-512");
         <Chapter id="undo" step={4} title="Deshaz y vuelve a intentarlo" />
         <p>
           La autora corrige la migración para que lea la coma como separador decimal. Antes de
-          ejecutarla otra vez, dejamos la copia como estaba al principio. <code>reset</code>{" "}
+          ejecutarla otra vez, dejamos la copia como estaba al principio. <code>restore</code>{" "}
           devuelve los archivos de la rama a como estaban en un commit, con un commit nuevo encima,
           así que incluso el intento fallido queda en el historial.
         </p>
-        <Code
-          file="try-again.ts"
-          code={`
-await pr.reset(start, { message: "PR 512: undo the first try" });
-const toCents = (price: string) =>
-  Math.round(Number(price.replace(",", ".")) * 100);
-await migrate(toCents);
-await pr.checkout("./previews/pr-512");
-`}
-        />
+        <Code file="try-again.ts" code={code["try-again.ts"]} />
         <p>Recarga la preview. Ahora todos los productos tienen precio:</p>
         <TwoTries />
         <p>
@@ -226,71 +176,42 @@ await pr.checkout("./previews/pr-512");
         <Chapter id="review" step={5} title="Que quien revisa mire, sin tocar" />
         <p>
           Quien revisa debería ver los datos sobre los que se ejecutó la preview, pero no
-          cambiarlos. Le creamos una key que solo puede leer, solo llega a este namespace y deja de
+          cambiarlos. Le creamos una key que solo puede leer, solo llega a este disco y deja de
           funcionar a la semana:
         </p>
-        <Code
-          file="review.ts"
-          code={`
-const review = await sky.keys.create("Review PR 512", "read", {
-  namespaces: "shop/data",
-  expiresInDays: 7,
-});
-`}
-        />
+        <Code file="review.ts" code={code["review.ts"]} />
         <p>
           Comparte <code>review.key</code> con quien revisa. Con ella, puede preguntar qué cambió el
           pull request en los datos:
         </p>
-        <Code
-          file="reviewer.ts"
-          code={`
-const reviewer = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: review.key,
-});
-const copy = reviewer.namespace("shop/data").branch("pr-512");
-
-const changed = await copy.diff("main", { against: "base" });
-console.log(changed);
-`}
-        />
+        <Code file="reviewer.ts" code={code["reviewer.ts"]} />
         <p>
-          Imprime un solo cambio: <code>catalog/products.json</code>, modificado. La opción{" "}
-          <code>against: &quot;base&quot;</code> compara la copia con su punto de partida, así que
-          solo aparecen los cambios del propio pull request, no lo que llegó a <code>main</code>{" "}
-          después. Quien revisa puede leer cualquier archivo de la copia. Si intenta escribir uno,
-          la petición se rechaza.
+          Imprime un solo cambio: <code>catalog/products.json</code>, modificado. <code>diff</code>{" "}
+          compara la copia con <code>main</code> tal como está ahora. Nada ha llegado a{" "}
+          <code>main</code> desde el fork, así que solo aparece el cambio del propio pull request.
+          Quien revisa puede leer cualquier archivo de la copia. Si intenta escribir uno, la
+          petición se rechaza.
         </p>
-        <Note title="Consejo: una key de lectura ve todo el namespace">
+        <Note title="Consejo: una key de lectura ve todo el disco">
           <p>
-            Una key se limita por namespace, no por rama. Esta también puede leer <code>main</code>,
-            lo que viene bien para comparar. No puede cambiar ninguna de las dos. Si algunos datos
-            tienen que ser privados, guárdalos en su propio namespace.
+            Una key se limita por disco, no por rama. Esta también puede leer <code>main</code>, lo
+            que viene bien para comparar. No puede cambiar ninguna de las dos. Si algunos datos
+            tienen que ser privados, guárdalos en su propio disco.
           </p>
         </Note>
 
         <Chapter id="ship" step={6} title="Publícalo o tíralo" />
         <p>
           El pull request está aprobado. Hacer merge de la rama lleva sus cambios a{" "}
-          <code>main</code>. El merge es la única forma en que cambia una rama protegida, así que es
-          el único camino por el que los nuevos precios llegan a los datos reales.
+          <code>main</code>. Nada más escribe en <code>main</code>, así que es el único camino por
+          el que los nuevos precios llegan a los datos reales.
         </p>
-        <Code
-          file="ship.ts"
-          code={`
-const merged = await pr.mergeInto("main", { message: "Ship PR 512" });
-if (merged.conflicts.length === 0) {
-  await pr.delete();
-  await sky.keys.revoke(review.id);
-}
-`}
-        />
+        <Code file="ship.ts" code={code["ship.ts"]} />
         <p>
           <code>main</code> guarda ahora los precios en céntimos, la copia ha desaparecido y la key
           de quien revisaba ya no funciona. Si <code>main</code> hubiera cambiado el mismo archivo
-          mientras tanto, el merge no guardaría nada y listaría ese archivo en{" "}
-          <code>conflicts</code>.
+          mientras tanto, el merge no guardaría nada y lanzaría un <code>MergeConflict</code> que
+          lista ese archivo en <code>conflicts</code>. La rama y la key seguirían ahí.
         </p>
         <p>
           No todo cambio en una copia debe publicarse. Por ejemplo, los pedidos de prueba que se
@@ -303,25 +224,7 @@ if (merged.conflicts.length === 0) {
           Los pasos anteriores caben en una pequeña función. Llámala desde tu CI cuando se abre, se
           fusiona o se cierra un pull request:
         </p>
-        <Code
-          file="on-pull-request.ts"
-          code={`
-export async function onPullRequest(n: number, event: string) {
-  const branch = shop.branch(\`pr-\${n}\`);
-  if (event === "opened") {
-    await main.fork(branch.name);
-    await branch.checkout(\`./previews/pr-\${n}\`);
-  }
-  if (event === "merged") {
-    const { conflicts } = await branch.mergeInto("main");
-    if (conflicts.length > 0) throw new Error(\`Conflicts: \${conflicts}\`);
-  }
-  if (event === "merged" || event === "closed") {
-    await branch.delete();
-  }
-}
-`}
-        />
+        <Code file="on-pull-request.ts" code={code["on-pull-request.ts"]} />
         <p>Algunas cosas que conviene saber cuando haya más pull requests abiertos a la vez:</p>
         <ul>
           <li>
@@ -333,8 +236,8 @@ export async function onPullRequest(n: number, event: string) {
             propios cambios, nunca los del otro.
           </li>
           <li>
-            <b>Los datos reales están a salvo.</b> <code>main</code> está protegida, así que solo
-            cambia cuando se fusiona un pull request.
+            <b>Los datos reales están a salvo.</b> Las previews solo escriben en sus propias ramas,
+            así que <code>main</code> solo cambia cuando se fusiona un pull request.
           </li>
           <li>
             <b>Limpiar es una llamada.</b> Borrar la rama elimina la copia. No queda ninguna base de
@@ -359,9 +262,9 @@ export async function onPullRequest(n: number, event: string) {
               "¿Y si main cambió mientras el pull request estaba abierto?",
               <p key="a">
                 Si cambiaron archivos distintos, el merge simplemente los combina. Si los dos
-                cambiaron el mismo archivo, el merge no guarda nada, lista el archivo en{" "}
-                <code>conflicts</code> y deja la rama como está. Haz fork de una copia nueva desde
-                el nuevo <code>main</code> y vuelve a ejecutar el cambio.
+                cambiaron el mismo archivo, el merge no guarda nada y lanza un{" "}
+                <code>MergeConflict</code> que lista el archivo. La rama queda como está. Haz fork
+                de una copia nueva desde el nuevo <code>main</code> y vuelve a ejecutar el cambio.
               </p>,
             ],
             [
@@ -397,13 +300,11 @@ function PreviewsCover() {
   return (
     <div className="grid">
       <div className={`${row} text-muted-foreground`}>
-        <span className="font-mono text-[12px]">shop/data</span>
+        <span className="font-mono text-[12px]">shop-data</span>
       </div>
       <div className={row}>
         <GitBranch className="size-3.5 text-muted-foreground" /> main
-        <span className="ml-auto flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <Lock className="size-3" /> Protected
-        </span>
+        <span className="ml-auto text-[12px] text-muted-foreground">Live data</span>
       </div>
       {prs.map(([name, state]) => (
         <div

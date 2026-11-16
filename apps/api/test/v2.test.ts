@@ -414,6 +414,10 @@ test("disk branches: fork, diff, merge, conflicts, revert and restore", { skip }
   ok(await api("PUT", "/disks/app/files/b.txt?branch=agent-1", undefined, "new"));
   const diff = ok(await api("GET", "/disks/app/diff?branch=agent-1&against=main"));
   assert.deepEqual(diff.data, [{ path: "b.txt", change: "added" }]);
+  const sinceCommit = ok(
+    await api("GET", `/disks/app/diff?branch=agent-1&against=${first.commit}`),
+  );
+  assert.deepEqual(sinceCommit.data, [{ path: "b.txt", change: "added" }]);
   const merged = ok(await api("POST", "/disks/app/merges", { from: "agent-1" }));
   assert.ok(merged.commit);
   assert.equal((await api("GET", "/disks/app/files/b.txt")).body, "new");

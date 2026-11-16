@@ -1,61 +1,73 @@
 ---
 title: Schemas and types
 icon: Shapes
-description: The vector columns, metrics, element types, attribute types and id types an index schema can use.
+description: The field types, vectors, text options and id types an index can use, and how they are worked out from your rows.
 ---
 
-```json title="schema"
-{
-  "vectors": [{ "name": "embedding", "dims": 768, "metric": "cosine", "element": "f16" }],
-  "attributes": [
-    { "name": "tag", "type": "string", "filter_index": true },
-    { "name": "stars", "type": "int" },
-    { "name": "published", "type": "datetime" },
-    { "name": "labels", "type": "strings" },
-    { "name": "body", "type": "text", "language": "english" },
-    { "name": "terms", "type": "sparse" }
-  ],
-  "id": "uuid"
-}
-```
+A schema says what each row of an index holds. Most of the time you don't write one: the first upsert works it out from the rows. Write one when you want a type that can't be guessed from a value, such as `datetime`, or text options.
 
-A schema tells the index what each document holds. It has `vectors` (up to 8), `attributes` (up to 64) and an optional `id` type. It needs at least one vector column or one `text` attribute, and the names in each list must be unique.
+## Inferred types
+
+When an upsert creates an index or brings a new field, each field gets its type from its value:
+
+| Value             | Type      | Notes                                                                    |
+| ----------------- | --------- | ------------------------------------------------------------------------ |
+| `"red shoes"`     | `text`    | Searchable by keywords, and filterable and sortable on its whole value.  |
+| `89`              | `number`  |                                                                          |
+| `true`            | `bool`    |                                                                          |
+| `["sale", "new"]` | `strings` | A filter holds if it holds for any item.                                 |
+| `[0.1, 0.2, 0.3]` | vector    | Its length is the dimension. A vector can only come with the first rows. |
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-1/inferred.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-1/inferred.py
+</include>
+
+The schema it prints has `vectors` and `attributes` (the index's fields). When no row has a vector and the environment has an embedding model, the index gets a hidden `_meaning` vector, embedded from the first of `text`, `content`, `body`, `description`, `title` or `name` that the rows have, or else the first text field.
+
+A new field on a later upsert is added to the schema on every branch, and nothing is rebuilt. A value of another type than the field's is an `InvalidRequest` error that names the row and the field. A nested object isn't a field type: flatten it into fields such as `author_name`.
+
+## A full schema
+
+Pass a schema to [`createIndex`](./create.mdx) to choose everything up front:
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-1/full-schema.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-1/full-schema.py
+</include>
+
+A schema has `vectors` (up to 8), `attributes` (up to 64 fields) and an optional `id` type. It needs at least one vector or one `text` field, and names must be unique within each list.
 
 ## Names
 
-A name has up to 64 letters, digits, `_` and `.`. No part between dots may start with a digit. You can't name an attribute `and`, `or`, `not` or `id`, because filters use those words.
+A field name has up to 64 letters, digits, `_` and `.`. No part between dots may start with a digit. You can't name a field `and`, `or`, `not` or `id`, because filters use those words.
 
-## Vector columns
+## Vectors
 
-| Field     | Type                           | Default  | Meaning                                                                                      |
-| --------- | ------------------------------ | -------- | -------------------------------------------------------------------------------------------- |
-| `name`    | string                         |          | The column name.                                                                             |
-| `dims`    | int, 1 to 4096                 |          | Numbers in each vector.                                                                      |
-| `metric`  | `cosine`, `euclidean` or `dot` | `cosine` | How vectors are compared.                                                                    |
-| `element` | `f32`, `f16` or `i8`           | `f32`    | How each number is stored.                                                                   |
-| `embed`   | `{model}`                      |          | Lets documents and queries give text instead. See [embeddings](./embeddings-and-rerank.mdx). |
+| Field     | Type                           | Default  | Meaning                                                                                     |
+| --------- | ------------------------------ | -------- | ------------------------------------------------------------------------------------------- |
+| `name`    | string                         |          | The field rows carry the vector in.                                                         |
+| `dims`    | int, 1 to 4096                 |          | Numbers in each vector.                                                                     |
+| `metric`  | `cosine`, `euclidean` or `dot` | `cosine` | How vectors are compared.                                                                   |
+| `element` | `f32`, `f16` or `i8`           | `f32`    | How each number is stored.                                                                  |
+| `embed`   | `{ model, from }`              |          | Embed the text of field `from` with `model`. See [embeddings](./embeddings-and-rerank.mdx). |
 
-Vector columns can't change after the index is created, so choose `dims`, `metric` and `element` with care.
+Vectors can't change after the index is created, so choose `dims`, `metric` and `element` with care. A vector field that is inferred from rows is `cosine` and `f32`.
 
-### Metrics
+`f16` uses half the bytes of `f32`. `i8` uses a quarter, and holds whole numbers from -128 to 127. An `i8` vector works with `euclidean` or `dot`. It can't use `cosine`.
 
-Every metric returns a [distance](./vector.mdx), so a smaller value means closer.
-
-| Metric      | `distance`               |
-| ----------- | ------------------------ |
-| `cosine`    | `1 - cos`                |
-| `euclidean` | The squared distance     |
-| `dot`       | The negative dot product |
-
-### Element types
-
-`f16` uses half the bytes of `f32`. `i8` uses a quarter, and holds whole numbers from -128 to 127. An `i8` column works with `euclidean` or `dot`. It can't use `cosine`.
-
-## Attribute types
+## Field types
 
 | Type       | Value                                    | Notes                                                                                                                       |
 | ---------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `string`   | `"billing"`                              | One string.                                                                                                                 |
+| `string`   | `"billing"`                              | One string, filtered on its whole value. Not searched by keywords.                                                          |
+| `text`     | `"How to reset a password"`              | Searched by keywords with BM25. See [full-text search](./full-text.mdx).                                                    |
 | `number`   | `9.5`                                    | One number.                                                                                                                 |
 | `int`      | `9`                                      | A whole number. You can compare it with any number: `n < 2.5` is the same as `n <= 2`.                                      |
 | `bool`     | `true`                                   | Can only be filtered with `eq`, `ne` and `in`.                                                                              |
@@ -64,13 +76,12 @@ Every metric returns a [distance](./vector.mdx), so a smaller value means closer
 | `strings`  | `["a", "b"]`                             | A list. A filter matches if it matches any item.                                                                            |
 | `ints`     | `[1, 2]`                                 | A list.                                                                                                                     |
 | `numbers`  | `[0.5, 2]`                               | A list.                                                                                                                     |
-| `text`     | `"How to reset a password"`              | Searched by BM25. See [full-text search](./full-text.mdx).                                                                  |
-| `sparse`   | `{"indices": [12], "values": [0.8]}`     | In the form SPLADE writes. Only used for scoring, never filtered or ordered by.                                             |
+| `sparse`   | `{"indices": [12], "values": [0.8]}`     | In the form SPLADE writes. Only used for scoring. See [sparse vectors](./sparse-and-late-interaction.mdx).                  |
 | `vectors`  | `[[0.1, 0.2], [0.3, 0.4]]`               | Vectors of one length, as ColBERT writes. Only used for scoring. See [late interaction](./sparse-and-late-interaction.mdx). |
 
 ### Text options
 
-These options control how a `text` attribute is split into words and scored. Only a `text` attribute takes them.
+These options control how a `text` field is split into words and scored. Only a `text` field takes them.
 
 | Field              | Type       | Default   | Meaning                                                                     |
 | ------------------ | ---------- | --------- | --------------------------------------------------------------------------- |
@@ -79,37 +90,39 @@ These options control how a `text` attribute is split into words and scored. Onl
 | `k1`               | 0 to 10    | `1.2`     | BM25 term saturation.                                                       |
 | `b`                | 0 to 1     | `0.75`    | BM25 length normalization.                                                  |
 | `stemming`         | bool       | `true`    | Match words by their stem, so `running` finds `run`.                        |
-| `filterable`       | bool       | `false`   | Also lets you filter, order and group by the whole value, like a `string`.  |
+| `filterable`       | bool       | `false`   | Also filter, sort and group by the whole value, like a `string`.            |
 | `case_sensitive`   | bool       | `false`   | Tell `Apple` from `apple`.                                                  |
 | `ascii_folding`    | bool       | `false`   | Match `café` with `cafe`.                                                   |
 | `max_token_length` | 1 to 1024  | `39`      | Words longer than this are left out.                                        |
 | `pre_tokenized`    | bool       | `false`   | The value is a list of strings, and each string is one word, used as it is. |
 
+A text field that is inferred from rows has `filterable: true`.
+
 ### Filter index
 
-Set `filter_index: true` when your vector queries often filter on this attribute and the filter matches only a few documents. The index then also keeps the documents sorted by this attribute, so such a query reads just those documents.
+Set `filter_index: true` on a field when your searches by meaning often filter on it and the filter matches only a few rows, such as a tenant id. The index then also keeps the rows sorted by this field, so such a query reads just those rows. See [filter-first search](./filters.mdx#filter-first-search).
 
-It works only on an attribute with a single value, so not on a list, `sparse` or `vectors`. You can turn it on later with an update, and the next build creates it. See [filter-first search](./filters.mdx#filter-first-search).
+It works only on a field with one value, so not on a list, `sparse` or `vectors`. You can turn it on later with `configure`, and the next build creates it.
 
 ## Id type
 
 | `id`   | Ids it accepts                                                                                                   |
 | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| unset  | A string of 1 to 256 characters, or a whole number from 0 to 2^53 - 1.                                           |
+| unset  | A string of 1 to 256 characters, or a whole number from 0 to 2^53 - 1. A row with no id gets a random UUID.      |
 | `uuid` | A UUID, stored in 16 bytes. Written as text with or without dashes, in any case; returned lowercase with dashes. |
 
 The id type can't change.
 
 ## Changing a schema
 
-You can add attributes with `PATCH /v1/indexes/{index}` (see [create](./create.mdx#change-an-index)) or by writing documents that have them ([new attributes](./write.mdx#new-attributes)). An attribute the index already has keeps its type, but you can turn on `filter_index` for it. Vector columns and the id type are fixed.
+You can add fields with [`configure`](./create.mdx#change-an-index) or just by writing rows that have them. A field the index already has keeps its type, but you can turn on `filter_index` for it. Vectors and the id type are fixed.
 
-To remove attributes, list them in `drop_attributes` in the same `PATCH`. This removes them and clears their values. You can add a dropped attribute back later, but only as it was before. The request is refused while the index has more than one branch, because branches share the index's data.
+To remove fields, pass them in `dropAttributes` to `configure`. This removes them and clears their values. You can add a dropped field back later, but only as it was before. It is refused while the index has more than one branch, because branches share the index's data.
 
 ## Next
 
 <Cards>
-  <Card href="./vector.mdx" />
+  <Card href="./write.mdx" />
   <Card href="./full-text.mdx" />
-  <Card href="/reference/api/indexes/createIndex" />
+  <Card href="./vector.mdx" />
 </Cards>

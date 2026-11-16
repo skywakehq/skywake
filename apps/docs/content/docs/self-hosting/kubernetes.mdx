@@ -6,7 +6,7 @@ description: Run Skywake on Kubernetes with the Helm chart, using your own bucke
 
 Use the Helm chart to run Skywake in your own cloud. It runs on Kubernetes and keeps everything in a bucket and a Postgres database that you own.
 
-```bash
+```bash norun
 helm install skywake oci://ghcr.io/skywakehq/charts/skywake \
   --set store=s3://my-bucket \
   --set aws.region=eu-central-1 \
@@ -46,7 +46,7 @@ Or run `docker/postgres/roles.sh` yourself once as the database's owner, with `P
 
 ### Make the Secret
 
-```bash
+```bash norun
 kubectl create secret generic skywake \
   --from-literal=api-database-url=postgres://skywake_api:…@db/skywake \
   --from-literal=console-database-url=postgres://skywake_console:…@db/skywake \
@@ -66,6 +66,8 @@ Every key is required except these: the AWS keys, which are read only when `aws.
 ### Install
 
 Run the `helm install` command at the top of this page, then route your ingress to the `skywake-console` (3100), `skywake-api` (8080) and `skywake-zero` (4848) services.
+
+To let `skywake login` send people straight to the console, give the API the console's address: `--set api.env.SKYWAKE_API_CONSOLE_URL=https://console.example.com`. Then point the CLI at your API with a profile of its own: `skywake login --profile ours --url https://api.example.com`.
 
 </Step>
 </Steps>
@@ -98,7 +100,7 @@ The role needs read, write, list and delete access on the bucket. For a bucket o
 | `api.trustProxy`                                   | `1`                           | Proxies in front of the API. See [IP allowlist](../security/ip-allowlist.mdx).      |
 | `console.trustedProxies`                           | `""`                          | The ingress's addresses or CIDRs. See [IP allowlist](../security/ip-allowlist.mdx). |
 | `api.indexCache.gb`                                | `10`                          | Local disk for the index blobs each copy reads. Misses go to the cache nodes.       |
-| `api.env`                                          |                               | More API settings, as environment variables.                                        |
+| `api.env`                                          |                               | More API settings, as environment variables, such as `SKYWAKE_API_CONSOLE_URL`.     |
 | `cache.replicas`                                   | `3`                           | Pick once: changing it moves most chunks.                                           |
 | `cache.storage`                                    | `200Gi`                       | Disk per cache node.                                                                |
 | `console.enabled`, `zero.enabled`, `cache.enabled` | `true`                        |                                                                                     |
@@ -107,7 +109,7 @@ The role needs read, write, list and delete access on the bucket. For a bucket o
 
 To upgrade, install the new chart version and keep your other values. Each chart version runs the images of the same version:
 
-```bash
+```bash norun
 helm upgrade skywake oci://ghcr.io/skywakehq/charts/skywake --version 0.2.0 --reset-then-reuse-values
 ```
 

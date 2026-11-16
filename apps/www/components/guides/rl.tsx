@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/rl";
 
 export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; title: string }) {
   return (
@@ -70,7 +71,7 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
         <div>
           <Checklist
             items={[
-              "Your task suite saved once, as a locked starting point.",
+              "Your task suite saved once, as a fixed starting point.",
               "A fresh, private copy of it for every rollout, made in 10 ms.",
               "Tools your policy calls to read and write files on its own copy.",
               "A score for each rollout, and a list of exactly what it changed.",
@@ -79,8 +80,8 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           />
         </div>
         <p>
-          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_URL</code> and{" "}
-          <code>SKYWAKE_KEY</code>, then install the SDK with <code>npm i @skywake/sdk</code>.
+          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_API_KEY</code>, then install the
+          SDK with <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Save the world once" />
@@ -101,60 +102,35 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           ]}
         />
         <p>
-          We’ll save it as a branch called <code>main</code>. A branch is a line of saved versions
-          of a folder, and each saved version is a <b>commit</b>, with its own id.
+          We’ll upload it to a disk, a set of files with branches and history. It lands on the
+          disk’s first branch, <code>main</code>. A branch is a line of saved versions, and each
+          saved version is a <b>commit</b>, with its own id.
         </p>
-        <Code
-          file="save-world.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const suite = await sky.createNamespace("rl/task-suite");
-const main = await suite.createBranch("main");
-const start = await main.commitFolder("./task-suite", {
-  message: "Task suite v3",
-});
-await main.protect();
-`}
-        />
+        <Code file="save-world.ts" code={code["save-world.ts"]} />
         <p>
-          Two things just happened. <code>start</code> is the id of the commit we saved: this is the
-          world every rollout will begin in. And <code>main</code> is now <b>protected</b>, so it
-          only changes by a merge. If a rollout tries to write to it directly, the write is refused.
+          Two things just happened. <code>start</code> is the id of the commit we saved. And{" "}
+          <code>v3</code> is a new branch at that commit: this is the world every rollout will begin
+          in. Nothing ever writes to <code>v3</code>, so it stays the same, even when{" "}
+          <code>main</code> moves on.
         </p>
 
         <Chapter id="fork" step={2} title="Give each rollout its own copy" />
         <p>
-          Now the key idea. A <b>fork</b> is a new branch that starts from an existing commit. It
+          Now the key idea. A <b>fork</b> is a new branch that starts where another one is. It
           copies nothing. It points at the same files until someone changes one, and only that
           change is saved, on the fork alone.
         </p>
-        <Code
-          file="rollout.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-async function newRollout(id: string): Promise<Branch> {
-  return main.fork(\`rollouts/\${id}\`, start);
-}
-
-const run = await newRollout("0001");
-`}
-        />
+        <Code file="rollout.ts" code={code["rollout.ts"]} />
         <p>
-          <code>run</code> holds every file of the suite, exactly as it was at <code>start</code>.
-          Whatever the policy does from here stays on <code>rollouts/0001</code>.
+          <code>run</code> holds every file of the suite, exactly as it is on <code>v3</code>.
+          Whatever the policy does from here stays on <code>rollout-0001</code>.
         </p>
-        <Note title="Tip: fork from the commit, not the branch">
+        <Note title="Tip: fork from v3, not main">
           <p>
-            We pass <code>start</code> on purpose. If the suite changes next week, a fork from{" "}
-            <code>start</code> still gets this week’s files. Store the commit id next to each result
-            and you can always rebuild the exact world a score came from.
+            We fork <code>v3</code> on purpose. If the suite changes next week, <code>main</code>{" "}
+            moves, but <code>v3</code> still has this week’s files. Store <code>start</code> next to
+            each result too: <code>{"fork(name, { at: start })"}</code> rebuilds the exact world a
+            score came from.
           </p>
         </Note>
 
@@ -164,58 +140,20 @@ const run = await newRollout("0001");
           file. Both are bound to one rollout, so the policy cannot reach any other copy, or{" "}
           <code>main</code>.
         </p>
-        <Code
-          file="tools.ts"
-          code={`
-function toolsFor(run: Branch) {
-  return {
-    readFile: (path: string) => run.readText(path),
-    writeFile: (path: string, text: string) =>
-      run.write({ [path]: text }, \`policy: write \${path}\`),
-  };
-}
-
-const tools = toolsFor(run);
-`}
-        />
+        <Code file="tools.ts" code={code["tools.ts"]} />
         <p>
-          Hand <code>tools</code> to your agent loop. Each write becomes its own commit on the
-          rollout, so you get a step-by-step record of what the policy did, for free.
+          Hand <code>tools</code> to your agent loop, here called <code>policy</code>. Each write
+          becomes its own commit on the rollout, so you get a step-by-step record of what the policy
+          did, for free.
         </p>
 
         <Chapter id="score" step={4} title="Score the rollout" />
         <p>
-          Some rewards need a real folder on disk, like running a test. <code>checkout</code> writes
+          Some rewards need a real folder on disk, like running a test. <code>download</code> writes
           the rollout’s files into a local folder. We run the task’s test there: it passes, reward
           1; it fails, reward 0.
         </p>
-        <Code
-          file="score.ts"
-          code={`
-import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-async function score(run: Branch, task: string) {
-  const dir = await mkdtemp(join(tmpdir(), "rollout-"));
-  await run.checkout(dir);
-  try {
-    execFileSync("node", [\`tasks/\${task}/test.js\`], {
-      cwd: dir,
-      stdio: "ignore",
-    });
-    return 1;
-  } catch {
-    return 0;
-  } finally {
-    await rm(dir, { recursive: true });
-  }
-}
-
-const reward = await score(run, "date-parser");
-`}
-        />
+        <Code file="score.ts" code={code["score.ts"]} />
         <p>
           The local folder is only a scratch copy for the test, and we remove it right after. The
           rollout itself still lives on its branch.
@@ -224,34 +162,19 @@ const reward = await score(run, "date-parser");
         <Chapter id="finish" step={5} title="Reset with one delete" />
         <p>
           Before you throw a rollout away, look at what it changed. <code>diff</code> lists every
-          file the rollout added, removed or edited since it forked. That makes one kind of cheating
-          easy to catch: a policy that “passes” by rewriting the test.
+          file the rollout added, removed or edited, compared with <code>v3</code>. That makes one
+          kind of cheating easy to catch: a policy that “passes” by rewriting the test.
         </p>
-        <Code
-          file="finish.ts"
-          code={`
-async function finish(id: string, run: Branch) {
-  const changed = await run.diff("main", { against: "base" });
-  const touchedTests = changed.some((c) => c.path.endsWith("test.js"));
-  if (touchedTests) {
-    console.log(\`Look at rollouts/\${id}:\`, changed);
-  } else {
-    await run.delete();
-  }
-}
-
-await finish("0001", run);
-`}
-        />
+        <Code file="finish.ts" code={code["finish.ts"]} />
         <p>
-          <code>{'against: "base"'}</code> compares the rollout with the commit it forked from, so
-          only the policy’s own changes show. An honest rollout is deleted, and that is the whole
-          reset. A rollout that edited a test stays on its branch, ready for you to open:
+          <code>v3</code> never moves, so only the policy’s own changes show. An honest rollout is
+          deleted, and that is the whole reset. A rollout that edited a test stays on its branch,
+          ready for you to open:
         </p>
         <Rollouts />
         <p>
           Both rollouts scored 1. Only the list of changed files tells them apart. The next rollout
-          you start forks from <code>start</code> again, with the bug back in place.
+          you start forks from <code>v3</code> again, with the bug back in place.
         </p>
 
         <Chapter id="many" step={6} title="Run them side by side" />
@@ -260,22 +183,7 @@ await finish("0001", run);
           serve. Here are eight, in parallel. <code>policy</code> is your own agent loop, called
           with the rollout’s tools.
         </p>
-        <Code
-          file="many.ts"
-          code={`
-const ids = Array.from({ length: 8 }, (_, i) => \`run-\${i}\`);
-
-const rewards = await Promise.all(
-  ids.map(async (id) => {
-    const run = await newRollout(id);
-    await policy(toolsFor(run));
-    const reward = await score(run, "date-parser");
-    await finish(id, run);
-    return reward;
-  }),
-);
-`}
-        />
+        <Code file="many.ts" code={code["many.ts"]} />
         <p>
           This is where a shared environment goes wrong, now fixed. We tested it with a policy that
           fixes the bug in only the first four rollouts it is given. Exactly four rewards came back
@@ -307,24 +215,14 @@ const rewards = await Promise.all(
         </ul>
         <h3>Shipping a new version of the suite</h3>
         <p>
-          Since <code>main</code> is protected, you change it the careful way: fork it, edit the
-          fork, and merge it back.
+          Change <code>main</code> the careful way too: fork it, edit the fork, and merge it back.
+          Then <code>main</code> moves to v4 in one step.
         </p>
-        <Code
-          file="new-version.ts"
-          code={`
-const v4 = await main.fork("suite-v4");
-await v4.write(
-  { "tasks/slugify/README.md": "Also handle tabs and many spaces." },
-  "Task suite v4",
-);
-await v4.mergeInto("main");
-`}
-        />
+        <Code file="new-version.ts" code={code["new-version.ts"]} />
         <p>
-          New runs can fork from the new head of <code>main</code>. Runs that fork from the old{" "}
-          <code>start</code> still get v3, file for file. So you can compare a checkpoint on v3 and
-          v4 without keeping two copies of anything.
+          New runs can fork from the new head of <code>main</code>. Runs that fork from{" "}
+          <code>v3</code> still get v3, file for file. So you can compare a checkpoint on v3 and v4
+          without keeping two copies of anything.
         </p>
 
         <Chapter id="questions" title="Questions" />
@@ -347,15 +245,15 @@ await v4.mergeInto("main");
             [
               "My environment needs a real folder. Does this still work?",
               <p key="a">
-                Yes. <code>checkout</code> writes any rollout, or any older commit, into a local
+                Yes. <code>download</code> writes any rollout, or any older commit, into a local
                 folder, as we did for the tests in step 4.
               </p>,
             ],
             [
               "What stops a buggy rollout from changing the starting state?",
               <p key="a">
-                <code>main</code> is protected, so it only changes by merge. A direct write to it is
-                refused. Protecting a branch needs an admin key.
+                The policy’s tools only reach its own branch. And every rollout forks from{" "}
+                <code>v3</code>, which nothing writes to, so the start stays the same.
               </p>,
             ],
           ]}
@@ -371,7 +269,7 @@ function RlCover() {
   return <Runs tone="blue" />;
 }
 
-/** One shared folder that each run leaves things in, next to one locked start and a copy per run. */
+/** One shared folder that each run leaves things in, next to one fixed start and a copy per run. */
 function TwoWorlds() {
   const box = "t-small rounded-lg border border-border bg-card px-3 py-2 text-foreground";
   const run = "t-small rounded-lg border border-border bg-card px-3 py-2 font-mono text-[12px]";
@@ -395,12 +293,12 @@ function TwoWorlds() {
         <p className="t-eyebrow text-muted-foreground">What we’ll build</p>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <span className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/5 p-2">
-            <span className={box}>main</span>
-            <span className="t-eyebrow px-1 text-signal">Saved once · locked</span>
+            <span className={box}>v3</span>
+            <span className="t-eyebrow px-1 text-signal">Saved once · never changes</span>
           </span>
           <ArrowRight className="size-4 text-muted-foreground" />
           <span className="flex flex-wrap gap-2">
-            {["rollouts/0001", "rollouts/0002", "rollouts/0003"].map((name) => (
+            {["rollout-0001", "rollout-0002", "rollout-0003"].map((name) => (
               <span key={name} className={run}>
                 {name}
               </span>
@@ -416,13 +314,13 @@ function TwoWorlds() {
 function Rollouts() {
   const rows = [
     {
-      name: "rollouts/0001",
+      name: "rollout-0001",
       file: "tasks/date-parser/parse.js",
       outcome: "Deleted",
       flagged: false,
     },
     {
-      name: "rollouts/0002",
+      name: "rollout-0002",
       file: "tasks/date-parser/test.js",
       outcome: "Kept for review",
       flagged: true,

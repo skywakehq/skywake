@@ -7,91 +7,95 @@ npm install skywake
 ```
 
 ```ts
-import { Skywake } from "skywake"; // the SDK: branches and search indexes
-import { createShell } from "skywake/bash"; // a bash shell for agents over a branch
+import { Skywake } from "skywake"; // the SDK: disks and search indexes
+import { shell } from "skywake/bash"; // a bash shell for agents over a disk
 import { bashTool } from "skywake/ai"; // that shell as a Vercel AI SDK tool
 ```
 
-It also installs two commands: `skywake-bash-mcp`, an MCP server with one
-`bash` tool (it reads `SKYWAKE_URL`, `SKYWAKE_KEY`, `SKYWAKE_NAMESPACE` and
-`SKYWAKE_BRANCH`), and `skywake`, the CLI:
+Set `SKYWAKE_API_KEY` (or run `skywake login`), then:
+
+```ts
+import { Skywake } from "skywake";
+
+const sky = new Skywake();
+
+const products = sky.index("products");
+await products.upsert({ id: 1, text: "red running shoes", price: 89 });
+await products.query("shoes for running", { filter: { price: { lt: 100 } } });
+
+const app = sky.disk("app");
+await app.write("notes.md", "hello");
+const work = await app.fork("agent-1");
+await work.write("notes.md", "changed");
+await work.mergeInto("main");
+```
+
+For agents, give the shell or the tool a disk handle:
+
+```ts
+import { shell } from "skywake/bash";
+
+const sh = shell(work);
+await sh.run("grep -r TODO .");
+```
+
+It also installs the `skywake` command.
+
+## The CLI
 
 ```bash
 npx skywake --help
 npm install -g skywake
+skywake login
 ```
-
-## The CLI
 
 The `skywake` command is prebuilt for Linux on x86_64 and arm64 (glibc). npm installs only the
-binary for your machine: it is in `@skywake/cli-linux-x64` or
-`@skywake/cli-linux-arm64`, optional dependencies of this package. Elsewhere,
-build the `skywake-cli` crate from source with cargo.
+binary for your machine: it is in `@skywake/cli-linux-x64` or `@skywake/cli-linux-arm64`, optional
+dependencies of this package. Elsewhere, build the `skywake-cli` crate from source with cargo.
+`skywake mcp` runs on Node, so it works on every platform.
 
-## Search indexes
-
-`skywake index` works with search indexes through the API. Set where it is
-and a key, made in the console under Settings → API keys:
-
-```bash
-export SKYWAKE_URL=http://localhost:8080 SKYWAKE_KEY=sw_...
-```
+`skywake login` signs in through the browser: it shows a code, and you allow it in the console.
+`skywake login --paste` saves a key you paste instead. The key is saved in
+`~/.config/skywake/credentials.toml`; `SKYWAKE_API_KEY` and `SKYWAKE_URL` override it.
 
 ```bash
-skywake index create prod/products --vector embedding:768 --attr tag:string --attr price:number
-skywake index upsert prod/products products.jsonl     # or .csv, .parquet, or stdin
-skywake index query prod/products --vector-file q.json -k 5 -f "tag = billing and price < 10" -i '*'
-skywake index fork prod/products agents/try-1
-skywake index upsert prod/products changes.jsonl -b agents/try-1
-skywake index branches prod/products
-skywake index build prod/products
-skywake index stats prod/products
+skywake upsert products products.jsonl     # or .csv, .parquet, or stdin with -
+skywake query products "running shoes" --filter "price < 100" --limit 5
+skywake fork products draft
+skywake upsert products@draft changes.jsonl
+skywake merge products@draft
+
+skywake upload ./project app -m "base"
+skywake fork app agent-1
+skywake write app@agent-1/notes.md notes.md
+skywake diff app@agent-1
+skywake merge app@agent-1
 ```
 
-| Command                       | What it does                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| `list`                        | The indexes you can reach.                                                     |
-| `create NAME`                 | From `--vector NAME:DIMS[:METRIC]` and `--attr NAME:TYPE`, or `--schema FILE`. |
-| `get NAME`                    | Its columns, and the counts of `main`.                                         |
-| `stats NAME [-b BRANCH]`      | The counts of one branch.                                                      |
-| `delete NAME`                 | The index and all its branches. Asks first; `--yes` skips that.                |
-| `upsert NAME [FILE]`          | Writes documents, 1000 to a request, 4 requests at once.                       |
-| `delete-docs NAME ID...`      | Deletes documents by id.                                                       |
-| `query NAME`                  | The nearest documents to `--vector` or `--vector-file`.                        |
-| `fork NAME BRANCH [--from B]` | A new branch. Nothing is copied.                                               |
-| `branches NAME`               | The branches.                                                                  |
-| `delete-branch NAME BRANCH`   | Deletes a branch.                                                              |
-| `build NAME [-b BRANCH]`      | Starts clustering the rows, so queries read less.                              |
+`NAME@BRANCH` names a branch, and no `@` means `main`. Every command takes `--json`, `--env` and
+`--profile`, and destructive ones ask first unless `--yes`. `skywake --help` lists every command.
 
-Every command prints a table, or the API's JSON with `--json`.
+A row has `id`, then its fields: `{"id": 1, "text": "red running shoes", "price": 89}`. The first
+upsert creates the index and works out its schema. Upserts replace rows by id, so after a failure,
+running it again is safe.
 
-A row to upsert has `id`, then each column by name:
-`{"id": 1, "embedding": [0.1, 0.2], "tag": "billing"}`. The API's own shape,
-`{"id", "vectors", "attributes"}`, works too. In CSV, write a vector as a
-JSON list and a list of strings as `a|b`. Ids of only digits become numbers.
-Upserts replace documents by id, so after a failure, running it again is
-safe.
-
-A filter is written in words: `=`, `!=`, `<`, `<=`, `>`, `>=`, `in (a, b)`,
-`not in (..)`, joined with `and`, `or`, `not` and brackets, such as
-`(tag = a or tag = b) and price < 10`. Quote values with spaces. The API's
-JSON form works too.
+A filter is written in words: `=`, `!=`, `<`, `<=`, `>`, `>=`, `in (a, b)`, `not in (..)`, joined
+with `and`, `or`, `not` and brackets, such as `(tag = a or tag = b) and price < 10`. Quote values
+with spaces. The API's JSON form works too.
 
 ## MCP
 
-`skywake-mcp` (`uvx skywake-mcp`, or `pip install skywake-mcp`) gives
-agents the same indexes as tools: `list_indexes`, `describe_index`,
-`query_index`, `upsert_documents`, `delete_documents` and
-`fork_index_branch`. It reads `SKYWAKE_URL` and `SKYWAKE_KEY`; with
-`SKYWAKE_NAMESPACE` it also offers file tools for that namespace.
+`skywake mcp` (or `npx skywake mcp`) runs the MCP server. It reads `SKYWAKE_API_KEY` and
+`SKYWAKE_URL`, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where the file tools work. Without
+`SKYWAKE_BRANCH` it forks a branch for the session instead of writing to `main`.
 
 ```json
 {
   "mcpServers": {
     "skywake": {
-      "command": "uvx",
-      "args": ["skywake-mcp"],
-      "env": { "SKYWAKE_URL": "...", "SKYWAKE_KEY": "sw_..." }
+      "command": "npx",
+      "args": ["-y", "skywake", "mcp"],
+      "env": { "SKYWAKE_API_KEY": "sw_...", "SKYWAKE_DISK": "app" }
     }
   }
 }

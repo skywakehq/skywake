@@ -16,6 +16,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/coding-agents";
 
 export function CodingAgentsGuide({
   locale,
@@ -80,7 +81,7 @@ export function CodingAgentsGuide({
         <div>
           <Checklist
             items={[
-              "Votre repo enregistré une fois, avec ses paquets, sur une branche que seuls les merges peuvent modifier.",
+              "Votre repo enregistré une fois sur un disque, paquets compris.",
               "Une branche neuve pour chaque agent, prête aussitôt, sans rien à installer.",
               "Le travail et le résultat des tests de chaque agent enregistrés en commit sur sa propre branche.",
               "Une liste claire de ce que chaque agent a changé, pour choisir le bon correctif.",
@@ -89,8 +90,8 @@ export function CodingAgentsGuide({
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Enregistrer le repo une fois" />
@@ -110,31 +111,15 @@ export function CodingAgentsGuide({
           ]}
         />
         <p>
-          Nous l’enregistrons dans un <b>namespace</b>, c’est-à-dire un dépôt de fichiers, sur une
-          branche appelée <code>main</code>. Chaque enregistrement est un <b>commit</b>, une version
-          à laquelle vous pouvez toujours revenir.
+          Nous l’enregistrons sur un <b>disque</b>, c’est-à-dire un dépôt de fichiers. Chaque disque
+          commence avec une branche appelée <code>main</code>. Chaque enregistrement est un{" "}
+          <b>commit</b>, une version à laquelle vous pouvez toujours revenir.
         </p>
-        <Code
-          file="save-repo.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const shop = await sky.createNamespace("acme/shop");
-const main = await shop.createBranch("main");
-await main.commitFolder("./shop", { message: "Shop, ready to test" });
-await main.protect();
-`}
-        />
+        <Code file="save-repo.ts" code={code["save-repo.ts"]} />
         <p>
           Tout le dossier est maintenant sur <code>main</code>, paquets compris. Le dossier{" "}
-          <code>.git</code> est laissé de côté. La dernière ligne <b>protège</b> <code>main</code> :
-          désormais, la branche ne change que par un merge, et aucun agent ne peut y écrire par
-          erreur. Protéger une branche nécessite une clé admin.
+          <code>.git</code> est laissé de côté. La première écriture a créé le disque{" "}
+          <code>shop</code>, il n’y avait donc rien à préparer.
         </p>
 
         <Chapter id="fork" step={2} title="Donner une branche à chaque agent" />
@@ -143,15 +128,7 @@ await main.protect();
           branche qui part avec exactement les mêmes fichiers. Un fork ne copie rien, il est donc
           prêt tout de suite, et un changement sur un fork n’apparaît jamais sur un autre.
         </p>
-        <Code
-          file="start-agents.ts"
-          code={`
-const task = "Login fails when the email has capital letters.";
-const tries = await Promise.all(
-  [1, 2, 3].map((n) => main.fork(\`try-\${n}\`)),
-);
-`}
-        />
+        <Code file="start-agents.ts" code={code["start-agents.ts"]} />
         <p>
           Vous avez maintenant <code>try-1</code>, <code>try-2</code> et <code>try-3</code>, qui
           partent tous du même commit que <code>main</code>.
@@ -160,33 +137,11 @@ const tries = await Promise.all(
         <Chapter id="work" step={3} title="Laisser chaque agent travailler dans son dossier" />
         <p>
           Les agents travaillent bien dans un dossier normal, alors nous leur en donnons un. Pour
-          chaque essai, nous faisons un <b>checkout</b> de sa branche dans un dossier local, nous
-          laissons l’agent le modifier, nous lançons les tests, puis nous enregistrons le dossier
-          sur la branche avec le résultat dans le message.
+          chaque essai, nous <b>téléchargeons</b> sa branche dans un dossier local, nous laissons
+          l’agent le modifier, nous lançons les tests, puis nous <b>envoyons</b> le dossier sur la
+          branche avec le résultat dans le message.
         </p>
-        <Code
-          file="run-try.ts"
-          code={`
-import { spawnSync } from "node:child_process";
-import type { Branch } from "@skywake/sdk";
-
-async function runTry(branch: Branch, task: string) {
-  const dir = \`./work/\${branch.name}\`;
-  await branch.checkout(dir);
-
-  await yourAgent(dir, task);
-
-  const tests = spawnSync("npm", ["test"], { cwd: dir });
-  const passed = tests.status === 0;
-  await branch.commitFolder(dir, {
-    message: passed ? "Tests pass" : "Tests fail",
-  });
-  return { branch, passed };
-}
-
-const results = await Promise.all(tries.map((t) => runTry(t, task)));
-`}
-        />
+        <Code file="run-try.ts" code={code["run-try.ts"]} />
         <p>
           <code>yourAgent</code> représente votre propre agent de code : tout ce qui prend un
           dossier et une tâche, et modifie des fichiers. Chaque dossier arrive avec{" "}
@@ -204,22 +159,11 @@ const results = await Promise.all(tries.map((t) => runTry(t, task)));
         <Chapter id="review" step={4} title="Voir ce que chaque agent a changé" />
         <p>
           Deux de nos agents disent que les tests passent. Ça ne suffit pas pour choisir. Un{" "}
-          <b>diff</b> liste les fichiers qu’une branche a modifiés. Avec{" "}
-          <code>{'against: "base"'}</code>, il compare avec le commit dont la branche est partie,
-          pour ne montrer que le travail de l’agent.
+          <b>diff</b> liste les fichiers qu’une branche a modifiés par rapport à une autre. Rien n’a
+          changé <code>main</code> pendant que les agents travaillaient, donc un diff avec{" "}
+          <code>main</code> ne montre que le travail de l’agent.
         </p>
-        <Code
-          file="review.ts"
-          code={`
-for (const { branch, passed } of results) {
-  const changed = [];
-  for await (const c of branch.allDiff("main", { against: "base" })) {
-    changed.push(\`\${c.kind} \${c.path}\`);
-  }
-  console.log(branch.name, passed ? "pass" : "fail", changed);
-}
-`}
-        />
+        <Code file="review.ts" code={code["review.ts"]} />
         <p>Voici ce que nos trois essais ont donné :</p>
         <Scorecard />
         <p>
@@ -230,18 +174,11 @@ for (const { branch, passed } of results) {
 
         <Chapter id="keep" step={5} title="Garder le meilleur correctif" />
         <p>
-          Fusionnez <code>try-1</code> dans <code>main</code>. Si le merge passe sans conflit,
-          supprimez les trois essais. Vous n’en avez plus besoin.
+          Fusionnez <code>try-1</code> dans <code>main</code>, puis supprimez les trois essais avec{" "}
+          <code>destroy</code>. Vous n’en avez plus besoin. En cas de conflit,{" "}
+          <code>mergeInto</code> lèverait une erreur avant qu’aucune branche ne soit supprimée.
         </p>
-        <Code
-          file="keep.ts"
-          code={`
-const merged = await tries[0]!.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  for (const t of tries) await t.delete();
-}
-`}
-        />
+        <Code file="keep.ts" code={code["keep.ts"]} />
         <p>
           <code>main</code> contient maintenant le correctif, ses tests passent, et c’est la seule
           branche restante. Le prochain agent que vous lancerez partira du code corrigé.
@@ -253,28 +190,13 @@ if (merged.conflicts.length === 0) {
           tâches différentes, et souvent dans les mêmes fichiers. Lançons-en trois à la fois, qui
           touchent tous <code>src/login.js</code>, avec le même <code>runTry</code> qu’avant.
         </p>
-        <Code
-          file="many-tasks.ts"
-          code={`
-const jobs = [
-  { name: "longer-sessions", task: "Keep people signed in 30 days." },
-  { name: "trim-spaces", task: "Ignore spaces around the email." },
-  { name: "ignore-case", task: "Saved emails may have capitals." },
-];
-const forks = await Promise.all(jobs.map((j) => main.fork(j.name)));
-await Promise.all(forks.map((f, i) => runTry(f, jobs[i]!.task)));
-
-for (const fork of forks) {
-  const { conflicts } = await fork.mergeInto("main");
-  console.log(fork.name, conflicts.length ? conflicts : "merged");
-}
-`}
-        />
+        <Code file="many-tasks.ts" code={code["many-tasks.ts"]} />
         <p>
           Un merge combine les fichiers ligne par ligne. Deux agents peuvent modifier le même
           fichier : s’ils ont changé des lignes différentes, les deux changements passent. Quand
-          deux agents changent les mêmes lignes, le merge signale le fichier comme un <b>conflit</b>{" "}
-          et n’enregistre rien, pour que personne ne voie son travail écrasé sans bruit.
+          deux agents changent les mêmes lignes, le merge n’enregistre rien et lève une{" "}
+          <code>MergeConflict</code> qui signale le fichier comme un <b>conflit</b>, pour que
+          personne ne voie son travail écrasé sans bruit.
         </p>
         <Merges />
         <p>
@@ -295,12 +217,12 @@ for (const fork of forks) {
             même pour un repo de 20 000 fichiers.
           </li>
           <li>
-            <b>Aucune préparation par agent.</b> Le checkout écrit les fichiers sur le disque de
-            l’agent, paquets compris. Pas de clone, pas d’installation.
+            <b>Aucune préparation par agent.</b> <code>download</code> écrit les fichiers sur le
+            disque de l’agent, paquets compris. Pas de clone, pas d’installation.
           </li>
           <li>
-            <b>Main reste protégé.</b> Avec <code>main</code> protégé, la seule porte d’entrée est
-            un merge que vous avez choisi.
+            <b>Main reste propre.</b> Les agents n’écrivent que sur leurs propres branches, donc{" "}
+            <code>main</code> ne change que quand vous fusionnez.
           </li>
           <li>
             <b>Chaque essai est gardé jusqu’à ce que vous le supprimiez.</b> Vous pouvez ouvrir,
@@ -332,16 +254,17 @@ for (const fork of forks) {
               </p>,
             ],
             [
-              "Un agent peut-il pousser directement sur main ?",
+              "Un agent peut-il écrire directement sur main ?",
               <p key="a">
-                Pas une fois <code>main</code> protégé. Une écriture directe est refusée, et la
-                seule porte d’entrée est un merge.
+                Pas s’il ne reçoit que sa propre branche. Donnez à l’agent le handle du fork, ou{" "}
+                <code>bashTool(work)</code> de <code>skywake/ai</code> pour un agent AI SDK, et ses
+                écritures y atterrissent. <code>main</code> ne change que quand vous fusionnez.
               </p>,
             ],
             [
               "Est-ce que j’utilise encore Git ?",
               <p key="a">
-                Oui, pour l’historique de votre projet. Enregistrer un dossier laisse de côté son
+                Oui, pour l’historique de votre projet. Envoyer un dossier laisse de côté son
                 dossier <code>.git</code>. Skywake garde les fichiers prêts à l’emploi et les essais
                 de vos agents.
               </p>,

@@ -50,7 +50,7 @@ Add the DNS TXT record that the console shows (its name starts with `_skywake-ss
 - A sign-in with an email outside the connection's domains is refused. So is any sign-in through a connection that is turned off.
 - OIDC uses PKCE and the scopes `openid`, `email` and `profile`.
 - When someone signs in for the first time, they join the organization as a member.
-- While SSO is required, the API refuses console tokens for people at those domains unless the token came from the organization's SSO. [API keys](./api-keys.mdx) are not affected.
+- While SSO is required, the API refuses console tokens for people at those domains unless the token came from the organization's SSO. [API keys](./api-keys.mdx), including keys made with `skywake login`, are not affected.
 
 ## For operators
 
@@ -61,7 +61,7 @@ If you run the console yourself, two settings control which identity providers a
 | `SSO_PRIVATE_IDP_ORIGINS` | Identity providers on a private network, by origin. Public ones must use HTTPS.   |
 | `SSO_VERIFIED_DOMAINS`    | Domains, and their subdomains, that need no DNS record. Only for domains you own. |
 
-The list of required domains is stored in the API. You can read it with [`GET`](/reference/api/orgs/getSsoPolicy) and set it with [`PUT /v1/orgs/{org}/sso`](/reference/api/orgs/setSsoPolicy), using the server's [admin token](../self-hosting/docker-compose.mdx#secrets-in-env).
+The list of required domains is stored in the API. You can read it with [`GET`](/reference/api/orgs/getSsoPolicy) and set it with [`PUT /v1/orgs/{org}/sso`](/reference/api/orgs/setSsoPolicy), using the server's [admin token](../self-hosting/docker-compose.mdx#secrets-in-env). These routes have no v2 version yet, and `/v1` goes away one release after v2.
 
 ## Next
 

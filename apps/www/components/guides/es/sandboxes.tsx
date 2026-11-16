@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/sandboxes";
 
 export function SandboxesGuide({
   locale,
@@ -41,10 +42,9 @@ export function SandboxesGuide({
           ["plan", "Qué vamos a construir"],
           ["base", "1. Guarda el workspace base una vez"],
           ["fork", "2. Dale al sandbox su propia rama"],
-          ["session", "3. Indica quién trabaja ahí"],
-          ["work", "4. Guarda después de cada paso"],
-          ["resume", "5. Retoma la tarea en una máquina nueva"],
-          ["finish", "6. Quédate con el resultado y descarta el sandbox"],
+          ["work", "3. Guarda después de cada paso"],
+          ["resume", "4. Retoma la tarea en una máquina nueva"],
+          ["finish", "5. Quédate con el resultado y descarta el sandbox"],
           ["scale", "Ejecutar muchos sandboxes"],
           ["questions", "Preguntas"],
         ]}
@@ -80,14 +80,14 @@ export function SandboxesGuide({
               "Un workspace base, guardado una vez, del que parte cada sandbox.",
               "Una rama por sandbox, para que cada tarea trabaje sobre su propia copia.",
               "Un guardado después de cada paso, con el archivo y la nota de progreso juntos.",
-              "Una forma de ver qué sandbox sigue vivo y cuál se ha detenido.",
+              "Un registro de cada paso, para ver dónde se detuvo una tarea.",
               "Una tarea caída que continúa desde su último guardado en una máquina nueva.",
             ]}
           />
         </div>
         <p>
-          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_URL</code> y{" "}
-          <code>SKYWAKE_KEY</code>, y después instala el SDK con <code>npm i @skywake/sdk</code>.
+          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_API_KEY</code> y después
+          instala el SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="base" step={1} title="Guarda el workspace base una vez" />
@@ -106,105 +106,37 @@ export function SandboxesGuide({
           ]}
         />
         <p>
-          Lo guardaremos una vez, como una rama llamada <code>base</code>. Una rama es una serie de
-          versiones guardadas de una carpeta, como una rama de Git para archivos. Cada guardado es
-          un commit.
+          Lo guardaremos una vez en un <b>disco</b>: un conjunto de archivos con ramas e historial,
+          como un repositorio de Git para archivos. Todo disco empieza con una rama llamada{" "}
+          <code>main</code>. Cada guardado es un commit.
         </p>
-        <Code
-          file="save-base.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const app = await sky.createNamespace("sandboxes/shop-app");
-const base = await app.createBranch("base");
-await base.commitFolder("./workspace", { message: "Base workspace" });
-`}
-        />
+        <Code file="save-base.ts" code={code["save-base.ts"]} />
         <p>
-          El namespace <code>sandboxes/shop-app</code> contiene las ramas de este proyecto. Este
+          El disco <code>shop-app</code> contiene este proyecto. La primera escritura lo crea. Este
           paso se hace una vez, no una vez por sandbox.
         </p>
 
         <Chapter id="fork" step={2} title="Dale al sandbox su propia rama" />
         <p>
           Cuando arranca un sandbox, recibe su propia rama, con su nombre. La creamos con un{" "}
-          <b>fork</b>: una rama nueva que empieza exactamente donde está <code>base</code>. Un fork
+          <b>fork</b>: una rama nueva que empieza exactamente donde está <code>main</code>. Un fork
           no copia nada, así que está listo al instante, sea cual sea el tamaño del workspace.
         </p>
-        <Code
-          file="new-sandbox.ts"
-          code={`
-const sandbox = await base.fork("sb-1842");
-await sandbox.checkout("./sandbox");
-`}
-        />
+        <Code file="new-sandbox.ts" code={code["new-sandbox.ts"]} />
         <p>
-          <code>checkout</code> escribe los archivos de la rama en una carpeta normal del disco del
-          sandbox. El agente trabaja ahí con sus herramientas de siempre. Los demás sandboxes tienen
-          sus propios forks, así que nunca tocan los archivos de los otros.
+          El fork lo crea una sola vez lo que arranca tus sandboxes. El sandbox abre la rama por su
+          nombre, y <code>download</code> escribe sus archivos en una carpeta normal de la máquina.
+          El agente trabaja ahí con sus herramientas de siempre. Los demás sandboxes tienen sus
+          propios forks, así que nunca tocan los archivos de los otros.
         </p>
 
-        <Chapter id="session" step={3} title="Indica quién trabaja ahí" />
-        <p>
-          Más adelante, una máquina nueva necesitará saber una cosa: ¿el sandbox anterior ha
-          desaparecido de verdad o solo va lento? Dos ideas sencillas lo resuelven.
-        </p>
-        <p>
-          Una <b>sesión</b> es un latido. Mientras el sandbox está vivo, le dice a Skywake «sigo
-          aquí» cada 20 segundos. Si pasa un minuto sin latido, la sesión termina. Un <b>claim</b>{" "}
-          es una nota en la rama que dice qué sesión está trabajando en ella. Termina con la sesión.
-        </p>
-        <Code
-          file="session.ts"
-          code={`
-import { hostname } from "node:os";
-
-const session = await app.startSession(\`sb-1842 on \${hostname()}\`);
-session.keepAlive();
-await sandbox.claim("", session.id);
-`}
-        />
-        <p>
-          La ruta vacía reclama la rama entera. Cada guardado que hagamos a partir de ahora lleva
-          también el id de la sesión, así que el historial muestra qué máquina hizo qué.
-        </p>
-
-        <Chapter id="work" step={4} title="Guarda después de cada paso" />
+        <Chapter id="work" step={3} title="Guarda después de cada paso" />
         <p>
           Ahora, la tarea en sí. El agente recorre los archivos de test en orden. Después de cada
           uno, guardamos dos archivos en un solo commit: el test que acaba de cambiar y{" "}
           <code>progress.json</code>, una pequeña nota que dice cuántos archivos están hechos.
         </p>
-        <Code
-          file="work.ts"
-          code={`
-import { readFile, readdir } from "node:fs/promises";
-
-const saved = await readFile("./sandbox/progress.json", "utf8")
-  .catch(() => \`{ "done": 0 }\`);
-const progress = JSON.parse(saved);
-const tests = (await readdir("./sandbox/tests")).sort();
-
-for (const name of tests.slice(progress.done)) {
-  const path = \`tests/\${name}\`;
-  await migrate(\`./sandbox/\${path}\`);
-  progress.done += 1;
-  await sandbox.write(
-    {
-      [path]: await readFile(\`./sandbox/\${path}\`, "utf8"),
-      "progress.json": JSON.stringify(progress),
-    },
-    \`Migrated \${path}\`,
-    session.id,
-  );
-}
-`}
-        />
+        <Code file="work.ts" code={code["work.ts"]} />
         <p>
           Aquí <code>migrate</code> representa a tu agente: reescribe un archivo en su sitio. El
           bucle empieza desde <code>progress.done</code>, así que en un sandbox nuevo empieza por el
@@ -223,71 +155,48 @@ for (const name of tests.slice(progress.done)) {
           </p>
         </Note>
 
-        <Chapter id="resume" step={5} title="Retoma la tarea en una máquina nueva" />
+        <Chapter id="resume" step={4} title="Retoma la tarea en una máquina nueva" />
         <p>
-          Ahora imagina que se recupera la máquina después del archivo 31. Sus latidos se detienen
-          y, alrededor de un minuto después, su sesión termina y el claim se va con ella.
+          Ahora imagina que se recupera la máquina después del archivo 31. Todo lo que guardó sigue
+          en la rama.
         </p>
         <p>
-          Un sandbox nuevo arranca en otra máquina. Crea el cliente como en el paso 1 y abre la
-          misma rama:
+          Un sandbox nuevo arranca en otra máquina. Crea el cliente como en el paso 1. Antes de
+          empezar, puede leer los últimos commits de la rama para ver dónde se detuvo la tarea:
         </p>
-        <Code
-          file="resume.ts"
-          code={`
-const app = sky.namespace("sandboxes/shop-app");
-const sandbox = app.branch("sb-1842");
-
-// The old machine's session ends a minute after its last heartbeat.
-while ((await sandbox.claims()).length > 0) {
-  await new Promise((wait) => setTimeout(wait, 5_000));
-}
-await sandbox.checkout("./sandbox");
-`}
-        />
+        <Code file="resume.ts" code={code["resume.ts"]} />
         <p>
-          Esperamos hasta que nadie reclame la rama, para que nunca trabajen dos máquinas en ella a
-          la vez. Después, checkout recupera todos los archivos guardados, y{" "}
-          <code>progress.json</code> dice 31.
-        </p>
-        <p>
-          Ahora ejecuta de nuevo el código de los pasos 3 y 4, sin cambios. La máquina nueva inicia
-          su propia sesión, reclama la rama y el bucle continúa en el archivo 32.
+          El commit más reciente es <code>Migrated tests/t31.test.js</code>. Ahora abre la rama y
+          descárgala como en el paso 2, y después ejecuta de nuevo el paso 3, sin cambios.{" "}
+          <code>download</code> recupera todos los archivos guardados, <code>progress.json</code>{" "}
+          dice 31 y el bucle continúa en el archivo 32.
         </p>
         <Timeline />
+        <Note title="Consejo: una máquina por rama">
+          <p>
+            Arranca el sandbox nuevo solo cuando el viejo se haya detenido. Tu proveedor de
+            sandboxes te lo dice. Dos máquinas en una misma rama harían los mismos archivos dos
+            veces.
+          </p>
+        </Note>
 
-        <Chapter id="finish" step={6} title="Quédate con el resultado y descarta el sandbox" />
+        <Chapter id="finish" step={5} title="Quédate con el resultado y descarta el sandbox" />
         <p>
           Cuando el último archivo está hecho, la tarea ha terminado. La nota de progreso ya cumplió
           su función, así que la borramos. Después miramos qué cambió y hacemos <b>merge</b> del
-          sandbox en <code>base</code>, lo que lleva sus cambios a esa rama.
+          sandbox en <code>main</code>, lo que lleva sus cambios a esa rama.
         </p>
-        <Code
-          file="finish.ts"
-          code={`
-await sandbox.commit(
-  "Job done",
-  [{ path: "progress.json", delete: true }],
-  session.id,
-);
-const changed = await sandbox.diff("base");
-console.log(\`\${changed.length} files changed\`);
-
-const merged = await sandbox.mergeInto("base");
-if (merged.conflicts.length === 0) {
-  await session.end();
-  await sandbox.delete();
-}
-`}
-        />
+        <Code file="finish.ts" code={code["finish.ts"]} />
         <p>
           El diff muestra los 40 tests y nada más. Después del merge, el siguiente sandbox que haga
-          fork de <code>base</code> empieza con los tests nuevos. La rama del sandbox se borra, y la
-          máquina puede desecharse sin nada en ella que perder.
+          fork de <code>main</code> empieza con los tests nuevos. <code>destroy</code> borra la rama
+          del sandbox, y la máquina puede desecharse sin nada en ella que perder.
         </p>
         <p>
-          Si el resultado de la tarea no es para <code>base</code>, sáltate el merge. Lee lo que
-          necesites de la rama y después bórrala.
+          Si mientras tanto <code>main</code> cambió las mismas líneas, <code>mergeInto</code> lanza
+          un <code>MergeConflict</code> y no guarda nada. La rama se queda entonces para que la
+          revises. Si el resultado de la tarea no es para <code>main</code>, sáltate el merge. Lee
+          lo que necesites de la rama y después bórrala con <code>destroy</code>.
         </p>
 
         <Chapter id="scale" title="Ejecutar muchos sandboxes" />
@@ -297,21 +206,20 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>Una base, muchos forks.</b> Cada sandbox hace fork de la misma base. Un fork no copia
-            nada: unos 95 ms para un workspace de cualquier tamaño.
+            <b>Una base, muchos forks.</b> Cada sandbox hace fork del mismo <code>main</code>. Un
+            fork no copia nada: unos 95 ms para un workspace de cualquier tamaño.
           </li>
           <li>
             <b>Guardado significa guardado.</b> Matar una máquina con <code>kill -9</code> no pierde
             ninguna escritura guardada. Solo se repite el paso en curso.
           </li>
           <li>
-            <b>Mira quién sigue vivo.</b> <code>app.sessions()</code> lista los sandboxes que
-            todavía envían latidos. Una rama sin claim está libre para que la retome una máquina
-            nueva.
+            <b>Mira cuánto avanzó una tarea.</b> <code>{'sandbox.read("progress.json")'}</code> lee
+            la nota sin descargar la rama.
           </li>
           <li>
-            <b>Limpia sobre la marcha.</b> Borra la rama de cada sandbox cuando termine su tarea. La
-            base se queda.
+            <b>Limpia sobre la marcha.</b> Borra la rama de cada sandbox cuando termine su tarea.{" "}
+            <code>main</code> se queda.
           </li>
           <li>
             <b>Todo sigue siendo tuyo.</b> Cada guardado llega a tu propio bucket, no a una máquina
@@ -337,19 +245,17 @@ if (merged.conflicts.length === 0) {
               </p>,
             ],
             [
-              "¿Puede la máquina nueva empezar antes de un minuto?",
+              "¿Pueden dos sandboxes trabajar en una misma rama?",
               <p key="a">
-                Sí. Pasa un tiempo más corto al iniciar la sesión, por ejemplo{" "}
-                <code>app.startSession(label, 15)</code>, y envía latidos más a menudo en
-                consecuencia, por ejemplo <code>session.keepAlive(5_000)</code>. Así la sesión
-                termina 15 segundos después del último latido.
+                Mejor que sea uno. Dale a cada sandbox su propio fork. Un fork no copia nada, así
+                que no hay motivo para compartir.
               </p>,
             ],
             [
               "¿Puedo deshacer un paso que salió mal?",
               <p key="a">
                 Sí. Cada guardado es un commit, y <code>sandbox.log()</code> los lista. Llama a{" "}
-                <code>sandbox.reset(commit)</code> para dejar los archivos como estaban en ese
+                <code>sandbox.restore(commit)</code> para dejar los archivos como estaban en ese
                 commit, como un commit nuevo encima.
               </p>,
             ],
@@ -368,7 +274,7 @@ function SandboxCover() {
     <div className="grid">
       <div className={row}>
         <GitBranch className="size-3.5 text-muted-foreground" /> sb-1842
-        <span className={`ml-auto ${mono} text-muted-foreground`}>sandboxes/shop-app</span>
+        <span className={`ml-auto ${mono} text-muted-foreground`}>shop-app</span>
       </div>
       <div className={`${row} ${mono} text-muted-foreground`}>
         Migrated tests/t30.test.js

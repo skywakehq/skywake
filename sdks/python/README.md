@@ -1,39 +1,45 @@
 # Skywake for Python
 
-A client for Skywake: branches of a filesystem, and search indexes. Python
-3.10+. The MCP server is its own package: `uvx skywake-mcp`.
+A client for Skywake: disks of files and search indexes, both with branches. Python 3.10+.
 
 ```bash
 pip install skywake
 ```
 
-```python
-import os
+Set `SKYWAKE_API_KEY` (or run `skywake login`), then:
 
+```python
 from skywake import Skywake
 
-sky = Skywake("https://api.skywake.dev", os.environ["SKYWAKE_KEY"])
+sky = Skywake()
 
-# Filesystems
-main = sky.namespace("prod/app").branch("main")
-fork = main.fork("agents/42")
-fork.write({"notes.md": "# Plan"}, "Add the plan")
-sky.namespace("prod/app").merge("agents/42", "main")
+products = sky.index("products")
+products.upsert({"id": 1, "text": "red running shoes", "price": 89})
+hits = products.query("shoes for running", filter={"price": {"lt": 100}})
 
-# Search indexes
-products = sky.indexes.create(
-    "prod/products",
-    vectors=[{"name": "embedding", "dims": 3}],
-    attributes=[{"name": "tag", "type": "string"}],
-)
-products.upsert([{"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"tag": "billing"}}])
-hits = products.query("embedding", [0.1, 0.2, 0.3], top_k=5)
+app = sky.disk("app")
+app.write("notes.md", "hello")
+work = app.fork("agent-1")
+work.write("notes.md", "changed")
+work.merge_into("main")
 ```
 
-- **Branches.** `fork` copies nothing; `fork(name, at=commit)` starts at an
-  older commit. `protect()` makes a branch change only by merge.
-- **Files.** `list`, `read`, `write`, `commit`, `log`, `history`, `diff`.
-- **Indexes.** `query`, `search` (BM25), `hybrid`, `order`, `rank`,
-  `aggregate` and `multi`; `upsert`, `patch`, `delete` and `write`.
-- **Errors** are `SkywakeError` with `status`, `code`, `request_id` and, for a
-  bad field, its `path`. Safe requests are retried.
+- **Settings.** `Skywake(key=..., url=..., environment=..., profile=...)`, else
+  `SKYWAKE_API_KEY`, `SKYWAKE_URL`, `SKYWAKE_ENV` and `SKYWAKE_PROFILE`, else
+  the profile `skywake login` saved. `AsyncSkywake` has the same methods, to
+  `await`.
+- **Handles.** `sky.disk(name)` and `sky.index(name)` call no network; pass
+  `branch="agent-1"` for another branch. `fork(name, at=...)` returns a handle
+  on the new branch, and copies no data.
+- **Disks.** `read`, `write` (one file, or a dict of files as one commit),
+  `delete`, `move`, `list`, `grep`, `find`, `query`, `log`, `diff`, `revert`,
+  `restore`, `upload` and `download`.
+- **Indexes.** `upsert`, `update`, `delete`, `get`, `query`, `count`,
+  `aggregate` and `rows`. Rows are plain dicts. The first upsert creates the
+  index.
+- **Errors** are `AuthError`, `PermissionError`, `NotFound`, `Conflict`,
+  `MergeConflict`, `InvalidRequest`, `RateLimited` and `ServerError`, each with
+  `code`, `message`, `hint` and `request_id`. Safe requests are retried.
+
+The package also installs a `skywake` command that runs the CLI and the MCP
+server (`uvx skywake mcp`) through `npx`, so it needs Node 18 or later.

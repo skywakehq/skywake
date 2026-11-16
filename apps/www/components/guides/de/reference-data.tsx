@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/reference-data";
 
 export function ReferenceDataGuide({
   locale,
@@ -81,7 +82,7 @@ export function ReferenceDataGuide({
           <Checklist
             items={[
               "Den Referenzdatensatz, einmal in Ihrem eigenen Bucket gespeichert, mit jedem Release erhalten.",
-              "Einen geschützten Branch und einen Key, der nur lesen kann, damit kein Agent die Dateien ändern kann.",
+              "Einen Key, der nur lesen kann und nur diese eine Disk erreicht, damit kein Agent die Dateien ändern kann.",
               "Lesezugriffe auf nur einen Ausschnitt einer großen Datei, für Agenten, die nur wenig brauchen.",
               "Eine lokale Kopie pro Maschine, die sich alle Agenten darauf teilen.",
               "Eine Möglichkeit, ein neues Release auszuliefern, das den Maschinen nur das Geänderte schickt.",
@@ -89,9 +90,8 @@ export function ReferenceDataGuide({
           />
         </div>
         <p>
-          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_URL</code> und{" "}
-          <code>SKYWAKE_KEY</code> und installieren Sie dann das SDK mit{" "}
-          <code>npm i @skywake/sdk</code>.
+          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_API_KEY</code> und
+          installieren Sie dann das SDK mit <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Den Referenzdatensatz einmal speichern" />
@@ -108,60 +108,31 @@ export function ReferenceDataGuide({
           ]}
         />
         <p>
-          Wir speichern ihn in einem <b>Namespace</b>, also einem Repository für Dateien, auf einem
-          Branch namens <code>main</code>. Ein Branch funktioniert wie ein Git-Branch für Dateien:
-          Jedes Speichern ist ein <b>Commit</b>, eine feste Version, zu der Sie jederzeit
-          zurückkehren können.
+          Wir speichern ihn auf einer <b>Disk</b>, also einer Sammlung von Dateien mit Branches und
+          Historie. Sie beginnt auf einem Branch namens <code>main</code>. Ein Branch funktioniert
+          wie ein Git-Branch für Dateien: Jedes Speichern ist ein <b>Commit</b>, eine feste Version,
+          zu der Sie jederzeit zurückkehren können.
         </p>
-        <Code
-          file="save-refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const genome = await sky.createNamespace("refs/genome");
-const main = await genome.createBranch("main");
-const release = await main.commitFolder("./grch38", {
-  message: "GRCh38, first release",
-});
-`}
-        />
+        <Code file="save-refs.ts" code={code["save-refs.ts"]} />
         <p>
-          <code>commitFolder</code> lädt jede Datei hoch und gibt den neuen Commit zurück. Große
-          Dateien werden automatisch in Teilen hochgeladen, Sie müssen sie also nicht aufteilen.
-          Behalten Sie <code>release</code>: Es bezeichnet genau diese Version des Datensatzes, und
-          wir brauchen es wieder.
+          <code>upload</code> schickt jede Datei als einen Commit. Große Dateien werden automatisch
+          in Teilen hochgeladen, Sie müssen sie also nicht aufteilen. Dann forken wir{" "}
+          <code>main</code> in einen Branch, der nach dem Release benannt ist: <code>grch38</code>.
+          Niemand schreibt mehr darauf, also bezeichnet dieser Name immer genau diese Version des
+          Datensatzes.
         </p>
 
         <Chapter id="lock" step={2} title="Für Agenten schreibgeschützt machen" />
         <p>
-          Referenzdaten sollten sich nie versehentlich ändern. Wir sichern sie auf zwei Arten ab.
-          Erstens <b>schützen</b> wir <code>main</code>. Ein geschützter Branch ändert sich nur
-          durch einen Merge, also kann nicht einmal ein Admin direkt darauf committen.
+          Referenzdaten sollten sich nie versehentlich ändern, also geben wir den Agenten einen
+          eigenen Key. Er hat die Rolle <code>read</code> und erreicht nur diese eine Disk.
         </p>
+        <Code file="lock.ts" code={code["lock.ts"]} />
         <p>
-          Zweitens geben wir den Agenten einen eigenen Key. Er hat die Rolle <code>read</code> und
-          erreicht nur diesen einen Namespace.
-        </p>
-        <Code
-          file="lock.ts"
-          code={`
-await main.protect();
-
-const agents = await sky.keys.create("agents", "read", {
-  namespaces: "refs/genome",
-});
-`}
-        />
-        <p>
-          <code>agents.key</code> wird nur dieses eine Mal angezeigt, speichern Sie ihn also sofort
-          als Secret. Ab jetzt schlägt ein Schreibzugriff mit diesem Key mit „this needs the{" "}
-          <code>write</code> role“ fehl. Ein direkter Commit auf <code>main</code> schlägt ebenfalls
-          fehl, selbst mit einem Admin-Key.
+          <code>agents.key</code> wird nur dieses eine Mal angezeigt, also speichern wir ihn sofort
+          als Secret. <code>saveSecret</code> steht für Ihren eigenen Secret-Speicher. Ab jetzt
+          schlägt ein Schreibzugriff mit diesem Key mit „this needs the <code>write</code> role“
+          fehl.
         </p>
         <Note title="Tipp: ein Key pro Zweck">
           <p>
@@ -173,46 +144,20 @@ const agents = await sky.keys.create("agents", "read", {
 
         <Chapter id="read" step={3} title="Nur den benötigten Teil lesen" />
         <p>
-          Jeder Agent verbindet sich mit dem Lese-Key. Das legen wir in eine kleine Datei, damit der
-          Agent-Code kurz bleibt:
+          Jeder Agent verbindet sich mit dem Lese-Key, auf dem Release, das er nutzen soll. Das
+          Release kommt aus <code>REFS_RELEASE</code>, das Sie einmal pro Maschine setzen:
         </p>
-        <Code
-          file="refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.AGENT_KEY!,
-});
-
-export const refs = sky.namespace("refs/genome").branch("main");
-`}
-        />
+        <Code file="refs.ts" code={code["refs.ts"]} />
         <p>
           Manche Agenten brauchen nur ein kleines Stück einer großen Datei: ein Gen, eine Region.
           Das ganze Chromosom brauchen sie nicht. Ein <b>Range-Read</b> fragt nur genau diese Bytes
           an, sodass der Agent sofort loslegen kann.
         </p>
-        <Code
-          file="read.ts"
-          code={`
-import { refs } from "./refs.ts";
-
-const release = process.env.REFS_RELEASE!;
-
-// Only the bytes this agent needs, at the agreed release.
-const piece = await refs.read("chr1.fa", {
-  offset: 120_000,
-  length: 600,
-  at: release,
-});
-`}
-        />
+        <Code file="read.ts" code={code["read.ts"]} />
         <p>
-          Die Zeile <code>at</code> legt den Lesezugriff auf das erste Release fest. Selbst wenn
-          während des Laufs ein neues Release erscheint, liest der Agent weiter dieselbe Version.
-          Jeder Agent, den Sie mit demselben <code>REFS_RELEASE</code> starten, sieht genau
+          <code>refs</code> liest den Branch <code>grch38</code>, und niemand schreibt darauf.
+          Selbst wenn während des Laufs ein neues Release erscheint, liest der Agent weiter dieselbe
+          Version. Jeder Agent, den Sie mit demselben <code>REFS_RELEASE</code> starten, sieht genau
           dieselben Bytes.
         </p>
 
@@ -224,70 +169,18 @@ const piece = await refs.read("chr1.fa", {
           zeigen.
         </p>
         <p>
-          <code>syncRefs</code> erledigt die Arbeit. Auf einer neuen Maschine checkt es den ganzen
-          Datensatz aus. Den erhaltenen Commit schreibt es in eine kleine Datei{" "}
-          <code>.release</code>. Beim nächsten Mal tut es nichts, wenn dieser Commit noch der
-          neueste ist.
+          <code>syncRefs</code> erledigt die Arbeit. Auf einer neuen Maschine lädt es das ganze
+          Release herunter. Den Namen des Release schreibt es in eine kleine Datei{" "}
+          <code>.release</code>. Beim nächsten Mal tut es nichts, wenn das noch das Release ist, das
+          die Maschine nutzen soll.
         </p>
-        <Code
-          file="sync-refs.ts"
-          code={`
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { refs } from "./refs.ts";
-
-export const REFS = process.env.REFS_DIR ?? "/srv/refs";
-
-export async function syncRefs(dir = REFS) {
-  const mark = join(dir, ".release");
-  const have = await readFile(mark, "utf8").catch(() => "");
-  const { head } = await refs.info();
-  if (have === head) return;
-
-  if (!have) {
-    await refs.checkout(dir, { at: head });
-  } else {
-    // Only the files that changed since this machine's release.
-    const changed = new Map<string, string>();
-    for (const commit of await refs.changes(have)) {
-      for (const change of commit.changes) {
-        changed.set(change.path, change.kind);
-      }
-    }
-    for (const [path, kind] of changed) {
-      const file = join(dir, path);
-      await rm(file, { force: true });
-      if (kind === "removed") continue;
-      await mkdir(dirname(file), { recursive: true });
-      await writeFile(file, await refs.readStream(path, { at: head }));
-    }
-  }
-  await writeFile(mark, head);
-}
-`}
-        />
+        <Code file="sync-refs.ts" code={code["sync-refs.ts"]} />
         <p>
           Führen Sie es einmal beim Start der Maschine aus, vor allen Agenten. Danach liest jeder
           Agent ganz normale Dateien aus dem Ordner, ohne jedes Netzwerk:
         </p>
-        <Code
-          file="start.ts"
-          code={`
-import { syncRefs } from "./sync-refs.ts";
-
-// Once when the machine starts, before any agent runs.
-await syncRefs();
-`}
-        />
-        <Code
-          file="agent.ts"
-          code={`
-import { readFile } from "node:fs/promises";
-import { REFS } from "./sync-refs.ts";
-
-const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
-`}
-        />
+        <Code file="start.ts" code={code["start.ts"]} />
+        <Code file="agent.ts" code={code["agent.ts"]} />
         <p>
           Damit sind die zwanzig Downloads weg. Zwanzig Agenten starten, und die Maschine hat den
           Datensatz bereits einmal heruntergeladen. Starten Sie die Maschine morgen erneut, sieht{" "}
@@ -296,36 +189,28 @@ const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
 
         <Chapter id="release" step={5} title="Ein neues Release ausliefern" />
         <p>
-          Ein Patch für Chromosom 2 erscheint, mit einer neuen Datei für Chromosom Y. Zur
-          Erinnerung: <code>main</code> ändert sich nur durch einen Merge. Also <b>forken</b> wir es
-          zuerst: Ein Fork ist ein neuer Branch, der als exakte Kopie beginnt, ohne Daten zu
-          kopieren.
+          Ein Patch für Chromosom 2 erscheint, mit einer neuen Datei für Chromosom Y. Jedes Release
+          bekommt seinen eigenen Branch, also <b>forken</b> wir <code>main</code> nach{" "}
+          <code>grch38-p2</code>. Ein Fork ist ein neuer Branch, der als exakte Kopie beginnt, ohne
+          Daten zu kopieren.
         </p>
         <p>
-          Wir speichern den neuen Ordner auf dem Fork und <b>mergen</b> ihn dann in{" "}
-          <code>main</code>. Ein Merge bringt die Änderungen des Forks als einen neuen Commit nach{" "}
-          <code>main</code>.
+          Wir laden den neuen Ordner auf den Fork hoch und <b>mergen</b> ihn dann in{" "}
+          <code>main</code>, damit <code>main</code> immer das neueste Release enthält. Maschinen
+          auf <code>grch38</code> merken davon nichts.
         </p>
-        <Code
-          file="release.ts"
-          code={`
-const next = await main.fork("next");
-await next.commitFolder("./grch38-p2", { message: "GRCh38 patch 2" });
-
-const merged = await next.mergeInto("main");
-if (merged.conflicts.length === 0) await next.delete();
-`}
-        />
+        <Code file="release.ts" code={code["release.ts"]} />
         <p>
           Wir haben den ganzen neuen Ordner geschickt, aber Skywake erfasst nur die Dateien, die
           sich unterscheiden: <code>chr2.fa</code> hat sich geändert und <code>chrY.fa</code> ist
-          neu. Wenn eine Maschine das nächste Mal <code>syncRefs</code> ausführt, fragt sie nach den
-          Änderungen seit ihrem <code>.release</code> und lädt nur diese zwei Dateien herunter:
+          neu. Setzen Sie auf einer Maschine <code>REFS_RELEASE</code> auf <code>grch38-p2</code>.
+          Wenn sie das nächste Mal <code>syncRefs</code> ausführt, fragt sie nach den Änderungen
+          seit ihrem <code>.release</code> und lädt nur diese zwei Dateien herunter:
         </p>
         <ReleaseUpdate />
         <p>
-          Agenten, die mit <code>at</code> auf das erste Release festgelegt sind, lesen weiterhin
-          das alte <code>chr2.fa</code>. Jedes Release bleibt in der Historie, also verschwindet
+          Maschinen, die noch auf <code>grch38</code> sind, lesen weiterhin das alte{" "}
+          <code>chr2.fa</code>. Jedes Release bleibt als eigener Branch erhalten, also verschwindet
           nichts, worauf sie sich verlassen.
         </p>
 
@@ -351,9 +236,9 @@ if (merged.conflicts.length === 0) await next.delete();
             Range-Reads nutzen, wie in Schritt 3.
           </li>
           <li>
-            <b>Jede Antwort hat eine Version.</b> Protokollieren Sie den <code>.release</code>
-            -Commit neben jedem Ergebnis. Auch Wochen später können Sie die exakten Dateien lesen,
-            aus denen diese Antwort stammt.
+            <b>Jede Antwort hat eine Version.</b> Protokollieren Sie den Namen aus{" "}
+            <code>.release</code> neben jedem Ergebnis. Auch Wochen später können Sie die exakten
+            Dateien lesen, aus denen diese Antwort stammt.
           </li>
           <li>
             <b>Alles bleibt bei Ihnen.</b> Die Dateien liegen in Ihrem eigenen Bucket. Es gibt kein
@@ -368,38 +253,38 @@ if (merged.conflicts.length === 0) await next.delete();
               "Kann ein Agent die Referenzdateien versehentlich ändern?",
               <p key="a">
                 Nicht über Skywake. Sein Key hat die Leserolle, also schlägt jeder Schreibzugriff
-                fehl. Und <code>main</code> ist geschützt, sodass selbst ein Key mit Schreibrechten
-                über einen Merge gehen muss.
+                mit einem <code>PermissionError</code> fehl.
               </p>,
             ],
             [
               "Lädt ein neues Release alles erneut hoch?",
               <p key="a">
-                <code>commitFolder</code> schickt den ganzen Ordner, aber nur Dateien, die sich
+                <code>upload</code> schickt den ganzen Ordner, aber nur Dateien, die sich
                 unterscheiden, zählen als Änderungen. Nur diese laden die Maschinen herunter.
               </p>,
             ],
             [
               "Wie gehe ich zu einem älteren Release zurück?",
               <p key="a">
-                Jedes Release ist ein Commit, und Commits bleiben erhalten. Lesen Sie eine beliebige
-                Datei mit <code>at</code> auf das gewünschte Release gesetzt, oder checken Sie
-                diesen Commit in einen eigenen Ordner aus.
+                Jedes Release ist ein Branch, und Branches bleiben erhalten. Setzen Sie{" "}
+                <code>REFS_RELEASE</code> zurück auf das gewünschte Release, und{" "}
+                <code>syncRefs</code> lädt nur die Dateien herunter, die sich unterscheiden.
               </p>,
             ],
             [
               "Was, wenn eine Datei größer ist als der Arbeitsspeicher der Maschine?",
               <p key="a">
-                Checkout und <code>readStream</code> streamen Dateien auf die Festplatte, eine Datei
-                muss also nie auf einmal in den Speicher passen.
+                <code>download</code> und <code>{`read(path, { as: "stream" })`}</code> streamen
+                Dateien auf die Festplatte, eine Datei muss also nie auf einmal in den Speicher
+                passen.
               </p>,
             ],
             [
               "Was, wenn ein Release ganze Ordner hinzufügt oder entfernt?",
               <p key="a">
                 <code>syncRefs</code> behandelt Änderungen an einzelnen Dateien, und so ändern sich
-                die meisten Referenz-Releases. Für eine größere Umstrukturierung checken Sie das
-                neue Release stattdessen in einen frischen Ordner aus.
+                die meisten Referenz-Releases. Für eine größere Umstrukturierung laden Sie das neue
+                Release stattdessen in einen frischen Ordner herunter.
               </p>,
             ],
           ]}

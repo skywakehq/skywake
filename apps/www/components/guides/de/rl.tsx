@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/rl";
 
 export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; title: string }) {
   return (
@@ -72,7 +73,7 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
         <div>
           <Checklist
             items={[
-              "Ihre Task-Suite, einmal gespeichert als gesperrter Startpunkt.",
+              "Ihre Task-Suite, einmal gespeichert als fester Startpunkt.",
               "Eine frische, private Kopie davon für jeden Rollout, in 10 ms erstellt.",
               "Tools, mit denen Ihre Policy Dateien auf ihrer eigenen Kopie liest und schreibt.",
               "Einen Score für jeden Rollout und eine Liste dessen, was er genau geändert hat.",
@@ -81,9 +82,8 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           />
         </div>
         <p>
-          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_URL</code> und{" "}
-          <code>SKYWAKE_KEY</code> und installieren Sie dann das SDK mit{" "}
-          <code>npm i @skywake/sdk</code>.
+          Sie brauchen einen Skywake-API-Key und Node. Setzen Sie <code>SKYWAKE_API_KEY</code> und
+          installieren Sie dann das SDK mit <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Die Welt einmal speichern" />
@@ -105,63 +105,36 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           ]}
         />
         <p>
-          Wir speichern sie als Branch namens <code>main</code>. Ein Branch ist eine Folge
-          gespeicherter Versionen eines Ordners, und jede gespeicherte Version ist ein <b>Commit</b>{" "}
-          mit eigener ID.
+          Wir laden sie auf eine Disk hoch: Dateien mit Branches und Verlauf. Sie landet auf dem
+          ersten Branch der Disk, <code>main</code>. Ein Branch ist eine Folge gespeicherter
+          Versionen, und jede gespeicherte Version ist ein <b>Commit</b> mit eigener ID.
         </p>
-        <Code
-          file="save-world.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const suite = await sky.createNamespace("rl/task-suite");
-const main = await suite.createBranch("main");
-const start = await main.commitFolder("./task-suite", {
-  message: "Task suite v3",
-});
-await main.protect();
-`}
-        />
+        <Code file="save-world.ts" code={code["save-world.ts"]} />
         <p>
-          Zwei Dinge sind gerade passiert. <code>start</code> ist die ID des gespeicherten Commits:
-          Das ist die Welt, in der jeder Rollout beginnt. Und <code>main</code> ist jetzt{" "}
-          <b>geschützt</b>, ändert sich also nur durch einen Merge. Versucht ein Rollout, direkt
-          darauf zu schreiben, wird der Schreibzugriff abgelehnt.
+          Zwei Dinge sind gerade passiert. <code>start</code> ist die ID des gespeicherten Commits.
+          Und <code>v3</code> ist ein neuer Branch bei diesem Commit: Das ist die Welt, in der jeder
+          Rollout beginnt. Nichts schreibt je auf <code>v3</code>, er bleibt also gleich, auch wenn
+          sich <code>main</code> weiterbewegt.
         </p>
 
         <Chapter id="fork" step={2} title="Jedem Rollout eine eigene Kopie geben" />
         <p>
-          Jetzt die zentrale Idee. Ein <b>Fork</b> ist ein neuer Branch, der von einem bestehenden
-          Commit ausgeht. Er kopiert nichts. Er verweist auf dieselben Dateien, bis jemand eine
-          davon ändert, und nur diese Änderung wird gespeichert, allein auf dem Fork.
+          Jetzt die zentrale Idee. Ein <b>Fork</b> ist ein neuer Branch, der dort beginnt, wo ein
+          anderer steht. Er kopiert nichts. Er verweist auf dieselben Dateien, bis jemand eine davon
+          ändert, und nur diese Änderung wird gespeichert, allein auf dem Fork.
         </p>
-        <Code
-          file="rollout.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-async function newRollout(id: string): Promise<Branch> {
-  return main.fork(\`rollouts/\${id}\`, start);
-}
-
-const run = await newRollout("0001");
-`}
-        />
+        <Code file="rollout.ts" code={code["rollout.ts"]} />
         <p>
-          <code>run</code> enthält jede Datei der Suite, genau so, wie sie bei <code>start</code>{" "}
-          war. Was die Policy ab hier tut, bleibt auf <code>rollouts/0001</code>.
+          <code>run</code> enthält jede Datei der Suite, genau so, wie sie auf <code>v3</code> ist.
+          Was die Policy ab hier tut, bleibt auf <code>rollout-0001</code>.
         </p>
-        <Note title="Tipp: vom Commit forken, nicht vom Branch">
+        <Note title="Tipp: von v3 forken, nicht von main">
           <p>
-            Wir übergeben <code>start</code> mit Absicht. Ändert sich die Suite nächste Woche,
-            bekommt ein Fork von <code>start</code> trotzdem die Dateien dieser Woche. Speichern Sie
-            die Commit-ID neben jedem Ergebnis, dann können Sie die exakte Welt, aus der ein Score
-            stammt, jederzeit wiederherstellen.
+            Wir forken <code>v3</code> mit Absicht. Ändert sich die Suite nächste Woche, bewegt sich{" "}
+            <code>main</code>, aber <code>v3</code> hat weiterhin die Dateien dieser Woche.
+            Speichern Sie auch <code>start</code> neben jedem Ergebnis:{" "}
+            <code>{"fork(name, { at: start })"}</code> stellt die exakte Welt wieder her, aus der
+            ein Score stammt.
           </p>
         </Note>
 
@@ -171,60 +144,21 @@ const run = await newRollout("0001");
           eine Datei schreiben. Beide sind an einen Rollout gebunden, die Policy kann also weder
           eine andere Kopie noch <code>main</code> erreichen.
         </p>
-        <Code
-          file="tools.ts"
-          code={`
-function toolsFor(run: Branch) {
-  return {
-    readFile: (path: string) => run.readText(path),
-    writeFile: (path: string, text: string) =>
-      run.write({ [path]: text }, \`policy: write \${path}\`),
-  };
-}
-
-const tools = toolsFor(run);
-`}
-        />
+        <Code file="tools.ts" code={code["tools.ts"]} />
         <p>
-          Übergeben Sie <code>tools</code> an Ihre Agent-Loop. Jeder Schreibvorgang wird zu einem
-          eigenen Commit auf dem Rollout, so bekommen Sie ohne Zusatzaufwand ein schrittweises
-          Protokoll dessen, was die Policy getan hat.
+          Übergeben Sie <code>tools</code> an Ihre Agent-Loop, hier <code>policy</code>. Jeder
+          Schreibvorgang wird zu einem eigenen Commit auf dem Rollout, so bekommen Sie ohne
+          Zusatzaufwand ein schrittweises Protokoll dessen, was die Policy getan hat.
         </p>
 
         <Chapter id="score" step={4} title="Den Rollout bewerten" />
         <p>
           Manche Rewards brauchen einen echten Ordner auf der Festplatte, etwa um einen Test
-          auszuführen. <code>checkout</code> schreibt die Dateien des Rollouts in einen lokalen
+          auszuführen. <code>download</code> schreibt die Dateien des Rollouts in einen lokalen
           Ordner. Dort führen wir den Test des Tasks aus: Besteht er, ist der Reward 1; schlägt er
           fehl, ist er 0.
         </p>
-        <Code
-          file="score.ts"
-          code={`
-import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-async function score(run: Branch, task: string) {
-  const dir = await mkdtemp(join(tmpdir(), "rollout-"));
-  await run.checkout(dir);
-  try {
-    execFileSync("node", [\`tasks/\${task}/test.js\`], {
-      cwd: dir,
-      stdio: "ignore",
-    });
-    return 1;
-  } catch {
-    return 0;
-  } finally {
-    await rm(dir, { recursive: true });
-  }
-}
-
-const reward = await score(run, "date-parser");
-`}
-        />
+        <Code file="score.ts" code={code["score.ts"]} />
         <p>
           Der lokale Ordner ist nur eine Arbeitskopie für den Test, und wir entfernen ihn gleich
           danach. Der Rollout selbst lebt weiter auf seinem Branch.
@@ -233,37 +167,22 @@ const reward = await score(run, "date-parser");
         <Chapter id="finish" step={5} title="Zurücksetzen mit einem Löschen" />
         <p>
           Bevor Sie einen Rollout wegwerfen, sehen Sie sich an, was er geändert hat.{" "}
-          <code>diff</code> listet jede Datei auf, die der Rollout seit dem Fork hinzugefügt,
-          entfernt oder bearbeitet hat. So fällt eine Art von Schummeln leicht auf: eine Policy, die
-          „besteht“, indem sie den Test umschreibt.
+          <code>diff</code> listet jede Datei auf, die der Rollout hinzugefügt, entfernt oder
+          bearbeitet hat, verglichen mit <code>v3</code>. So fällt eine Art von Schummeln leicht
+          auf: eine Policy, die „besteht“, indem sie den Test umschreibt.
         </p>
-        <Code
-          file="finish.ts"
-          code={`
-async function finish(id: string, run: Branch) {
-  const changed = await run.diff("main", { against: "base" });
-  const touchedTests = changed.some((c) => c.path.endsWith("test.js"));
-  if (touchedTests) {
-    console.log(\`Look at rollouts/\${id}:\`, changed);
-  } else {
-    await run.delete();
-  }
-}
-
-await finish("0001", run);
-`}
-        />
+        <Code file="finish.ts" code={code["finish.ts"]} />
         <p>
-          <code>{'against: "base"'}</code> vergleicht den Rollout mit dem Commit, von dem er geforkt
-          wurde, sodass nur die eigenen Änderungen der Policy erscheinen. Ein ehrlicher Rollout wird
-          gelöscht, und das ist das ganze Zurücksetzen. Ein Rollout, der einen Test bearbeitet hat,
-          bleibt auf seinem Branch und wartet darauf, dass Sie ihn öffnen:
+          <code>v3</code> bewegt sich nie, also erscheinen nur die eigenen Änderungen der Policy.
+          Ein ehrlicher Rollout wird gelöscht, und das ist das ganze Zurücksetzen. Ein Rollout, der
+          einen Test bearbeitet hat, bleibt auf seinem Branch und wartet darauf, dass Sie ihn
+          öffnen:
         </p>
         <Rollouts />
         <p>
           Beide Rollouts haben 1 erzielt. Nur die Liste der geänderten Dateien unterscheidet sie.
-          Der nächste Rollout, den Sie starten, forkt wieder von <code>start</code>, mit dem Bug
-          wieder an seinem Platz.
+          Der nächste Rollout, den Sie starten, forkt wieder von <code>v3</code>, mit dem Bug wieder
+          an seinem Platz.
         </p>
 
         <Chapter id="many" step={6} title="Viele nebeneinander laufen lassen" />
@@ -272,22 +191,7 @@ await finish("0001", run);
           wie Ihre Policy bedienen kann. Hier sind es acht, parallel. <code>policy</code> ist Ihre
           eigene Agent-Loop, aufgerufen mit den Tools des Rollouts.
         </p>
-        <Code
-          file="many.ts"
-          code={`
-const ids = Array.from({ length: 8 }, (_, i) => \`run-\${i}\`);
-
-const rewards = await Promise.all(
-  ids.map(async (id) => {
-    const run = await newRollout(id);
-    await policy(toolsFor(run));
-    const reward = await score(run, "date-parser");
-    await finish(id, run);
-    return reward;
-  }),
-);
-`}
-        />
+        <Code file="many.ts" code={code["many.ts"]} />
         <p>
           Genau hier geht eine geteilte Umgebung schief, und das ist jetzt behoben. Wir haben es mit
           einer Policy getestet, die den Bug nur in den ersten vier Rollouts behebt, die sie
@@ -321,23 +225,13 @@ const rewards = await Promise.all(
         </ul>
         <h3>Eine neue Version der Suite ausliefern</h3>
         <p>
-          Da <code>main</code> geschützt ist, ändern Sie es auf dem vorsichtigen Weg: forken, den
-          Fork bearbeiten und zurückmergen.
+          Ändern Sie auch <code>main</code> auf dem vorsichtigen Weg: forken, den Fork bearbeiten
+          und zurückmergen. Dann springt <code>main</code> in einem Schritt auf v4.
         </p>
-        <Code
-          file="new-version.ts"
-          code={`
-const v4 = await main.fork("suite-v4");
-await v4.write(
-  { "tasks/slugify/README.md": "Also handle tabs and many spaces." },
-  "Task suite v4",
-);
-await v4.mergeInto("main");
-`}
-        />
+        <Code file="new-version.ts" code={code["new-version.ts"]} />
         <p>
-          Neue Läufe können vom neuen Stand von <code>main</code> forken. Läufe, die vom alten{" "}
-          <code>start</code> forken, bekommen weiterhin v3, Datei für Datei. So können Sie einen
+          Neue Läufe können vom neuen Stand von <code>main</code> forken. Läufe, die von{" "}
+          <code>v3</code> forken, bekommen weiterhin v3, Datei für Datei. So können Sie einen
           Checkpoint auf v3 und v4 vergleichen, ohne von irgendetwas zwei Kopien zu behalten.
         </p>
 
@@ -363,16 +257,15 @@ await v4.mergeInto("main");
             [
               "Meine Umgebung braucht einen echten Ordner. Funktioniert das trotzdem?",
               <p key="a">
-                Ja. <code>checkout</code> schreibt jeden Rollout oder jeden älteren Commit in einen
+                Ja. <code>download</code> schreibt jeden Rollout oder jeden älteren Commit in einen
                 lokalen Ordner, so wie wir es in Schritt 4 für die Tests getan haben.
               </p>,
             ],
             [
               "Was hindert einen fehlerhaften Rollout daran, den Startzustand zu ändern?",
               <p key="a">
-                <code>main</code> ist geschützt und ändert sich nur durch einen Merge. Ein direkter
-                Schreibzugriff darauf wird abgelehnt. Um einen Branch zu schützen, brauchen Sie
-                einen Admin-Key.
+                Die Tools der Policy erreichen nur ihren eigenen Branch. Und jeder Rollout forkt von{" "}
+                <code>v3</code>, auf den nichts schreibt, also bleibt der Start gleich.
               </p>,
             ],
           ]}
@@ -388,7 +281,7 @@ function RlCover() {
   return <Runs tone="blue" />;
 }
 
-/** One shared folder that each run leaves things in, next to one locked start and a copy per run. */
+/** One shared folder that each run leaves things in, next to one fixed start and a copy per run. */
 function TwoWorlds() {
   const box = "t-small rounded-lg border border-border bg-card px-3 py-2 text-foreground";
   const run = "t-small rounded-lg border border-border bg-card px-3 py-2 font-mono text-[12px]";
@@ -412,12 +305,12 @@ function TwoWorlds() {
         <p className="t-eyebrow text-muted-foreground">Was wir bauen</p>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <span className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/5 p-2">
-            <span className={box}>main</span>
-            <span className="t-eyebrow px-1 text-signal">Einmal gespeichert · gesperrt</span>
+            <span className={box}>v3</span>
+            <span className="t-eyebrow px-1 text-signal">Einmal gespeichert · unveränderlich</span>
           </span>
           <ArrowRight className="size-4 text-muted-foreground" />
           <span className="flex flex-wrap gap-2">
-            {["rollouts/0001", "rollouts/0002", "rollouts/0003"].map((name) => (
+            {["rollout-0001", "rollout-0002", "rollout-0003"].map((name) => (
               <span key={name} className={run}>
                 {name}
               </span>
@@ -433,13 +326,13 @@ function TwoWorlds() {
 function Rollouts() {
   const rows = [
     {
-      name: "rollouts/0001",
+      name: "rollout-0001",
       file: "tasks/date-parser/parse.js",
       outcome: "Gelöscht",
       flagged: false,
     },
     {
-      name: "rollouts/0002",
+      name: "rollout-0002",
       file: "tasks/date-parser/test.js",
       outcome: "Zur Prüfung behalten",
       flagged: true,

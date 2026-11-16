@@ -1,58 +1,110 @@
 ---
 title: Install
 icon: Download
-description: Install the skywake CLI, the skywaked daemon and the SDKs, and choose where your data goes.
+description: Install the CLI and the SDKs, sign in, and run the MCP server.
 ---
 
-Most people start with the CLI from npm:
+Most people start with the CLI from npm, then sign in:
 
-```bash
+```bash norun
 npm install -g skywake
-skywake --help
+skywake login
 ```
 
 ## The CLI
 
-The npm package ships prebuilt binaries for Linux on x86_64 and arm64 (glibc). npm installs only the one for your machine, from `@skywake/cli-linux-x64` or `@skywake/cli-linux-arm64`. You need Node 18 or later.
-
-To run it without installing:
-
-```bash
-npx skywake --help          # without installing
-```
+The npm package ships prebuilt binaries for Linux on x86_64 and arm64 (glibc). npm installs only the one for your machine. You need Node 18 or later. To run it without installing, use `npx skywake`.
 
 On any other platform, build the `skywake-cli` crate from source:
 
-```bash
+```bash norun
 cargo build --release -p skywake-cli    # target/release/skywake
 ```
 
-Mounts don't run on macOS. There, you can give an agent a working folder with [`checkout` and `commit` through the API](../agents/cli.mdx#a-working-folder-through-the-api).
+## The SDKs
+
+```bash tab="TypeScript" norun
+npm install skywake
+```
+
+```bash tab="Python" norun
+pip install skywake
+```
+
+The `skywake` npm package is the TypeScript SDK, plus `skywake/bash` and `skywake/ai` for [agents](../agents/bash.mdx), and the CLI. Go, Rust, Java, C# and Ruby SDKs have the same disks, indexes and verbs. See the [SDK reference](/reference/sdk).
+
+## Sign in
+
+```bash norun
+skywake login
+```
+
+[`skywake login`](/reference/cli/login) signs you in through the browser. It shows a code and opens the console at `/cli/CODE`. Check that the console shows the same code, choose the key's role and environment, and allow it. The CLI then saves a new key for you.
+
+To use a key you already have, run `skywake login --paste` and paste it, or set `SKYWAKE_API_KEY` before you run `skywake login`. Make keys in the console under Settings → API keys, or see [API keys](../security/api-keys.mdx).
+
+[`skywake whoami`](/reference/cli/whoami) shows the key's organization, environment and role. A key belongs to one organization and one environment, so you never name the environment again. An organization admin may make a key for every environment. With one of those, pick the environment with `skywake env staging`, `--env`, `SKYWAKE_ENV`, or `environment` in the SDKs.
+
+## Where settings come from
+
+The SDKs, the CLI and the MCP server read their settings the same way. The first match wins:
+
+| Setting     | Code          | Env var           | Credentials file     | Default                   |
+| ----------- | ------------- | ----------------- | -------------------- | ------------------------- |
+| key         | `key`         | `SKYWAKE_API_KEY` | from `skywake login` | none                      |
+| URL         | `url`         | `SKYWAKE_URL`     | per profile          | `https://api.skywake.dev` |
+| environment | `environment` | `SKYWAKE_ENV`     | per profile          | the key's own             |
+| profile     | `profile`     | `SKYWAKE_PROFILE` | none                 | `default`                 |
+
+With no key, the error says to run `skywake login` or set `SKYWAKE_API_KEY`.
+
+The credentials file is `~/.config/skywake/credentials.toml` (on Windows, `%APPDATA%\skywake\credentials.toml`), readable only by you. It has one table for each profile:
+
+```toml
+[default]
+key = "sw_..."
+
+[local]
+key = "sw_..."
+url = "http://localhost:8080"
+environment = "dev"
+```
+
+A self-hosted server is a profile with its own `url`. Sign in to it with `skywake login --profile local --url http://localhost:8080`, then pass `--profile local` or set `SKYWAKE_PROFILE=local`.
+
+## The MCP server
+
+```bash norun
+skywake mcp
+```
+
+[`skywake mcp`](/reference/cli/mcp) runs the MCP server for agents. It runs on Node, so it works anywhere `npx skywake mcp` does, and `uvx skywake mcp` starts the same server from the Python package. It reads the settings above, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where its file tools work. For example:
+
+```json
+{
+  "mcpServers": {
+    "skywake": {
+      "command": "npx",
+      "args": ["-y", "skywake", "mcp"],
+      "env": { "SKYWAKE_API_KEY": "sw_...", "SKYWAKE_DISK": "app" }
+    }
+  }
+}
+```
+
+See [MCP](../agents/mcp.mdx) for its tools.
 
 ## The daemon
 
-You need `skywaked` only for mounts. It uses FUSE, so it runs on Linux only. Build it from source:
+You need `skywaked` only to [mount](../filesystem/mount.mdx) a branch as a folder. It uses FUSE, so it runs on Linux only. Build it from source:
 
-```bash
+```bash norun
 cargo build --release -p skywake-daemon    # target/release/skywaked
 ```
 
-Run it with the same store settings as the CLI. See [mount](../filesystem/mount.mdx) for how to start it.
+## Without a server
 
-## The SDKs
-
-```bash tab="Python"
-pip install skywake
-pip install skywake-mcp        # the MCP server
-```
-
-```bash tab="TypeScript"
-npm install skywake            # the SDK, skywake/bash and the CLI
-```
-
-## Where data goes
-
-[Branch commands](../filesystem/branches.mdx) and `skywaked` need to know where to keep data. Pass `--store`, or set `SKYWAKE_STORE`:
+Disk commands can also work straight on a bucket or a folder, with no API. Pass `--local`, or `--local=DIR`, or set `SKYWAKE_STORE`. The store is one disk, so only the branch in `NAME@BRANCH` is used. `fork`, `merge`, `branches`, `log`, `diff`, `destroy NAME@BRANCH`, `upload` and `download` work this way, plus `gc` and `recover`.
 
 | Store                                  | Example                                                     |
 | -------------------------------------- | ----------------------------------------------------------- |
@@ -60,7 +112,6 @@ npm install skywake            # the SDK, skywake/bash and the CLI
 | An S3 bucket, or any S3 compatible one | `s3://bucket`, or `s3://bucket/folder` for one folder of it |
 | A Google Cloud Storage bucket          | `gs://bucket`, or `gs://bucket/folder`                      |
 | An Azure Blob Storage container        | `az://container`, or `az://container/folder`                |
-| One namespace, through the API         | `skywake://prod/app`                                        |
 
 Each bucket reads the usual variables of its cloud:
 
@@ -70,15 +121,14 @@ Each bucket reads the usual variables of its cloud:
 
 To try a bucket locally, start the bundled object storage server:
 
-```bash
+```bash norun
 docker compose -f docker/dev/compose.yaml up -d
 export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
        AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
+skywake upload ./project app
 ```
 
 The bucket must support conditional writes (`If-None-Match` and `If-Match`, or generation checks on Google Cloud Storage), because that is how Skywake keeps two writers from overwriting each other. It checks once, before its first conditional write, and refuses a store that ignores them.
-
-To use a `skywake://` store, see [scoped credentials](../security/scoped-credentials.mdx).
 
 ## Next
 
