@@ -15,7 +15,9 @@ function scopeFor(caller: Caller, asked: NewKey): KeyScope {
   const environment =
     asked.environment !== undefined
       ? asked.environment
-      : (legacy?.environment ?? caller.environment);
+      : legacy
+        ? legacy.environment
+        : caller.environment;
   const only = asked.only ?? legacy?.only ?? caller.only;
   if (environment === null) {
     allowOrgAdmin(caller);
