@@ -6,6 +6,7 @@ import { before, test } from "node:test";
 
 import {
   collect,
+  Conflict,
   MergeConflict,
   NotFound,
   PermissionError,
@@ -24,8 +25,11 @@ let sky: Skywake;
 before(async () => {
   if (skip) return;
   const org = new Skywake({ url: URL, key: ADMIN });
-  await org.createEnvironment("prod");
-  await org.createEnvironment("staging");
+  for (const name of ["prod", "staging"]) {
+    await org.createEnvironment(name).catch((error) => {
+      if (!(error instanceof Conflict)) throw error;
+    });
+  }
   const made = (name: string, role: "admin" | "read", environment: string) =>
     org.createKey({ name, role, environment }).then((created) => created.key);
   keys.prod = await made("prod", "admin", "prod");

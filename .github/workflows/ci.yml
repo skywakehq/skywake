@@ -125,10 +125,10 @@ jobs:
       # above; a skipped test fails in CI), the TypeScript SDK and the npm
       # wrapper of the CLI.
       - run: pnpm test
-      - name: Scenario list, TypeScript SDK
+      - name: Scenario list, TypeScript and Python SDKs
         run: scripts/scenarios.sh
       - name: Python SDK
-        run: uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests
+        run: uv run --isolated --with pytest --with-editable ./sdks/python pytest -q sdks/python/tests
       - name: Start the API on S3
         env:
           SKYWAKE_STORE: s3://skywake/ci
@@ -155,14 +155,12 @@ jobs:
         env:
           SKYWAKE_URL: http://localhost:8080
           SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
-        run: uv run --isolated --with "./sdks/python[mcp]" python e2e/swarm/orchestrator.py
-      - name: CLI and MCP index tools
+        run: uv run --isolated --with ./sdks/python --with mcp python e2e/swarm/orchestrator.py
+      - name: CLI index commands
         env:
           SKYWAKE_URL: http://localhost:8080
           SKYWAKE_API_ADMIN_TOKEN: ci-admin-token-0123456789
-        run: |
-          cargo test -p skywake-cli --test index
-          uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests/test_mcp.py
+        run: cargo test -p skywake-cli --test index
       - name: API log
         if: always()
         run: cat api.log || true

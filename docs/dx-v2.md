@@ -323,7 +323,8 @@ skywake types                        # write TypeScript types
 
 One server, `skywake mcp` (also `npx skywake mcp`, `uvx skywake mcp`). Same
 settings as above, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where file
-tools work.
+tools work. It is written in TypeScript, because `bash` runs on just-bash; the
+Python package's `skywake` command starts it through `npx`, so it needs Node.
 
 Tools: `read`, `write`, `delete`, `list`, `grep`, `find`, `query`, `bash`,
 `fork`, `merge`, `log`, `diff`, `index_query`, `index_upsert`, `index_delete`.

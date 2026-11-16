@@ -41,7 +41,7 @@ def test_the_key_comes_from_the_environment_and_the_url_defaults_to_the_cloud(cr
     seen, transport = recorder()
     Skywake(transport=transport).whoami()
     assert seen["authorization"] == "Bearer sw_env"
-    assert seen["url"] == "https://api.skywake.dev/v1/whoami"
+    assert seen["url"] == "https://api.skywake.dev/v2/whoami"
 
 
 def test_a_profile_is_used_when_no_key_is_given(credentials, monkeypatch):
@@ -53,7 +53,7 @@ def test_a_profile_is_used_when_no_key_is_given(credentials, monkeypatch):
     assert seen == {
         "authorization": "Bearer sw_file",
         "environment": "prod",
-        "url": "http://local/v1/whoami",
+        "url": "http://local/v2/whoami",
     }
     monkeypatch.setenv("SKYWAKE_PROFILE", "staging")
     Skywake(transport=transport).whoami()
@@ -68,7 +68,7 @@ def test_code_beats_the_environment_which_beats_the_file(credentials, monkeypatc
     Skywake(transport=transport, environment="staging").whoami()
     assert seen["authorization"] == "Bearer sw_env"
     assert seen["environment"] == "staging"
-    with Skywake("http://other", "sw_code", transport=transport) as sky:
+    with Skywake(url="http://other", key="sw_code", transport=transport) as sky:
         sky.whoami()
     assert seen["authorization"] == "Bearer sw_code"
-    assert seen["url"] == "http://other/v1/whoami"
+    assert seen["url"] == "http://other/v2/whoami"

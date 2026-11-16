@@ -1,87 +1,148 @@
 import httpx
 
-from ._encode import compact
-from ._http import check, send_with_retries
+from ._drive import AsyncDriver, SyncDriver, call, compact, listing, op, pages, segment
 from ._settings import resolve_settings
-from .namespace import Namespace
-from .search_index import Indexes, SearchIndex
+from ._transport import AsyncTransport, SyncTransport
+from .disk import MAIN, Disk
+from .index import Index
 
 
-class Skywake:
+def _headers(key, environment):
+    headers = {"authorization": f"Bearer {key}", "user-agent": "skywake-python"}
+    if environment:
+        headers["skywake-environment"] = environment
+    return headers
+
+
+def _base(url):
+    base = url.rstrip("/")
+    for old in ("/v1", "/v2"):
+        if base.endswith(old):
+            base = base[: -len(old)]
+    return base
+
+
+class _Client:
+    def __init__(self, driver, url, environment):
+        self._driver = driver
+        self.url = url
+        self.environment = environment
+
+    def disk(self, name, branch=None):
+        return Disk(self._driver, name, branch or MAIN)
+
+    def index(self, name, branch=None):
+        return Index(self._driver, name, branch or MAIN)
+
+    @op
+    def create_disk(self, name, *, region=None, search=None, visibility=None):
+        body = compact({"name": name, "region": region, "search": search, "visibility": visibility})
+        yield from call("POST", "/disks", body=body)
+        return self.disk(name)
+
+    @op
+    def create_index(self, name, *, schema=None, region=None, embed=None):
+        yield from call(
+            "POST", "/indexes", body=compact({"name": name, "schema": schema, "region": region, "embed": embed})
+        )
+        return self.index(name)
+
+    @listing
+    def list_disks(self):
+        return (yield from pages("/disks"))
+
+    @listing
+    def list_indexes(self):
+        return (yield from pages("/indexes"))
+
+    @op
+    def create_key(self, name, role, *, environment=None, only=None, expires_in_days=None):
+        body = compact({"name": name, "role": role, "only": only, "expires_in_days": expires_in_days})
+        body["environment"] = environment
+        return (yield from call("POST", "/keys", body=body))
+
+    @listing
+    def list_keys(self):
+        return (yield from pages("/keys"))
+
+    @op
+    def revoke_key(self, id):
+        yield from call("DELETE", f"/keys/{segment(id)}")
+
+    @listing
+    def list_environments(self):
+        return (yield from pages("/environments"))
+
+    @op
+    def create_environment(self, name):
+        return (yield from call("POST", "/environments", body={"name": name}))
+
+    @op
+    def whoami(self):
+        return (yield from call("GET", "/whoami"))
+
+
+class Skywake(_Client):
     def __init__(
         self,
-        url=None,
+        *,
         key=None,
+        url=None,
+        environment=None,
+        profile=None,
         timeout=60.0,
         retries=3,
         backoff=0.2,
         transport=None,
-        environment=None,
-        profile=None,
     ):
-        """With no arguments, the key comes from SKYWAKE_API_KEY or the
-        profile `skywake login` saved, and the URL defaults to the cloud.
-        `timeout` is in seconds per try; failed requests are retried up to
-        `retries` times when that is safe."""
-        settings = resolve_settings(key=key, url=url, environment=environment, profile=profile)
-        self.url = settings["url"].rstrip("/").removesuffix("/v1")
-        self.environment = settings["environment"]
-        self.retries = retries
-        self.backoff = backoff
-        headers = {"Authorization": f"Bearer {settings['key']}"}
-        if self.environment:
-            headers["Skywake-Environment"] = self.environment
-        self.http = httpx.Client(
-            base_url=f"{self.url}/v1",
-            headers=headers,
+        settings = resolve_settings(key, url, environment, profile)
+        base = _base(settings["url"])
+        http = httpx.Client(
+            base_url=f"{base}/v2",
+            headers=_headers(settings["key"], settings["environment"]),
             timeout=timeout,
             transport=transport,
         )
-        self.indexes = Indexes(self)
+        super().__init__(SyncDriver(SyncTransport(http, retries, backoff)), base, settings["environment"])
+
+    def close(self):
+        self._driver.transport.close()
 
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *_):
         self.close()
 
-    def whoami(self):
-        return self.call("GET", "/whoami").json()
 
-    def send(self, method, path, json=None, **kwargs):
-        """Sends a request and returns the response, even an error. Fields
-        set to None are left out, so the server uses its defaults."""
-        if isinstance(json, dict):
-            json = compact(json)
-        return send_with_retries(self.http, method, path, self.retries, self.backoff, json=json, **kwargs)
+class AsyncSkywake(_Client):
+    def __init__(
+        self,
+        *,
+        key=None,
+        url=None,
+        environment=None,
+        profile=None,
+        timeout=60.0,
+        retries=3,
+        backoff=0.2,
+        transport=None,
+    ):
+        settings = resolve_settings(key, url, environment, profile)
+        base = _base(settings["url"])
+        http = httpx.AsyncClient(
+            base_url=f"{base}/v2",
+            headers=_headers(settings["key"], settings["environment"]),
+            timeout=timeout,
+            transport=transport,
+        )
+        super().__init__(AsyncDriver(AsyncTransport(http, retries, backoff)), base, settings["environment"])
 
-    def call(self, method, path, **kwargs):
-        """Like `send`, but raises the API's error."""
-        return check(self.send(method, path, **kwargs))
+    async def close(self):
+        await self._driver.transport.close()
 
-    def namespace(self, name):
-        return Namespace(self, name)
+    async def __aenter__(self):
+        return self
 
-    def index(self, name):
-        """A search index, on its `main` branch."""
-        return SearchIndex(self, name)
-
-    def namespaces(self):
-        return self.call("GET", "/namespaces").json()
-
-    def create_namespace(self, name, region=None):
-        self.call("POST", "/namespaces", json={"name": name, "region": region})
-        return self.namespace(name)
-
-    def regions(self):
-        return self.call("GET", "/regions").json()
-
-    def environments(self):
-        return self.call("GET", "/environments").json()
-
-    def create_environment(self, name):
-        """An environment has no region; each namespace picks its own."""
-        return self.call("POST", "/environments", json={"name": name}).json()
-
-    def close(self):
-        self.http.close()
+    async def __aexit__(self, *_):
+        await self.close()

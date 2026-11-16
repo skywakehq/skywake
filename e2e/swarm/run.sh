@@ -4,7 +4,7 @@
 set -e
 cd "$(dirname "$0")/../.."
 python3 -m venv /tmp/swarm
-/tmp/swarm/bin/pip install --quiet "./sdks/python[mcp]"
+/tmp/swarm/bin/pip install --quiet ./sdks/python mcp
 
 # The repository's .env holds the admin token; without it, set
 # SKYWAKE_API_ADMIN_TOKEN or SKYWAKE_KEY yourself (CI does).

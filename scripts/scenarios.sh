@@ -20,6 +20,5 @@ started=$(grep -m1 '^SCENARIO ' "$log" | cut -d' ' -f2-)
 export SKYWAKE_SCENARIO_URL=$(node -e 'console.log(JSON.parse(process.argv[1]).url)' "$started")
 export SKYWAKE_SCENARIO_KEY=$(node -e 'console.log(JSON.parse(process.argv[1]).key)' "$started")
 
-cd "$root/sdks/typescript"
-pnpm -s build
-node --test --test-concurrency=1 test/scenarios.test.ts
+(cd "$root/sdks/typescript" && pnpm -s build && node --test --test-concurrency=1 test/scenarios.test.ts)
+uv run --isolated --with pytest --with-editable "$root/sdks/python" pytest -q "$root/sdks/python/tests/test_scenarios.py"

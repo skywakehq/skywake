@@ -29,11 +29,9 @@ export const operations: SdkOperation[] = [
       typescript: `import { Skywake } from "skywake";
 
 const sky = new Skywake({ key: process.env.SKYWAKE_API_KEY! });`,
-      python: `import os
+      python: `from skywake import Skywake
 
-from skywake import Skywake
-
-sky = Skywake(os.environ["SKYWAKE_URL"], os.environ["SKYWAKE_KEY"])`,
+sky = Skywake()`,
       go: `import (
 	"context"
 	"os"
@@ -75,10 +73,12 @@ using var sky = new SkywakeClient(
     ],
   },
 });`,
-      python: `products = sky.indexes.create(
+      python: `products = sky.create_index(
     "products",
-    vectors=[{"name": "embedding", "dims": 3}],
-    attributes=[{"name": "title", "type": "text"}, {"name": "price", "type": "number"}],
+    schema={
+        "vectors": [{"name": "embedding", "dims": 3}],
+        "attributes": [{"name": "title", "type": "text"}, {"name": "price", "type": "number"}],
+    },
 )`,
       go: `products, err := sky.Indexes.Create(ctx, skywake.NewIndex{
 	Name: "products",
@@ -118,9 +118,9 @@ let products = sky.indexes().create("products", schema, &IndexOptions::default()
   { id: 1, embedding: [0.1, 0.2, 0.3], title: "Desk lamp", price: 40 },
   { id: 2, embedding: [0.3, 0.1, 0.2], title: "Red mug", price: 9 },
 ]);`,
-      python: `count = sky.index("products").upsert([
-    {"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"title": "Desk lamp", "price": 40}},
-    {"id": 2, "vectors": {"embedding": [0.3, 0.1, 0.2]}, "attributes": {"title": "Red mug", "price": 9}},
+      python: `done = sky.index("products").upsert([
+    {"id": 1, "embedding": [0.1, 0.2, 0.3], "title": "Desk lamp", "price": 40},
+    {"id": 2, "embedding": [0.3, 0.1, 0.2], "title": "Red mug", "price": 9},
 ])`,
       go: `count, err := sky.Index("products").Upsert(ctx, []skywake.Document{
 	{
@@ -169,9 +169,9 @@ let count = sky.index("products").upsert(&docs).await?;`,
     examples: {
       typescript: `const hits = await sky.index("products").query({ vector: [0.1, 0.2, 0.3], limit: 5 });
 for (const hit of hits) console.log(hit.id, hit.score);`,
-      python: `hits = sky.index("products").query("embedding", [0.1, 0.2, 0.3], top_k=5)
+      python: `hits = sky.index("products").query(vector=[0.1, 0.2, 0.3], limit=5)
 for hit in hits:
-    print(hit["id"], hit["distance"])`,
+    print(hit["id"], hit["score"])`,
       go: `hits, err := sky.Index("products").Query(ctx, skywake.Query{
 	Vector: skywake.Vector{Column: "embedding", Value: []float32{0.1, 0.2, 0.3}},
 	TopK:   5,
@@ -213,7 +213,7 @@ foreach (var hit in hits)
     examples: {
       typescript: `const hits = await sky.index("products").query("desk lamp", { mode: "keywords", limit: 5 });
 for (const hit of hits) console.log(hit.id, hit.score);`,
-      python: `hits = sky.index("products").search("desk lamp", fields=["title"], top_k=5)
+      python: `hits = sky.index("products").query("desk lamp", mode="keywords", limit=5)
 for hit in hits:
     print(hit["id"], hit["score"])`,
       go: `hits, err := sky.Index("products").Search(ctx, skywake.Search{
@@ -259,13 +259,9 @@ foreach (var hit in hits)
     examples: {
       typescript: `const hits = await sky.index("products").query("desk lamp", { limit: 5 });
 for (const hit of hits) console.log(hit.id, hit.score);`,
-      python: `hits = sky.index("products").hybrid(
-    {
-        "meaning": {"vector": {"column": "embedding", "value": [0.1, 0.2, 0.3]}, "topK": 50},
-        "words": {"query": "desk lamp", "topK": 50},
-    },
-    top_k=5,
-)`,
+      python: `hits = sky.index("products").query("desk lamp", limit=5)
+for hit in hits:
+    print(hit["id"], hit["score"])`,
       go: `hits, err := sky.Index("products").Hybrid(ctx, skywake.Hybrid{
 	Searches: map[string]any{
 		"meaning": skywake.Query{
@@ -313,9 +309,8 @@ let hits = sky.index("products").hybrid(&hybrid).await?;`,
   filter: { and: [{ price: { gte: 20 } }, { price: { lt: 50 } }] },
 });`,
       python: `hits = sky.index("products").query(
-    "embedding",
-    [0.1, 0.2, 0.3],
-    top_k=5,
+    vector=[0.1, 0.2, 0.3],
+    limit=5,
     filter={"and": [{"price": {"gte": 20}}, {"price": {"lt": 50}}]},
 )`,
       go: `hits, err := sky.Index("products").Query(ctx, skywake.Query{
@@ -359,8 +354,8 @@ let hits = sky.index("products").query(&query).await?;`,
     examples: {
       typescript: `const trial = await sky.index("products").fork("try");
 await trial.delete({ filter: { price: { gt: 100 } } });`,
-      python: `trial = sky.index("products").fork("agents/try")
-trial.delete_by({"price": {"gt": 100}})`,
+      python: `trial = sky.index("products").fork("try")
+trial.delete({"filter": {"price": {"gt": 100}}})`,
       go: `trial, err := sky.Index("products").Fork(ctx, "agents/try")
 if err != nil {
 	return err
@@ -386,9 +381,9 @@ await trial.DeleteByAsync(new { price = new { gt = 100 } });`,
       typescript: `const trial = sky.index("products", { branch: "try" });
 const { rows } = await trial.mergeInto("main");
 await trial.destroy();`,
-      python: `products = sky.index("products")
-added = products.merge("agents/try")
-products.at("agents/try").delete_branch()`,
+      python: `trial = sky.index("products", branch="try")
+merged = trial.merge_into("main")
+trial.destroy()`,
       go: `products := sky.Index("products")
 added, err := products.Merge(ctx, "agents/try")
 if err != nil {
@@ -416,9 +411,8 @@ await products.At("agents/try").DeleteBranchAsync();`,
     examples: {
       typescript: `const work = await sky.disk("acme").fork("agent-42");
 console.log(work.branch);`,
-      python: `main = sky.namespace("acme").branch("main")
-fork = main.fork("agents/42")
-print(fork.name)`,
+      python: `work = sky.disk("acme").fork("agent-42")
+print(work.branch)`,
     },
   },
   {
@@ -429,9 +423,9 @@ print(fork.name)`,
       typescript: `const work = sky.disk("acme", { branch: "agent-42" });
 const { commit } = await work.write({ "notes.md": "hello", "todo.md": "ship docs" }, { message: "add notes" });
 await work.delete("todo.md", { message: "drop the todo" });`,
-      python: `branch = sky.namespace("acme").branch("agents/42")
-head = branch.write({"notes.md": "hello", "todo.md": "ship docs"}, "add notes")
-branch.commit("drop the todo", [{"path": "todo.md", "delete": True}])`,
+      python: `work = sky.disk("acme", branch="agent-42")
+done = work.write({"notes.md": "hello", "todo.md": "ship docs"}, message="add notes")
+work.delete("todo.md", message="drop the todo")`,
     },
   },
   {
@@ -442,9 +436,9 @@ branch.commit("drop the todo", [{"path": "todo.md", "delete": True}])`,
       typescript: `const work = sky.disk("acme", { branch: "agent-42" });
 const text = await work.read("notes.md");
 const bytes = await work.read("notes.md", { as: "bytes", offset: 0, length: 5 });`,
-      python: `branch = sky.namespace("acme").branch("agents/42")
-text = branch.read_text("notes.md")
-data = branch.read("notes.md", offset=0, length=5)`,
+      python: `work = sky.disk("acme", branch="agent-42")
+text = work.read("notes.md")
+data = work.read("notes.md", binary=True, offset=0, length=5)`,
     },
   },
 ];
