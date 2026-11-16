@@ -13,7 +13,12 @@ import {
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@skywake/ui/components/sheet";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@skywake/ui/components/dialog";
 import { cn } from "@skywake/ui/lib/utils";
 import { Button, Checkbox, Empty, Panel, Rows } from "@/components/kit";
 import {
@@ -27,7 +32,7 @@ import {
   call,
   useApi,
 } from "./api";
-import { Label, Select, TextArea, TextField } from "./fields";
+import { Select, TextArea, TextField } from "./fields";
 
 const SIZES = [25, 50, 100];
 
@@ -352,67 +357,83 @@ function Detail({
   onClose: () => void;
   onDelete: (id: DocId) => void;
 }) {
-  // While the panel slides out, it still shows the document it had.
   const [doc, setDoc] = useState(picked);
   if (picked && picked !== doc) setDoc(picked);
+  const linked = index.schema.attributes.some((a) => a.name === "chunk");
+  const attributes = index.schema.attributes.filter((a) => !(linked && INTERNAL.has(a.name)));
   return (
-    <Sheet open={picked !== null} onOpenChange={(next) => !next && onClose()}>
-      <SheetContent
-        side="right"
+    <Dialog open={picked !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent
+        size="lg"
         onOpenAutoFocus={(event) => event.preventDefault()}
-        className="w-full gap-0 overflow-y-auto border-l shadow-none sm:max-w-md"
+        className="flex max-h-[85dvh] flex-col p-0"
       >
         {doc && (
           <>
-            <div className="grid gap-1 border-b px-5 pt-5 pb-4 pr-12">
-              <Label>Document</Label>
-              <SheetTitle className="text-lg font-semibold break-all">{String(doc.id)}</SheetTitle>
-              <SheetDescription className="text-xs text-faint">
-                {typeof doc.id === "number" ? "number id" : "string id"} · on {index.name}
-              </SheetDescription>
+            <div className="grid gap-1 border-b px-6 pt-5 pb-4 pr-12">
+              <DialogTitle className="text-base font-semibold break-all">
+                {linked ? String(doc.attributes.path) : String(doc.id)}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-faint">
+                {linked
+                  ? `Passage ${Number(doc.attributes.chunk) + 1}`
+                  : typeof doc.id === "number"
+                    ? "Number id"
+                    : "String id"}{" "}
+                · {index.name}
+              </DialogDescription>
             </div>
 
-            <section className="grid gap-1 border-b px-5 py-4">
-              <Label>Attributes</Label>
-              {index.schema.attributes.length === 0 && (
-                <p className="text-sm text-muted-foreground">This index has no attributes.</p>
-              )}
-              {index.schema.attributes.map((a) => (
-                <div key={a.name} className="flex min-h-8 items-baseline gap-4 py-1">
-                  <span className="w-28 shrink-0 truncate text-xs text-muted-foreground">
-                    {a.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 text-sm break-words",
-                      doc.attributes[a.name] === undefined && "text-faint",
-                    )}
-                  >
-                    {format(doc.attributes[a.name])}
-                  </span>
-                  <span className="text-micro text-faint">{a.type}</span>
-                </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <section className="grid gap-4 px-6 py-5">
+                {attributes.length === 0 && (
+                  <p className="text-sm text-muted-foreground">This index has no attributes.</p>
+                )}
+                {attributes.map((a) => (
+                  <Field key={a.name} name={a.name} type={a.type} value={doc.attributes[a.name]} />
+                ))}
+              </section>
+              {index.schema.vectors.map((v) => (
+                <VectorView
+                  key={v.name}
+                  name={v.name}
+                  values={doc.vectors[v.name] ?? []}
+                  normalized={v.metric === "cosine"}
+                />
               ))}
-            </section>
+            </div>
 
-            {index.schema.vectors.map((v) => (
-              <VectorView
-                key={v.name}
-                name={v.name}
-                values={doc.vectors[v.name] ?? []}
-                normalized={v.metric === "cosine"}
-              />
-            ))}
-
-            <div className="mt-auto flex items-center gap-2 border-t px-5 py-4">
+            <div className="flex items-center gap-2 border-t px-6 py-3">
               <CopyButton text={JSON.stringify(doc, null, 2)} label="Copy JSON" />
               <span className="ml-auto" />
               <ConfirmDelete key={keyOf(doc.id)} onDelete={() => onDelete(doc.id)} />
             </div>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ name, type, value }: { name: string; type: string; value?: AttributeValue }) {
+  const long = typeof value === "string" && value.length > 120;
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-baseline gap-2">
+        <span className="text-xs text-muted-foreground">{name}</span>
+        <span className="text-micro text-faint">{type}</span>
+      </div>
+      <p
+        className={cn(
+          "text-sm break-words",
+          long &&
+            "max-h-56 overflow-y-auto rounded-md bg-muted/50 p-3 leading-6 whitespace-pre-wrap",
+          value === undefined && "text-faint",
+        )}
+      >
+        {format(value)}
+      </p>
+    </div>
   );
 }
 
@@ -444,30 +465,41 @@ function VectorView({
   values: number[];
   normalized: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const norm = Math.sqrt(values.reduce((sum, x) => sum + x * x, 0));
   return (
-    <section className="grid gap-2 border-b px-5 py-4">
+    <section className="grid gap-2 border-t px-6 py-4">
       <div className="flex items-baseline gap-2">
-        <Label>{name}</Label>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
+          {open ? "Hide" : "Show"} {name}
+        </button>
         <span className="text-xs text-faint tabular-nums">
           {values.length} dims · length {norm.toFixed(3)}
-          {normalized && " · stored normalized, for cosine"}
+          {normalized && " · normalized for cosine"}
         </span>
         <span className="ml-auto" />
         <CopyButton text={JSON.stringify(values)} label="Copy" small />
       </div>
-      <p className="rounded-md max-h-64 overflow-y-auto bg-muted/50 p-3 font-mono text-xs leading-5 break-all text-muted-foreground">
-        {all ? `[${values.map(round).join(", ")}]` : preview(values, 12)}
-      </p>
-      {values.length > 12 && (
-        <button
-          type="button"
-          onClick={() => setAll(!all)}
-          className="w-fit text-xs text-muted-foreground hover:text-foreground"
-        >
-          {all ? "Show less" : `Show all ${values.length}`}
-        </button>
+      {open && (
+        <>
+          <p className="max-h-64 overflow-y-auto rounded-md bg-muted/50 p-3 font-mono text-xs leading-5 break-all text-muted-foreground">
+            {all ? `[${values.map(round).join(", ")}]` : preview(values, 12)}
+          </p>
+          {values.length > 12 && (
+            <button
+              type="button"
+              onClick={() => setAll(!all)}
+              className="w-fit text-xs text-muted-foreground hover:text-foreground"
+            >
+              {all ? "Show less" : `Show all ${values.length}`}
+            </button>
+          )}
+        </>
       )}
     </section>
   );
