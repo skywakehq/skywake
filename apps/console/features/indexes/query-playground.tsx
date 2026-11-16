@@ -9,6 +9,7 @@ import {
   type FusedHit,
   type Highlight,
   type Hit,
+  INTERNAL,
   type IndexInfo,
   type SearchHit,
   branchUrl,
@@ -43,6 +44,12 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: "hybrid", label: "Hybrid" },
 ];
 
+function labelOf(kind: Kind, embeds: boolean) {
+  if (kind === "text") return "Words";
+  if (kind === "vector") return embeds ? "Meaning" : "Vector";
+  return embeds ? "Meaning and words" : "Vector and words";
+}
+
 /** How long `work` takes, in milliseconds. */
 async function timed<T>(work: () => Promise<T>) {
   const started = performance.now();
@@ -53,13 +60,12 @@ async function timed<T>(work: () => Promise<T>) {
 /** `""` as unset, else the number. */
 const optional = (text: string) => (text.trim() ? Number(text) : undefined);
 
-const HIDDEN = new Set(["grams", "hash"]);
 
 /** Runs queries by hand, and shows them as code to paste. */
 export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: string }) {
   const { schema } = index;
   const api = useUrls().api;
-  const shown = schema.attributes.filter((a) => !HIDDEN.has(a.name));
+  const shown = schema.attributes.filter((a) => !INTERNAL.has(a.name));
   const texts = shown.filter((a) => a.type === "text");
   const others = shown.filter((a) => a.type !== "text");
   const kinds = KINDS.filter(
@@ -96,6 +102,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   const picked = schema.vectors.find((v) => v.name === column);
   const dims = picked?.dims;
   const embed = picked?.embed;
+  const oneBox = kind === "hybrid" && !!embed && !image;
   // Text is long, so hits show its highlighted fragment instead.
   const include = others.map((a) => a.name);
   const highlight = texts.map((a) => a.name);
@@ -120,12 +127,13 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     };
   }
 
-  function textBody(): SearchBody {
-    if (!words.trim()) throw new Error("Type a query first");
+  function textBody(fallback = ""): SearchBody {
+    const query = words.trim() ? words : fallback;
+    if (!query.trim()) throw new Error("Type what to find first");
     const f = filter();
     const set = Object.entries(boosts).filter(([, v]) => v.trim() && Number(v) !== 1);
     return {
-      query: words,
+      query,
       topK,
       ...(set.length ? { boosts: Object.fromEntries(set.map(([n, v]) => [n, Number(v)])) } : {}),
       ...(optional(k1) === undefined ? {} : { k1: optional(k1) }),
@@ -149,7 +157,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     return {
       route: "hybrid",
       body: {
-        searches: { vector: vectorBody(brief), text: textBody() },
+        searches: { vector: vectorBody(brief), text: textBody(oneBox ? vector : "") },
         topK,
         ...(Object.keys(fuse).length ? { fuse } : {}),
       },
@@ -182,119 +190,45 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     setBusy(false);
   }
 
-  const topKField = (
-    <label className="grid gap-1.5">
-      <Label>Top k</Label>
+  const number = (
+    label: string,
+    value: string,
+    set: (next: string) => void,
+    placeholder: string,
+    step = 1,
+  ) => (
+    <label key={label} className="grid gap-1.5">
+      <Label>{label}</Label>
       <TextField
         type="number"
-        min={1}
-        max={1000}
-        value={topK}
-        onChange={(e) => setTopK(Number(e.target.value))}
-        className="w-20 tabular-nums"
+        min={0}
+        step={step}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        className="w-24 tabular-nums"
       />
     </label>
   );
 
-  const vectorFields = (
-    <div className="grid gap-3">
-      <label className="grid gap-1.5">
-        <Label>
-          {embed
-            ? `Text, image or vector · embedded by ${embed.model}`
-            : `Vector · ${dims ?? "?"} numbers`}
-        </Label>
-        {!(embed && image) && (
-          <TextArea
-            value={vector}
-            onChange={(e) => setVector(e.target.value)}
-            placeholder={embed ? "What to find, in your own words" : "[0.12, -0.03, 0.88, …]"}
-            className="min-h-20"
-          />
-        )}
-      </label>
-      {embed && <ImagePick picked={image} onPick={setImage} />}
-      <div className="flex flex-wrap items-end gap-3">
-        {topKField}
-        <Recall value={recall} onChange={setRecall} overridden={!!probe} />
-        <label className="grid gap-1.5">
-          <Label>Probe</Label>
-          <TextField
-            type="number"
-            min={1}
-            placeholder="auto"
-            value={probe}
-            onChange={(e) => setProbe(e.target.value)}
-            className="w-20 tabular-nums"
-          />
-        </label>
-      </div>
-    </div>
-  );
-
-  const textFields = (
-    <div className="grid gap-3">
-      <label className="grid gap-1.5">
-        <Label>Query</Label>
-        <TextField
-          value={words}
-          onChange={(e) => setWords(e.target.value)}
-          placeholder="reset password"
-          className="h-10 px-3 text-[15px]"
-        />
-      </label>
-      <div className="flex flex-wrap items-end gap-3">
-        {kind === "text" && topKField}
-        {texts.map((a) => (
-          <label key={a.name} className="grid gap-1.5">
-            <Label>{`${a.name} boost`}</Label>
-            <TextField
-              type="number"
-              min={0}
-              step={0.1}
-              placeholder="1"
-              value={boosts[a.name] ?? ""}
-              onChange={(e) => setBoosts({ ...boosts, [a.name]: e.target.value })}
-              className="w-20 tabular-nums"
-            />
-          </label>
-        ))}
-        <label className="grid gap-1.5">
-          <Label>k1</Label>
-          <TextField
-            type="number"
-            min={0}
-            step={0.1}
-            placeholder={String(texts[0]?.k1 ?? 1.2)}
-            value={k1}
-            onChange={(e) => setK1(e.target.value)}
-            className="w-20 tabular-nums"
-          />
-        </label>
-        <label className="grid gap-1.5">
-          <Label>b</Label>
-          <TextField
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            placeholder={String(texts[0]?.b ?? 0.75)}
-            value={b}
-            onChange={(e) => setB(e.target.value)}
-            className="w-20 tabular-nums"
-          />
-        </label>
-      </div>
-    </div>
+  const wordsField = (label: string, placeholder: string) => (
+    <label className="grid gap-1.5">
+      <Label>{label}</Label>
+      <TextField
+        value={words}
+        onChange={(e) => setWords(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 px-3 text-[15px]"
+      />
+    </label>
   );
 
   return (
     <div className="grid gap-10">
       <form onSubmit={run} className="grid gap-5">
-        <div className="flex flex-wrap items-end gap-3 empty:hidden">
-          {kinds.length > 1 && (
-            <div className="grid gap-1.5">
-              <Label>Search</Label>
+        {(kinds.length > 1 || (kind !== "text" && schema.vectors.length > 1)) && (
+          <div className="flex flex-wrap items-end gap-3">
+            {kinds.length > 1 && (
               <Choice
                 value={kind}
                 onChange={(next) => {
@@ -302,55 +236,46 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
                   setRows([]);
                   setHits(null);
                 }}
-                options={kinds}
+                options={kinds.map((k) => ({ value: k.value, label: labelOf(k.value, !!embed) }))}
               />
-            </div>
-          )}
-          {kind !== "text" && (
-            <label className="grid gap-1.5">
-              <Label>Column</Label>
+            )}
+            {kind !== "text" && schema.vectors.length > 1 && (
               <Select value={column} onChange={(e) => setColumn(e.target.value)}>
                 {schema.vectors.map((v) => (
                   <option key={v.name}>{v.name}</option>
                 ))}
               </Select>
-            </label>
-          )}
-        </div>
-
-        {kind !== "text" && vectorFields}
-        {kind !== "vector" && textFields}
-
-        {kind === "hybrid" && (
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="grid gap-1.5">
-              <Label>Rank constant k</Label>
-              <TextField
-                type="number"
-                min={0}
-                placeholder="60"
-                value={rankK}
-                onChange={(e) => setRankK(e.target.value)}
-                className="w-24 tabular-nums"
-              />
-            </label>
-            <label className="grid gap-1.5">
-              <Label>Text weight</Label>
-              <TextField
-                type="number"
-                min={0}
-                step={0.1}
-                placeholder="1"
-                value={textWeight}
-                onChange={(e) => setTextWeight(e.target.value)}
-                className="w-24 tabular-nums"
-              />
-            </label>
-            <p className="pb-2 text-xs text-faint">
-              Each hit scores the sum of weight / (k + rank) over both searches.
-            </p>
+            )}
           </div>
         )}
+
+        {kind !== "text" && (
+          <div className="grid gap-3">
+            {!(embed && image) && (
+              <label className="grid gap-1.5">
+                <Label>{embed ? "What to find" : `Vector · ${dims ?? "?"} numbers`}</Label>
+                {embed ? (
+                  <TextField
+                    value={vector}
+                    onChange={(e) => setVector(e.target.value)}
+                    placeholder="Ask in your own words, or paste a vector"
+                    className="h-10 px-3 text-[15px]"
+                  />
+                ) : (
+                  <TextArea
+                    value={vector}
+                    onChange={(e) => setVector(e.target.value)}
+                    placeholder="[0.12, -0.03, 0.88, …]"
+                    className="min-h-16"
+                  />
+                )}
+              </label>
+            )}
+            {embed && <ImagePick picked={image} onPick={setImage} />}
+          </div>
+        )}
+        {kind === "text" && wordsField("Words to find", "reset password")}
+        {kind === "hybrid" && !oneBox && wordsField("Words to match", "reset password")}
 
         <div className="grid gap-2">
           <div className="flex items-center gap-3">
@@ -379,6 +304,65 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
           )}
         </div>
 
+        <details className="group">
+          <summary className="w-fit cursor-pointer list-none text-xs text-muted-foreground transition-colors hover:text-foreground">
+            <span className="group-open:hidden">Advanced</span>
+            <span className="hidden group-open:inline">Hide advanced</span>
+          </summary>
+          <div className="mt-4 grid gap-4">
+            {kind === "hybrid" && oneBox && (
+              <div className="max-w-xl">
+                {wordsField("Words to match", "The same as what to find")}
+              </div>
+            )}
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="grid gap-1.5">
+                <Label>Results</Label>
+                <TextField
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={topK}
+                  onChange={(e) => setTopK(Number(e.target.value))}
+                  className="w-20 tabular-nums"
+                />
+              </label>
+              {kind !== "text" && (
+                <>
+                  <Recall value={recall} onChange={setRecall} overridden={!!probe} />
+                  {number("Probe", probe, setProbe, "auto")}
+                </>
+              )}
+              {kind !== "vector" && (
+                <>
+                  {texts.map((a) =>
+                    number(
+                      `${a.name} boost`,
+                      boosts[a.name] ?? "",
+                      (v) => setBoosts({ ...boosts, [a.name]: v }),
+                      "1",
+                      0.1,
+                    ),
+                  )}
+                  {number("k1", k1, setK1, String(texts[0]?.k1 ?? 1.2), 0.1)}
+                  {number("b", b, setB, String(texts[0]?.b ?? 0.75), 0.05)}
+                </>
+              )}
+              {kind === "hybrid" && (
+                <>
+                  {number("Rank constant k", rankK, setRankK, "60")}
+                  {number("Words weight", textWeight, setTextWeight, "1", 0.1)}
+                </>
+              )}
+            </div>
+            {kind === "hybrid" && (
+              <p className="text-xs text-faint">
+                Both searches run, and each hit scores the sum of weight / (k + rank) over them.
+              </p>
+            )}
+          </div>
+        </details>
+
         {error && (
           <p className="bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error.path && <span className="mr-2 font-mono text-xs">{error.path}</span>}
@@ -387,14 +371,22 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
         )}
         <div className="flex items-center gap-3">
           <Button variant="primary" size="default" leadingIcon={Play} disabled={busy}>
-            {kind === "vector" ? "Run query" : "Run search"}
+            Search
           </Button>
           <span className="text-xs text-faint">on {branch}</span>
         </div>
       </form>
 
       {hits && (
-        <Results hits={hits.hits} ms={hits.ms} kind={kind} attributes={include} thumb={thumb} />
+        <Results
+          hits={hits.hits}
+          ms={hits.ms}
+          kind={kind}
+          attributes={include}
+          thumb={thumb}
+          linked={linked}
+          embeds={!!embed}
+        />
       )}
 
       <Panel title="As code" action={<LangChoice value={lang} onChange={setLang} />}>
@@ -477,20 +469,50 @@ function useThumbnails(index: string, branch: string, linked: boolean): Thumb {
     );
 }
 
+const FOLDED = new Set(["path", "chunk", "summary", "kind"]);
+
+function FileCell({ hit, thumb }: { hit: AnyHit; thumb: Thumb }) {
+  const path = String(hit.attributes.path ?? hit.id);
+  const chunk = Number(hit.attributes.chunk ?? 0);
+  return (
+    <span className="flex items-center gap-3 py-1.5">
+      {thumb && hit.attributes.kind === "image" && (
+        <span
+          role="img"
+          aria-label={path}
+          style={{ backgroundImage: `url("${thumb(path)}")` }}
+          className="size-12 shrink-0 rounded-md bg-muted bg-cover bg-center"
+        />
+      )}
+      <span className="min-w-0">
+        <span className="block truncate font-medium">{path}</span>
+        {chunk > 0 && (
+          <span className="text-xs text-faint tabular-nums">passage {chunk + 1}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
 function Results({
   hits,
   ms,
   kind,
   attributes,
   thumb,
+  linked,
+  embeds,
 }: {
   hits: AnyHit[];
   ms: number;
   kind: Kind;
   attributes: string[];
   thumb: Thumb;
+  linked: boolean;
+  embeds: boolean;
 }) {
-  const span = 2 + (kind === "hybrid" ? 2 : 0) + attributes.length;
+  const columns = linked ? attributes.filter((name) => !FOLDED.has(name)) : attributes;
+  const span = 2 + (kind === "hybrid" ? 2 : 0) + columns.length;
   return (
     <Panel
       title="Results"
@@ -509,17 +531,19 @@ function Results({
           <table className="w-full text-sm">
             <thead>
               <tr className="h-10 border-b text-left text-xs text-muted-foreground">
-                <th className="px-4 font-normal">Id</th>
+                <th className="px-4 font-normal">{linked ? "File" : "Id"}</th>
                 <th className="px-4 text-right font-normal">
                   {kind === "vector" ? "Distance" : "Score"}
                 </th>
                 {kind === "hybrid" && (
                   <>
-                    <th className="px-4 text-right font-normal">Vector rank</th>
-                    <th className="px-4 text-right font-normal">Text rank</th>
+                    <th className="px-4 text-right font-normal">
+                      {embeds ? "Meaning rank" : "Vector rank"}
+                    </th>
+                    <th className="px-4 text-right font-normal">Words rank</th>
                   </>
                 )}
-                {attributes.map((name) => (
+                {columns.map((name) => (
                   <th key={name} className="px-4 font-normal">
                     {name}
                   </th>
@@ -537,7 +561,9 @@ function Results({
                         !highlights.length && "border-b border-border/60 last:border-0",
                       )}
                     >
-                      <td className="px-4">{String(hit.id)}</td>
+                      <td className="px-4">
+                        {linked ? <FileCell hit={hit} thumb={thumb} /> : String(hit.id)}
+                      </td>
                       <td className="px-4 text-right tabular-nums">
                         {"distance" in hit ? hit.distance.toFixed(4) : hit.score.toFixed(4)}
                       </td>
@@ -551,25 +577,13 @@ function Results({
                           </td>
                         </>
                       )}
-                      {attributes.map((name) => (
+                      {columns.map((name) => (
                         <td key={name} className="px-4 text-muted-foreground">
-                          <span className="flex items-center gap-3 py-1">
-                            {name === "path" && thumb && hit.attributes.kind === "image" && (
-                              <span
-                                role="img"
-                                aria-label={format(hit.attributes.path)}
-                                style={{
-                                  backgroundImage: `url("${thumb(String(hit.attributes.path))}")`,
-                                }}
-                                className="size-12 shrink-0 rounded-md bg-muted bg-cover bg-center"
-                              />
-                            )}
-                            <span
-                              title={format(hit.attributes[name])}
-                              className="line-clamp-2 max-w-md break-words"
-                            >
-                              {format(hit.attributes[name])}
-                            </span>
+                          <span
+                            title={format(hit.attributes[name])}
+                            className="line-clamp-2 max-w-md break-words"
+                          >
+                            {format(hit.attributes[name])}
                           </span>
                         </td>
                       ))}
@@ -579,7 +593,7 @@ function Results({
                         <td colSpan={span} className="grid gap-1 px-4 pb-3">
                           {highlights.map(([name, h]) => (
                             <p key={name} className="text-muted-foreground">
-                              <span className="mr-2 text-xs text-faint">{name}</span>
+                              {!linked && <span className="mr-2 text-xs text-faint">{name}</span>}
                               <Marked highlight={h} />
                             </p>
                           ))}

@@ -97,6 +97,8 @@ export function useApi<T>(url: string | null) {
   return { loaded, reload };
 }
 
+export const INTERNAL = new Set(["grams", "hash"]);
+
 export const indexUrl = (index: string) => indexApi(index);
 export const branchUrl = (index: string, branch: string, rest = "") =>
   indexApi(index, `branches/${encodeURIComponent(branch)}${rest ? `/${rest}` : ""}`);

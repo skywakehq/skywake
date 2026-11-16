@@ -2,13 +2,22 @@
 
 import { useState } from "react";
 import { Choice, Panel, cx } from "@/components/kit";
-import { indexApi } from "@/lib/paths";
+import { Link } from "@/components/shell/router";
+import { nameInEnv } from "@/lib/names";
+import { indexApi, nsPath } from "@/lib/paths";
 import { city } from "@/features/environments/regions";
-import { type IndexInfo, type Stats, type UsageDay, branchUrl, bytes, useApi } from "./api";
+import {
+  INTERNAL,
+  type IndexInfo,
+  type Stats,
+  type UsageDay,
+  branchUrl,
+  bytes,
+  useApi,
+} from "./api";
 import { Label } from "./fields";
 
-const FIGURES: { key: keyof Stats; label: string }[] = [
-  { key: "rows", label: "Rows" },
+const DETAILS: { key: keyof Stats; label: string }[] = [
   { key: "indexed_rows", label: "Built" },
   { key: "unindexed_rows", label: "Waiting to build" },
   { key: "deleted_rows", label: "Deleted" },
@@ -16,58 +25,76 @@ const FIGURES: { key: keyof Stats; label: string }[] = [
   { key: "clusters", label: "Clusters" },
 ];
 
-/** A branch's counts, then the schema. */
 export function Overview({ index, branch }: { index: IndexInfo; branch: string }) {
   const { loaded } = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
   const stats = loaded.state === "done" ? loaded.value.stats : undefined;
+  const { vectors, attributes } = index.schema;
+  const linked = attributes.some((column) => column.name === "chunk");
+  const shown = attributes.filter((column) => !(linked && INTERNAL.has(column.name)));
+  const model = vectors.find((column) => column.embed)?.embed?.model;
 
   return (
     <div className="grid gap-10">
-      <div className="grid grid-cols-2 gap-x-10 gap-y-6 border-b pb-8 sm:grid-cols-4 lg:grid-cols-7">
-        {FIGURES.map(({ key, label }) => (
-          <Figure key={key} label={label} value={stats ? stats[key].toLocaleString() : undefined} />
-        ))}
-        <Figure label="Size" value={stats ? bytes(stats.bytes) : undefined} />
+      <div className="grid gap-6">
+        <Status stats={stats} index={index.name} linked={linked} />
+        <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3">
+          <Figure
+            label={linked ? "Passages" : "Documents"}
+            value={stats ? stats.rows.toLocaleString() : undefined}
+          />
+          <Figure label="Size" value={stats ? bytes(stats.bytes) : undefined} />
+          <Figure
+            label="Search by"
+            value={vectors.length ? (model ? "Meaning and words" : "Vectors and words") : "Words"}
+            small
+          />
+        </div>
+        {stats && (
+          <details className="group text-sm">
+            <summary className="w-fit cursor-pointer list-none text-xs text-muted-foreground transition-colors hover:text-foreground">
+              <span className="group-open:hidden">Show details</span>
+              <span className="hidden group-open:inline">Hide details</span>
+            </summary>
+            <dl className="mt-4 grid grid-cols-2 gap-x-10 gap-y-4 sm:grid-cols-5">
+              {DETAILS.map(({ key, label }) => (
+                <div key={key} className="grid gap-0.5">
+                  <dt className="text-xs text-muted-foreground">{label}</dt>
+                  <dd className="tabular-nums">{stats[key].toLocaleString()}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-3 text-xs text-faint">
+              New rows are searched exactly, then grouped for speed after 10,000 of them or 64 MB.
+            </p>
+          </details>
+        )}
+        {stats === null && (
+          <p className="text-sm text-muted-foreground">
+            This server does not count rows yet. Queries and writes work as usual.
+          </p>
+        )}
+        {loaded.state === "failed" && <p className="text-sm text-destructive">{loaded.error}</p>}
       </div>
-      {stats === null && (
-        <p className="-mt-6 text-sm text-muted-foreground">
-          This server does not count rows yet. Queries and writes work as usual.
-        </p>
-      )}
-      {stats && stats.unindexed_rows > 0 && (
-        <p className="-mt-6 text-sm text-muted-foreground">
-          Every row is searchable now. Rows waiting to build are searched exactly, then grouped
-          for speed after 10,000 new rows or 64 MB.
-        </p>
-      )}
-      {loaded.state === "failed" && <p className="text-sm text-destructive">{loaded.error}</p>}
 
       <Usage index={index.name} />
 
-      {index.schema.vectors.length > 0 && (
-        <Panel title="Vector columns" count={index.schema.vectors.length}>
-          {index.schema.vectors.map((column) => (
-            <Row
-              key={column.name}
-              name={column.name}
-              detail={[
-                `${column.dims} dims`,
-                column.metric,
-                column.embed && `embeds with ${column.embed.model}`,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            />
-          ))}
-        </Panel>
-      )}
-      <Panel title="Attributes" count={index.schema.attributes.length}>
-        {index.schema.attributes.length ? (
-          index.schema.attributes.map((column) => (
-            <Row key={column.name} name={column.name} detail={column.type} />
-          ))
-        ) : (
-          <p className="px-4 py-3 text-sm text-muted-foreground">No attributes.</p>
+      <Panel title="Schema" count={vectors.length + shown.length}>
+        {vectors.map((column) => (
+          <Row
+            key={column.name}
+            name={column.name}
+            detail={[
+              column.embed ? `embeds with ${column.embed.model}` : "vector",
+              `${column.dims} dims`,
+              column.metric,
+            ].join(" · ")}
+          />
+        ))}
+        {shown.map((column) => (
+          <Row key={column.name} name={column.name} detail={column.type} />
+        ))}
+        {vectors.length + shown.length === 0 && (
+          <p className="px-4 py-3 text-sm text-muted-foreground">No attributes yet.</p>
         )}
       </Panel>
       <p className="text-xs text-faint">
@@ -78,11 +105,48 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
   );
 }
 
-function Figure({ label, value }: { label: string; value?: string }) {
+function Status({
+  stats,
+  index,
+  linked,
+}: {
+  stats: Stats | null | undefined;
+  index: string;
+  linked: boolean;
+}) {
+  const { loaded } = useApi<{ namespace: string }>(linked ? indexApi(index, "link") : null);
+  const disk = loaded.state === "done" ? loaded.value.namespace : null;
+  if (!stats) return null;
+  const empty = stats.rows === 0;
+  return (
+    <p className="flex items-center gap-2 text-sm">
+      <span className={cx("size-1.5 rounded-full", empty ? "bg-faint" : "bg-green")} />
+      {empty ? "Empty" : "Searchable"}
+      {disk && (
+        <span className="text-muted-foreground">
+          · kept in sync with{" "}
+          <Link href={nsPath(disk, "search")} className="text-foreground hover:underline">
+            {nameInEnv(disk)}
+          </Link>
+        </span>
+      )}
+      {!disk && empty && (
+        <span className="text-muted-foreground">· write documents or link a disk to fill it</span>
+      )}
+    </p>
+  );
+}
+
+function Figure({ label, value, small }: { label: string; value?: string; small?: boolean }) {
   return (
     <div className="grid gap-1">
       <Label>{label}</Label>
-      <span className="text-[22px] leading-8 font-medium tracking-[-0.02em] whitespace-nowrap tabular-nums">
+      <span
+        className={cx(
+          "leading-8 font-medium tracking-[-0.02em] whitespace-nowrap tabular-nums",
+          small ? "text-[15px]" : "text-[22px]",
+        )}
+      >
         {value ?? "—"}
       </span>
     </div>
