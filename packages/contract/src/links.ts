@@ -1,9 +1,11 @@
 import { createRoute } from "@hono/zod-openapi";
 
 import { body, errors, json, noContent, signedIn } from "./http.ts";
+import { IndexParams } from "./indexes/routes.ts";
 import { BranchParams, Name, NamespaceParams, Time, z } from "./schemas.ts";
 
-export const MAX_BYTES_DEFAULT = 1 << 20;
+export const MAX_BYTES_DEFAULT = 16 << 20;
+export const MAX_BYTES_MAX = 64 << 20;
 
 export const NewIndexLink = z
   .object({
@@ -27,22 +29,48 @@ export const NewIndexLink = z
       .number()
       .int()
       .min(1)
-      .max(4 << 20)
+      .max(MAX_BYTES_MAX)
       .default(MAX_BYTES_DEFAULT)
-      .openapi({ description: "Larger files are left out. 1 MiB when not given." }),
+      .openapi({
+        description:
+          "Larger files are left out, at most 64 MiB. 16 MiB when not given. All of a file's " +
+          "text is searchable, and documents are measured by the text taken from them.",
+      }),
     embed: z
-      .object({
-        model: z.string().min(1),
-        dims: z.number().int().min(1).max(4096),
-      })
+      .union([
+        z
+          .object({
+            model: z.string().min(1).optional(),
+            dims: z.number().int().min(1).max(4096).optional(),
+          })
+          .strict(),
+        z.literal(false),
+      ])
       .optional()
       .openapi({
         description:
-          "Also embed each file (its first 8,000 characters) for vector search, when the " +
-          "index is made. Billed as embeddings.",
+          "Search by meaning: each file is split into overlapping chunks and every chunk is " +
+          "embedded; images are embedded too when the model takes them. On by default with " +
+          "the server's model; `false` keeps the index to words. Turning it on for an index " +
+          "the link made rebuilds it. Billed as embeddings.",
       }),
   })
   .openapi("NewIndexLink");
+
+export const Skipped = z
+  .object({
+    path: z.string(),
+    reason: z.string().openapi({ example: "larger than 1024 KiB" }),
+  })
+  .openapi("SkippedFile");
+
+export const LinkEmbed = z
+  .object({
+    model: z.string(),
+    dims: z.number().int(),
+    images: z.boolean().openapi({ description: "Whether image files are embedded too." }),
+  })
+  .openapi("LinkEmbed");
 
 export const LinkedBranch = z
   .object({
@@ -51,6 +79,15 @@ export const LinkedBranch = z
     behind: z.boolean().openapi({ description: "Whether newer files wait to be indexed." }),
     syncedAt: Time.nullable(),
     error: z.string().nullable().openapi({ description: "Why the last try failed, if it did." }),
+    files: z.number().int().nullable().openapi({ description: "Files indexed, once synced." }),
+    chunks: z
+      .number()
+      .int()
+      .nullable()
+      .openapi({ description: "Rows those files became: one per chunk embedded." }),
+    skipped: z
+      .array(Skipped)
+      .openapi({ description: "Files left out of the last syncs and why; the first 50." }),
   })
   .openapi("LinkedBranch");
 
@@ -61,10 +98,23 @@ export const IndexLink = z
     include: z.array(z.string()),
     exclude: z.array(z.string()),
     maxBytes: z.number().int(),
+    embed: LinkEmbed.nullable().openapi({
+      description: "How files are embedded; null for words only.",
+    }),
+    made: z.boolean().openapi({ description: "Whether the link made its index." }),
     created: Time,
     branches: z.array(LinkedBranch),
   })
   .openapi("IndexLink");
+
+export const LinkDefaults = z
+  .object({
+    embed: z
+      .object({ model: z.string(), images: z.boolean() })
+      .nullable()
+      .openapi({ description: "The model a new link embeds with; null when none is set up." }),
+  })
+  .openapi("LinkDefaults");
 
 export const BranchIndex = LinkedBranch.extend({
   head: z.string().openapi({ description: "The branch's head now." }),
@@ -87,6 +137,16 @@ export const linkIndex = createRoute({
   responses: { 200: json(IndexLink, "The link."), ...errors(400, 401, 402, 403, 404, 409) },
 });
 
+export const getLinkDefaults = createRoute({
+  method: "get",
+  path: "/index-links/defaults",
+  operationId: "getLinkDefaults",
+  tags: ["links"],
+  summary: "What a new link does when not told: the model it embeds with.",
+  security: signedIn,
+  responses: { 200: json(LinkDefaults, "The defaults."), ...errors(401) },
+});
+
 export const getIndexLink = createRoute({
   method: "get",
   path: "/namespaces/{namespace}/index",
@@ -94,6 +154,17 @@ export const getIndexLink = createRoute({
   tags: ["links"],
   security: signedIn,
   request: { params: NamespaceParams },
+  responses: { 200: json(IndexLink, "The link."), ...errors(401, 403, 404) },
+});
+
+export const getLinkOfIndex = createRoute({
+  method: "get",
+  path: "/indexes/{index}/link",
+  operationId: "getLinkOfIndex",
+  tags: ["links"],
+  summary: "The namespace whose files keep this index up to date, if one does.",
+  security: signedIn,
+  request: { params: IndexParams },
   responses: { 200: json(IndexLink, "The link."), ...errors(401, 403, 404) },
 });
 

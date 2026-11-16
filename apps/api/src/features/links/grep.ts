@@ -5,7 +5,7 @@ import type { Services } from "../../http/context.ts";
 import * as indexes from "../indexes/queries.ts";
 import { neededGrams } from "./grams.ts";
 import * as links from "./queries.ts";
-import { literal } from "./sync.ts";
+import { literal } from "./writer.ts";
 
 const PAGE = 1_000;
 const CANDIDATES_MAX = 10_000;

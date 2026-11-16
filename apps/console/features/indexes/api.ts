@@ -7,7 +7,8 @@ import { indexApi } from "@/lib/paths";
 
 export type Metric = "cosine" | "euclidean" | "dot";
 export type AttributeType = "string" | "number" | "bool" | "strings" | "text";
-export type VectorColumn = { name: string; dims: number; metric: Metric };
+export type Embed = { model: string; from?: string };
+export type VectorColumn = { name: string; dims: number; metric: Metric; embed?: Embed };
 export type AttributeColumn = { name: string; type: AttributeType; k1?: number; b?: number };
 export type Schema = { vectors: VectorColumn[]; attributes: AttributeColumn[] };
 
@@ -95,6 +96,8 @@ export function useApi<T>(url: string | null) {
   const reload = useCallback(() => setRound((n) => n + 1), []);
   return { loaded, reload };
 }
+
+export const INTERNAL = new Set(["grams", "hash"]);
 
 export const indexUrl = (index: string) => indexApi(index);
 export const branchUrl = (index: string, branch: string, rest = "") =>

@@ -253,36 +253,45 @@ export function Namespaces({ env }: { env: string }) {
 function DiskCard({ card }: { card: Card }) {
   const total = card.commits.reduce((a, b) => a + b, 0);
   const who = card.agents.length ? card.agents : card.last?.agent ? [card.last.agent] : [];
+  const facts = factsOf(card);
 
   return (
     <Link
       href={nsPath(card.name)}
-      className="group flex h-full min-h-52 flex-col rounded-xl bg-muted/50 p-5 transition-colors hover:bg-muted"
+      className="group flex h-full flex-col rounded-xl bg-muted/50 p-5 transition-colors hover:bg-muted"
     >
       <div className="flex items-start gap-3">
         <Orb name={card.name} className="size-9" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-medium">{nameInEnv(card.name)}</div>
           <div className="truncate text-xs text-faint">
-            {plural(card.branches, "open branch")} · {city(card.region)}
+            {plural(card.branches, "branch")} · {city(card.region)}
           </div>
         </div>
         <State card={card} />
       </div>
 
-      <div className="mt-5">
-        <Spark values={card.commits} className="h-10 w-full" />
-        <div className="mt-1.5 flex justify-between text-micro text-faint">
-          <span>{DAYS} days</span>
-          <span className="tabular-nums">{plural(total, "commit")}</span>
+      {total > 0 ? (
+        <div className="mt-5">
+          <Spark values={card.commits} className="h-10 w-full" />
+          <div className="mt-1.5 text-micro text-faint tabular-nums">
+            {plural(total, "commit")} in {DAYS} days
+          </div>
         </div>
-      </div>
+      ) : (
+        <p className="mt-5 text-xs text-faint">No changes in the last {DAYS} days</p>
+      )}
 
-      <dl className="mt-4 grid grid-cols-3 gap-2">
-        <Figure label="To merge" value={card.waiting} alert />
-        <Figure label="Sessions" value={card.agents.length} />
-        <Figure label="Merged" value={card.merged} />
-      </dl>
+      {facts.length > 0 && (
+        <p className="mt-4 text-xs text-muted-foreground tabular-nums">
+          {facts.map(([value, label], i) => (
+            <span key={label}>
+              {i > 0 && " · "}
+              <span className="font-medium text-foreground">{value}</span> {label}
+            </span>
+          ))}
+        </p>
+      )}
 
       <div className="mt-auto flex items-center gap-2.5 pt-5 text-xs">
         <Avatars names={who} />
@@ -295,13 +304,21 @@ function DiskCard({ card }: { card: Card }) {
   );
 }
 
+function factsOf(card: Card) {
+  const all: [number, string][] = [
+    [card.waiting, "ready to merge"],
+    [card.agents.length, card.agents.length === 1 ? "agent working" : "agents working"],
+    [card.merged, "merged"],
+  ];
+  return all.filter(([value]) => value > 0);
+}
+
 function DiskRow({ card }: { card: Card }) {
   const total = card.commits.reduce((a, b) => a + b, 0);
-  const counts = [
-    [card.waiting, "to merge"],
-    [card.agents.length, card.agents.length === 1 ? "session" : "sessions"],
+  const counts: [number, string][] = [
+    ...factsOf(card),
     [card.branches, card.branches === 1 ? "branch" : "branches"],
-  ] as const;
+  ];
 
   return (
     <Link href={nsPath(card.name)} data-glide className="group flex h-14 items-center gap-4 px-4">
@@ -338,23 +355,6 @@ function DiskRow({ card }: { card: Card }) {
   );
 }
 
-function Figure({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
-  return (
-    <div>
-      <dd
-        className={cx(
-          "text-lg leading-6 font-semibold tabular-nums",
-          !value && "text-faint",
-          alert && value > 0 && "text-signal",
-        )}
-      >
-        {value}
-      </dd>
-      <dt className="text-micro text-faint">{label}</dt>
-    </div>
-  );
-}
-
 /** What the disk needs, in a word, with a dot so it never rests on colour alone. */
 function State({ card }: { card: Card }) {
   if (card.conflicts)
@@ -363,11 +363,8 @@ function State({ card }: { card: Card }) {
         <TriangleAlert className="size-3" /> {plural(card.conflicts, "conflict")}
       </span>
     );
-  const [label, dot] = card.waiting
-    ? ["Ready to merge", "bg-signal"]
-    : card.agents.length
-      ? ["Working", "bg-green"]
-      : ["Quiet", "bg-faint"];
+  if (!card.waiting && !card.agents.length) return null;
+  const [label, dot] = card.waiting ? ["Ready to merge", "bg-signal"] : ["Working", "bg-green"];
   return (
     <span className="inline-flex h-6 shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
       <span className={cx("size-1.5 rounded-full", dot)} />

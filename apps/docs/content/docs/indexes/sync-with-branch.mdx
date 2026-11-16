@@ -25,12 +25,14 @@ The index is made when it does not exist, with a `path` string and a `text` attr
 
 ## What gets indexed, and when
 
-- Files that match `include` (all when empty) and none of `exclude`, at most `maxBytes` (1 MiB by default), and valid UTF-8 text. Others are left out.
+- Files that match `include` (all when empty) and none of `exclude`, at most `maxBytes` (16 MiB by default, 64 MiB at most). All of a file's text is searchable: it is split into passages of about 2,000 characters, and a search returns each file once, at its best passage.
+- UTF-8 text, PDFs, and Word, PowerPoint and Excel files (`.docx`, `.pptx`, `.xlsx`). Documents are read for their text, up to 64 MiB a file; `maxBytes` then applies to the text taken out. Images (`.png`, `.jpg`, `.webp`, `.gif`, up to 5 MB) are embedded when the link's model reads images.
+- What can't be indexed is listed in the branch's `skipped`, each with a reason: too large, binary, an old `.doc`, `.ppt` or `.xls` file, a PDF locked with a password or without a text layer (scanned pages need OCR), or an image on a link whose model reads only text.
 - A commit is searchable within seconds. A save, such as a mount's autosave, waits about 30 seconds, so a burst of saves is indexed once.
 - Saves written straight to the bucket, by a mount or the CLI with `skywake://` credentials, are found too: they can call `advanced` to be indexed sooner, and every linked branch is checked at least every 5 minutes either way.
 - Each sync writes only what changed between the commit the index matches and the branch's head. Removing a folder removes the documents of everything in it.
 
-Give `embed: {model, dims}` when the link makes the index to also embed each file's first 8,000 characters for vector search. Embeddings are billed as usual.
+Links search by meaning as well as words by default, with the server's embedding model; give `embed: {model}` to choose another, or `embed: false` for words only. Each passage is embedded, and unchanged passages keep their vectors, so an edit embeds only what it changed. Embeddings are billed as usual.
 
 ## Forks
 

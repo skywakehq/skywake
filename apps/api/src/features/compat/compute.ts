@@ -111,6 +111,6 @@ async function embedded(c: Ctx, index: SearchIndex, expr: unknown[], path: strin
   const model = asked ?? (models.length === 1 ? models[0] : undefined);
   if (!model) throw invalidAt(path, "names no model, and the namespace has not one embed model");
   const dims = index.schema.vectors.find((column) => column.embed?.model === model)?.dims;
-  const [vector] = await c.var.services.models.embed(model, [expr[1]], dims);
+  const [vector] = await c.var.services.models.embed(model, [expr[1]], dims, "query");
   return vector;
 }

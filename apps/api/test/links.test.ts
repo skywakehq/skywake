@@ -74,6 +74,30 @@ test("a linked namespace's files are searchable, and follow each commit", { skip
   assert.equal(stamp?.version, status.body.version);
 });
 
+test("a disk linked before its first commit is indexed once files arrive", { skip }, async () => {
+  const s = await server();
+  const { key } = await s.ready();
+  const EMPTY = "/namespaces/prod%2Fempty";
+  assert.equal((await s.call("POST", "/namespaces", key, { name: "prod/empty" })).status, 201);
+  const made = await s.call("PUT", `${EMPTY}/index`, key, { index: "prod/empty-files" });
+  assert.equal(made.status, 200, JSON.stringify(made.body));
+  await s.services.syncer.drain();
+
+  const main = await s.call("POST", `${EMPTY}/branches`, key, { name: "main" });
+  assert.equal(main.status, 201, JSON.stringify(main.body));
+  const done = await s.call("POST", `${EMPTY}/branches/main/commits`, key, {
+    message: "first",
+    changes: [{ path: "deck.md", text: "our pitch to investors" }],
+  });
+  assert.equal(done.status, 201, JSON.stringify(done.body));
+  await s.services.syncer.drain();
+  const hits = await s.call("POST", "/indexes/prod%2Fempty-files/branches/main/search", key, {
+    query: "investors",
+  });
+  assert.equal(hits.status, 200, JSON.stringify(hits.body));
+  assert.deepEqual(hits.body.hits.map((hit: { id: string }) => hit.id), ["deck.md"]);
+});
+
 test("a link indexes only the files its globs and size let in", { skip }, async () => {
   const s = await server();
   const { key } = await linked(s, {

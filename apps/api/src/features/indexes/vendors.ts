@@ -2,6 +2,7 @@ import { indexes } from "@skywake/contract";
 
 import type { Provider, Vendors } from "../../config.ts";
 import { badRequest } from "../../http/errors.ts";
+import type { Media } from "./providers.ts";
 
 interface Vendor {
   url?: string;
@@ -46,6 +47,15 @@ export interface Route {
   model: string;
   dims?: string;
   top: string;
+  media: Media;
+}
+
+function multimodal(name: string, model: string, images: boolean, url: string, rerankUrl?: string) {
+  if (name === "voyage" && model.includes("multimodal")) return { media: "voyage" as const, url };
+  if (!images) return null;
+  if (name === "cohere" && rerankUrl) return { media: "cohere" as const, url: rerankUrl };
+  if (name === "google") return { media: "gemini" as const, url: url.replace(/\/openai$/, "") };
+  return null;
 }
 
 export function route(
@@ -54,6 +64,7 @@ export function route(
   vendors: Vendors,
   fallback: Provider | undefined,
   dims?: number,
+  images = false,
 ): Route {
   const known =
     kind === "embed"
@@ -66,15 +77,27 @@ export function route(
     const vendor = VENDORS[name] ?? {};
     const url = kind === "embed" ? (own.url ?? vendor.url) : (own.rerankUrl ?? vendor.rerankUrl);
     if (!url) throw badRequest(`provider \`${name}\` needs a URL on this server for \`${model}\``);
+    const named = vendor.names?.[model] ?? model.slice(name.length + 1);
+    const media =
+      kind === "embed"
+        ? multimodal(name, named, images, url, own.rerankUrl ?? vendor.rerankUrl)
+        : null;
     return {
-      provider: { url, key: own.key },
-      model: vendor.names?.[model] ?? model.slice(name.length + 1),
+      provider: { url: media?.url ?? url, key: own.key },
+      model: named,
       dims: fewer ? vendor.dims : undefined,
       top: vendor.top ?? "top_n",
+      media: media?.media ?? "openai",
     };
   }
   if (fallback)
-    return { provider: fallback, model, dims: fewer ? "dimensions" : undefined, top: "top_n" };
+    return {
+      provider: fallback,
+      model,
+      dims: fewer ? "dimensions" : undefined,
+      top: "top_n",
+      media: "openai",
+    };
   if (known)
     throw badRequest(`model \`${model}\` needs provider \`${name}\` set up on this server`);
   throw badRequest(

@@ -3,7 +3,7 @@
 export type Lang = "ts" | "python" | "curl";
 
 export type QueryBody = {
-  vector: { column: string; value: number[] };
+  vector: { column: string; value: number[] | string | { image: string } };
   topK: number;
   recall?: number;
   probe?: number;
@@ -37,11 +37,34 @@ export type Request =
 
 const json = (value: unknown) => JSON.stringify(value);
 
-/** Python literals: JSON with True, False and None. */
-const python = (value: unknown): string =>
-  JSON.stringify(value)
-    .replace(/\btrue\b/g, "True")
-    .replace(/\bfalse\b/g, "False");
+type Style = "ts" | "python";
+
+const WIDTH = 64;
+
+const keyOf = (key: string, style: Style) =>
+  style === "ts" && /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+
+function literal(value: unknown, style: Style, depth = 0): string {
+  if (value === null || value === undefined) return style === "python" ? "None" : "null";
+  if (typeof value === "boolean")
+    return style === "python" ? (value ? "True" : "False") : `${value}`;
+  if (typeof value !== "object") return JSON.stringify(value);
+  const list = Array.isArray(value);
+  const items = list
+    ? value.map((item) => literal(item, style, depth + 1))
+    : Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => `${keyOf(key, style)}: ${literal(item, style, depth + 1)}`);
+  const [open, close] = list ? ["[", "]"] : ["{", "}"];
+  if (!items.length) return open + close;
+  const gap = list || style === "python" ? "" : " ";
+  const inline = `${open}${gap}${items.join(", ")}${gap}${close}`;
+  if (!inline.includes("\n") && inline.length + depth * 2 <= WIDTH) return inline;
+  const pad = "  ".repeat(depth + 1);
+  return `${open}\n${items.map((item) => `${pad}${item},`).join("\n")}\n${"  ".repeat(depth)}${close}`;
+}
+
+const python = (value: unknown) => literal(value, "python");
 
 /** Python keyword arguments, leaving out what is not set. */
 const kwargs = (pairs: [string, unknown][]) =>
@@ -91,30 +114,42 @@ function pythonCall(request: Request): string {
   ].join(", ")})`;
 }
 
-export function snippet(lang: Lang, index: string, branch: string, request: Request, api: string) {
-  const at = branch === "main" ? "" : `.at(${json(branch)})`;
-  if (lang === "ts") {
-    return [
-      `import { Skywake } from "@skywake/sdk";`,
-      ``,
-      `const sky = new Skywake({ url: ${json(api)}, key: process.env.SKYWAKE_KEY! });`,
-      `const hits = await sky.index(${json(index)})${at}.${request.route}(${JSON.stringify(request.body, null, 2)});`,
-    ].join("\n");
-  }
-  if (lang === "python") {
-    return [
-      `import os`,
-      `from skywake import Skywake`,
-      ``,
-      `sky = Skywake(${json(api)}, os.environ["SKYWAKE_KEY"])`,
-      `hits = sky.index(${json(index)})${at}.${pythonCall(request)}`,
-    ].join("\n");
-  }
-  const path = `${api}/v1/indexes/${encodeURIComponent(index)}/branches/${encodeURIComponent(branch)}/${request.route}`;
+const TS_CLIENT = (api: string) => [
+  `import { Skywake } from "@skywake/sdk";`,
+  ``,
+  `const sky = new Skywake({ url: ${json(api)}, key: process.env.SKYWAKE_KEY! });`,
+];
+
+const PYTHON_CLIENT = (api: string) => [
+  `import os`,
+  `from skywake import Skywake`,
+  ``,
+  `sky = Skywake(${json(api)}, os.environ["SKYWAKE_KEY"])`,
+];
+
+function curl(api: string, index: string, branch: string, route: string, body: unknown) {
+  const path = `${api}/v1/indexes/${encodeURIComponent(index)}/branches/${encodeURIComponent(branch)}/${route}`;
   return [
     `curl -X POST '${path}' \\`,
     `  -H "Authorization: Bearer $SKYWAKE_KEY" \\`,
     `  -H 'content-type: application/json' \\`,
-    `  -d '${JSON.stringify(request.body).replace(/'/g, "'\\''")}'`,
+    `  -d '${JSON.stringify(body).replace(/'/g, "'\\''")}'`,
   ].join("\n");
+}
+
+const handle = (index: string, branch: string) =>
+  `sky.index(${json(index)})${branch === "main" ? "" : `.at(${json(branch)})`}`;
+
+export function snippet(lang: Lang, index: string, branch: string, request: Request, api: string) {
+  const target = handle(index, branch);
+  if (lang === "ts") {
+    return [
+      ...TS_CLIENT(api),
+      `const hits = await ${target}.${request.route}(${literal(request.body, "ts")});`,
+    ].join("\n");
+  }
+  if (lang === "python") {
+    return [...PYTHON_CLIENT(api), `hits = ${target}.${pythonCall(request)}`].join("\n");
+  }
+  return curl(api, index, branch, request.route, request.body);
 }

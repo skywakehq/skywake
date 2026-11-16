@@ -8,6 +8,8 @@ export interface EmbeddingModel {
   sizes: number[];
   /** Tokens embedded; the rest of a longer text is left out. */
   context: number;
+  /** Also embeds images, into the same space as its texts. */
+  images?: true;
   deprecated?: true;
 }
 
@@ -22,8 +24,20 @@ const NEMOTRON_8B = [512, 1024, 2048, 4096];
 
 export const EMBEDDING_MODELS: EmbeddingModel[] = [
   { id: "baai/bge-m3", dims: 1024, sizes: [1024], context: 8192 },
-  { id: "cohere/embed-v4.0", dims: 1536, sizes: [256, 512, 1024, 1536], context: 128000 },
-  { id: "google/gemini-embedding-2", dims: 1536, sizes: [768, 1536, 3072], context: 8192 },
+  {
+    id: "cohere/embed-v4.0",
+    dims: 1536,
+    sizes: [256, 512, 1024, 1536],
+    context: 128000,
+    images: true,
+  },
+  {
+    id: "google/gemini-embedding-2",
+    dims: 1536,
+    sizes: [768, 1536, 3072],
+    context: 8192,
+    images: true,
+  },
   { id: "nvidia/nemotron-3-embed-1b", dims: 2048, sizes: NEMOTRON_1B, context: 32768 },
   { id: "nvidia/nemotron-3-embed-8b", dims: 4096, sizes: NEMOTRON_8B, context: 32768 },
   { id: "nvidia/nemotron-3.5-embed-1b", dims: 2048, sizes: NEMOTRON_1B, context: 32768 },
@@ -65,6 +79,7 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
   { id: "voyage/voyage-4-nano", dims: 1024, sizes: VOYAGE, context: 32000 },
   { id: "voyage/voyage-code-3", dims: 1024, sizes: VOYAGE, context: 32000 },
   { id: "voyage/voyage-code-4", dims: 1024, sizes: VOYAGE, context: 32000 },
+  { id: "voyage/voyage-multimodal-3.5", dims: 1024, sizes: [1024], context: 32000, images: true },
   {
     id: "zeroentropy/zembed-1",
     dims: 1280,
@@ -89,6 +104,14 @@ export const EMBEDDING_MODELS: EmbeddingModel[] = [
   { id: "voyage/voyage-3-large", dims: 1024, sizes: VOYAGE, context: 32768, deprecated: true },
   { id: "voyage/voyage-3.5", dims: 1024, sizes: VOYAGE, context: 32768, deprecated: true },
   { id: "voyage/voyage-3.5-lite", dims: 1024, sizes: VOYAGE, context: 32768, deprecated: true },
+  {
+    id: "voyage/voyage-multimodal-3",
+    dims: 1024,
+    sizes: [1024],
+    context: 32000,
+    images: true,
+    deprecated: true,
+  },
 ];
 
 export const RERANK_MODELS: RerankModel[] = [

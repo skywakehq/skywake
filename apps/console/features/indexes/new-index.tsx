@@ -21,6 +21,7 @@ import { namespaceName } from "@/lib/names";
 import { indexApi, indexPath } from "@/lib/paths";
 import {
   type AttributeColumn,
+  type Embed,
   type Metric,
   type Schema,
   type VectorColumn,
@@ -77,6 +78,10 @@ function check(name: string, vectors: VectorColumn[], attributes: AttributeColum
     if (!Number.isInteger(v.dims) || v.dims < 1 || v.dims > DIMS_MAX) {
       errors[`vectors.${i}.dims`] = `1 to ${DIMS_MAX}`;
     }
+    const from = v.embed?.from;
+    if (from && !sources(attributes).includes(from)) {
+      errors[`vectors.${i}.from`] = "Embed from a string or text attribute";
+    }
   });
   const attributeNames = new Set<string>();
   attributes.forEach((a, i) => {
@@ -86,6 +91,15 @@ function check(name: string, vectors: VectorColumn[], attributes: AttributeColum
   });
   return errors;
 }
+
+const sources = (attributes: AttributeColumn[]) =>
+  attributes.filter((a) => a.name && (a.type === "string" || a.type === "text")).map((a) => a.name);
+
+const sent = ({ embed, ...column }: VectorColumn): VectorColumn => {
+  const model = embed?.model.trim();
+  if (!model) return column;
+  return { ...column, embed: embed?.from ? { model, from: embed.from } : { model } };
+};
 
 /** `schema.vectors[0].dims` from the API, as this form names its fields. */
 const fieldOf = (path: string) => path.replace(/^schema\./, "").replace(/\[(\d+)\]/g, ".$1");
@@ -143,7 +157,7 @@ export function NewIndex({
       return;
     }
     const full = namespaceName(env, name.trim());
-    const schema: Schema = { vectors, attributes };
+    const schema: Schema = { vectors: vectors.map(sent), attributes };
     setBusy(true);
     setServerError(undefined);
     try {
@@ -295,6 +309,12 @@ export function NewIndex({
                   <FieldNote error={nameError ?? dimsError}>
                     {METRICS.find((m) => m.value === column.metric)!.note}
                   </FieldNote>
+                  <EmbedFields
+                    embed={column.embed}
+                    sources={sources(attributes)}
+                    error={errorOf(`vectors.${i}.from`)}
+                    onChange={(embed) => setVector(i, { embed })}
+                  />
                 </div>
               );
             })}
@@ -411,6 +431,55 @@ const summary = (vectors: VectorColumn[], attributes: AttributeColumn[]) => {
       : ""
   }`;
 };
+
+function EmbedFields({
+  embed,
+  sources,
+  error,
+  onChange,
+}: {
+  embed?: Embed;
+  sources: string[];
+  error?: string;
+  onChange: (embed: Embed) => void;
+}) {
+  const model = embed?.model ?? "";
+  const from = embed?.from ?? "";
+  return (
+    <div className="grid gap-1">
+      <div className="grid grid-cols-[1fr_10rem_2rem] items-center gap-2 max-sm:grid-cols-[1fr_2rem]">
+        <TextField
+          aria-label="Embedding model"
+          value={model}
+          placeholder="Embedding model, optional"
+          onChange={(e) => onChange({ model: e.target.value, from })}
+        />
+        <Select
+          aria-label="Embed from"
+          aria-invalid={!!error}
+          value={from}
+          disabled={!model.trim()}
+          onChange={(e) => onChange({ model, from: e.target.value })}
+          className={cn("max-sm:order-last", error && "bg-destructive/10")}
+        >
+          <option value="">Text given</option>
+          {sources.map((name) => (
+            <option key={name} value={name}>
+              From {name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <FieldNote error={error}>
+        {model.trim()
+          ? from
+            ? `Documents without a vector get one from ${from}; queries can be text`
+            : "Documents and queries can give text in place of a vector"
+          : "Set a model to let the server turn text into vectors"}
+      </FieldNote>
+    </div>
+  );
+}
 
 function Section({
   label,

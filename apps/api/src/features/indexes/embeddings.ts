@@ -1,12 +1,13 @@
-import type { indexes } from "@skywake/contract";
+import { indexes } from "@skywake/contract";
 
 import { invalidAt } from "../../http/errors.ts";
 import type { Models } from "./models.ts";
+import { type Input, isImage, type Purpose } from "./providers.ts";
 import type { Bill } from "./usage.ts";
 
 type Column = indexes.IndexSchema["vectors"][number];
 
-export type Input = string | { image: string };
+export type { Input };
 
 interface Wanted {
   model: string;
@@ -18,6 +19,11 @@ interface Wanted {
 
 export class Texts {
   #wanted: Wanted[] = [];
+  readonly #purpose: Purpose;
+
+  constructor(purpose: Purpose = "document") {
+    this.#purpose = purpose;
+  }
 
   vector(column: Column, input: Input, path: string): number[] {
     if (!column.embed) {
@@ -25,6 +31,10 @@ export class Texts {
         path,
         `column \`${column.name}\` has no \`embed\` model, so it takes numbers`,
       );
+    }
+    const known = indexes.embeddingModel(column.embed.model);
+    if (isImage(input) && known && !known.images) {
+      throw invalidAt(path, `model \`${column.embed.model}\` embeds text only, not images`);
     }
     const vector: number[] = [];
     this.#wanted.push({ model: column.embed.model, dims: column.dims, input, path, vector });
@@ -41,6 +51,7 @@ export class Texts {
         model,
         wanted.map((one) => one.input),
         dims,
+        this.#purpose,
       );
       wanted.forEach((one, i) => {
         const vector = vectors[i]!;

@@ -1400,6 +1400,13 @@
           "maxBytes": {
             "type": "integer"
           },
+          "embed": {
+            "$ref": "#/components/schemas/LinkEmbed"
+          },
+          "made": {
+            "type": "boolean",
+            "description": "Whether the link made its index."
+          },
           "created": {
             "type": "string",
             "format": "date-time"
@@ -1417,9 +1424,35 @@
           "include",
           "exclude",
           "maxBytes",
+          "embed",
+          "made",
           "created",
           "branches"
         ]
+      },
+      "LinkEmbed": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "dims": {
+            "type": "integer"
+          },
+          "images": {
+            "type": "boolean",
+            "description": "Whether image files are embedded too."
+          }
+        },
+        "required": [
+          "model",
+          "dims",
+          "images"
+        ],
+        "description": "How files are embedded; null for words only."
       },
       "LinkedBranch": {
         "type": "object",
@@ -1451,6 +1484,27 @@
               "null"
             ],
             "description": "Why the last try failed, if it did."
+          },
+          "files": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Files indexed, once synced."
+          },
+          "chunks": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Rows those files became: one per chunk embedded."
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SkippedFile"
+            },
+            "description": "Files left out of the last syncs and why; the first 50."
           }
         },
         "required": [
@@ -1458,7 +1512,26 @@
           "synced",
           "behind",
           "syncedAt",
-          "error"
+          "error",
+          "files",
+          "chunks",
+          "skipped"
+        ]
+      },
+      "SkippedFile": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "example": "larger than 1024 KiB"
+          }
+        },
+        "required": [
+          "path",
+          "reason"
         ]
       },
       "NewIndexLink": {
@@ -1496,34 +1569,68 @@
           "maxBytes": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 4194304,
-            "default": 1048576,
-            "description": "Larger files are left out. 1 MiB when not given."
+            "maximum": 67108864,
+            "default": 16777216,
+            "description": "Larger files are left out, at most 64 MiB. 16 MiB when not given. All of a file's text is searchable, and documents are measured by the text taken from them."
           },
           "embed": {
-            "type": "object",
-            "properties": {
-              "model": {
-                "type": "string",
-                "minLength": 1
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "dims": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 4096
+                  }
+                },
+                "additionalProperties": false
               },
-              "dims": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4096
+              {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
               }
-            },
-            "required": [
-              "model",
-              "dims"
             ],
-            "description": "Also embed each file (its first 8,000 characters) for vector search, when the index is made. Billed as embeddings."
+            "description": "Search by meaning: each file is split into overlapping chunks and every chunk is embedded; images are embedded too when the model takes them. On by default with the server's model; `false` keeps the index to words. Turning it on for an index the link made rebuilds it. Billed as embeddings."
           }
         },
         "required": [
           "index"
         ],
         "additionalProperties": false
+      },
+      "LinkDefaults": {
+        "type": "object",
+        "properties": {
+          "embed": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "images": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "model",
+              "images"
+            ],
+            "description": "The model a new link embeds with; null when none is set up."
+          }
+        },
+        "required": [
+          "embed"
+        ]
       },
       "BranchIndex": {
         "allOf": [
@@ -7977,6 +8084,131 @@
         "responses": {
           "204": {
             "description": "Done."
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/index-links/defaults": {
+      "get": {
+        "operationId": "getLinkDefaults",
+        "tags": [
+          "links"
+        ],
+        "summary": "What a new link does when not told: the model it embeds with.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The defaults.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkDefaults"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/indexes/{index}/link": {
+      "get": {
+        "operationId": "getLinkOfIndex",
+        "tags": [
+          "links"
+        ],
+        "summary": "The namespace whose files keep this index up to date, if one does.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "An index of your organization, such as `prod/products`. Encode `/` as `%2F`.",
+              "example": "prod%2Fproducts"
+            },
+            "required": true,
+            "description": "An index of your organization, such as `prod/products`. Encode `/` as `%2F`.",
+            "name": "index",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndexLink"
+                }
+              }
+            }
           },
           "401": {
             "description": "A valid API key or token is needed.",

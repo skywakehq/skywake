@@ -218,6 +218,13 @@
       "when": 1794648625232,
       "tag": "0030_deletions",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794777916725,
+      "tag": "0031_link_chunks",
+      "breakpoints": true
     }
   ]
 }

@@ -137,7 +137,7 @@ test("vectors given as text are embedded on upsert and on query", { skip }, asyn
   }));
   assert.equal((await call("/documents", { documents: many })).status, 200);
   assert.deepEqual(
-    seen.map((one) => one.body.input.length),
+    seen.map((one) => one.body.input.length).sort((a, b) => b - a),
     [128, 2],
   );
 

@@ -1,14 +1,19 @@
 import { indexes as indexContract, links as routes } from "@skywake/contract";
 
 import { note } from "../../audit/note.ts";
+import type { Caller } from "../../auth/roles.ts";
 import type { Ctx, Feature } from "../../http/context.ts";
 import { badRequest, conflict, isMissing, notFound } from "../../http/errors.ts";
 import { changeable, indexFor } from "../../http/request.ts";
 import { isBucketRegion } from "../environments/buckets.ts";
-import { MAIN, makeIndex } from "../indexes/lifecycle.ts";
+import { deleteIndex, MAIN, makeIndex } from "../indexes/lifecycle.ts";
 import * as indexes from "../indexes/queries.ts";
 import { engineSchema } from "../indexes/schemas.ts";
 import * as links from "./queries.ts";
+
+type Schema = indexes.IndexRow["schema"];
+type Embed = { model: string; dims: number };
+type Asked = { embed?: { model?: string; dims?: number } | false };
 
 const shownBranch = (row: links.LinkedBranchRow) => ({
   branch: row.branch,
@@ -16,29 +21,53 @@ const shownBranch = (row: links.LinkedBranchRow) => ({
   behind: row.dirty || row.synced === null,
   syncedAt: row.syncedAt?.toISOString() ?? null,
   error: row.error,
+  files: row.files,
+  chunks: row.chunks,
+  skipped: row.skipped,
 });
 
+function embedOf(schema: Schema) {
+  const column = schema.vectors.find((one) => one.embed);
+  if (!column) return null;
+  const model = column.embed!.model;
+  return {
+    model,
+    dims: column.dims,
+    images: indexContract.embeddingModel(model)?.images === true,
+  };
+}
+
 async function shown(c: Ctx, link: links.Link) {
-  const rows = await links.branches(c.var.services.db, link.org, link.namespace);
+  const { db } = c.var.services;
+  const rows = await links.branches(db, link.org, link.namespace);
+  const index = await indexes.find(db, link.org, link.index);
   return {
     namespace: link.namespace,
     index: link.index,
     include: link.include,
     exclude: link.exclude,
     maxBytes: link.maxBytes,
+    embed: index ? embedOf(index.schema) : null,
+    made: link.made,
     created: link.created.toISOString(),
     branches: rows.map(shownBranch),
   };
 }
 
-/** The schema of an index a link makes: a file's path and text, and its vector when asked. */
-function linkSchema(embed: { model: string; dims: number } | undefined) {
+export function linkSchema(embed: Embed | null) {
   return indexContract.IndexSchema.parse({
     attributes: [
       { name: "path", type: "string" },
       { name: "text", type: "text" },
       { name: "grams", type: "text", language: "none", stemming: false },
-      ...(embed ? [{ name: "summary", type: "string" }] : []),
+      { name: "chunk", type: "number" },
+      { name: "kind", type: "string" },
+      ...(embed
+        ? [
+            { name: "summary", type: "string" },
+            { name: "hash", type: "string" },
+          ]
+        : []),
     ],
     vectors: embed
       ? [{ name: "embedding", dims: embed.dims, embed: { model: embed.model, from: "summary" } }]
@@ -46,40 +75,84 @@ function linkSchema(embed: { model: string; dims: number } | undefined) {
   });
 }
 
-/** Whether an existing index can hold files: `path` a string, `text` searchable text. */
-function holdsFiles(schema: indexes.IndexRow["schema"]) {
+function holdsFiles(schema: Schema) {
   const type = (name: string) => schema.attributes.find((column) => column.name === name)?.type;
   return type("path") === "string" && type("text") === "text" && schema.id === undefined;
 }
 
+async function wanted(c: Ctx, asked: Asked): Promise<Embed | null | undefined> {
+  if (asked.embed === false) return null;
+  const { models } = c.var.services;
+  const model = asked.embed?.model ?? models.linkModel;
+  if (!model) {
+    if (asked.embed) throw badRequest("`embed.model` is needed: this server has no default model");
+    return undefined;
+  }
+  return { model, dims: asked.embed?.dims ?? (await models.dims(model)) };
+}
+
+function differs(schema: Schema, embed: Embed | null) {
+  const have = embedOf(schema);
+  if (!have || !embed) return have !== embed;
+  return have.model !== embed.model || have.dims !== embed.dims;
+}
+
+async function made(c: Ctx, caller: Caller, name: string, region: string, embed: Embed | null) {
+  const schema = linkSchema(embed);
+  return makeIndex(
+    c,
+    caller,
+    {
+      name,
+      region: isBucketRegion(region) ? undefined : region,
+      schema,
+      shards: 1,
+      encryption: undefined,
+    },
+    ({ store }) => store.create(engineSchema(schema)),
+  );
+}
+
 export const linksFeature: Feature = {
   register(api) {
+    api.openapi(routes.getLinkDefaults, async (c) => {
+      const model = c.var.services.models.linkModel;
+      const images = model ? indexContract.embeddingModel(model)?.images === true : false;
+      return c.json({ embed: model ? { model, images } : null }, 200);
+    });
+
     api.openapi(routes.linkIndex, async (c) => {
       const { caller, ns } = await changeable(c, c.req.valid("param").namespace, "admin");
       const asked = c.req.valid("json");
       const { db } = c.var.services;
+      const before = await links.find(db, ns.org, ns.name);
       let row = await indexes.find(db, ns.org, asked.index);
+      let owned = before?.index === asked.index && before.made;
+      let branches: string[] = [];
       if (row) {
-        if (asked.embed) throw badRequest("`embed` is only for an index the link makes");
         await indexFor(c, asked.index, "write");
         if (!holdsFiles(row.schema)) {
           throw conflict(
             `index \`${asked.index}\` needs a \`path\` string and a \`text\` text attribute`,
           );
         }
+        const embed = asked.embed === undefined ? undefined : await wanted(c, asked);
+        if (embed !== undefined && differs(row.schema, embed)) {
+          if (!owned) {
+            throw conflict(
+              `index \`${asked.index}\` was not made by this link, so its vectors can't be ` +
+                "changed; link a new index instead",
+            );
+          }
+          branches = (await links.branches(db, ns.org, ns.name)).map((one) => one.branch);
+          await deleteIndex(c, row);
+          row = await made(c, caller, asked.index, ns.region, embed);
+        }
       } else {
-        const schema = linkSchema(asked.embed);
-        // Next to the files: in their region, or in the bucket their environment brings.
-        const region = isBucketRegion(ns.region) ? undefined : ns.region;
-        row = await makeIndex(
-          c,
-          caller,
-          { name: asked.index, region, schema, shards: 1, encryption: undefined },
-          ({ store }) => store.create(engineSchema(schema)),
-        );
+        row = await made(c, caller, asked.index, ns.region, (await wanted(c, asked)) ?? null);
+        owned = true;
       }
-      const before = await links.find(db, ns.org, ns.name);
-      // Another index starts over: its branches are indexed in full.
+      const relinked = before !== null && before.index === row.name && branches.length === 0;
       if (before && before.index !== row.name) await links.remove(db, ns.org, ns.name);
       await links.save(db, {
         org: ns.org,
@@ -88,12 +161,12 @@ export const linksFeature: Feature = {
         include: asked.include,
         exclude: asked.exclude,
         maxBytes: asked.maxBytes,
+        made: owned,
       });
-      await links.addBranch(db, ns.org, ns.name, MAIN, null);
-      if (before && before.index === row.name) {
-        // New globs change which files belong: index everything again.
-        await links.reindex(db, ns.org, ns.name);
+      for (const branch of new Set([MAIN, ...branches])) {
+        await links.addBranch(db, ns.org, ns.name, branch, null);
       }
+      if (relinked) await links.reindex(db, ns.org, ns.name);
       note(c, { details: { index: row.name } });
       return c.json(await shown(c, (await links.find(db, ns.org, ns.name))!), 200);
     });
@@ -102,6 +175,13 @@ export const linksFeature: Feature = {
       const { ns } = await changeable(c, c.req.valid("param").namespace, "read");
       const link = await links.find(c.var.services.db, ns.org, ns.name);
       if (!link) throw notFound(`an index link of \`${ns.name}\``);
+      return c.json(await shown(c, link), 200);
+    });
+
+    api.openapi(routes.getLinkOfIndex, async (c) => {
+      const { index } = await indexFor(c, c.req.valid("param").index, "read");
+      const link = await links.ofIndex(c.var.services.db, index.org, index.name);
+      if (!link) throw notFound(`a link to \`${index.name}\``);
       return c.json(await shown(c, link), 200);
     });
 
