@@ -1,6 +1,6 @@
 {
   "name": "@skywake/cli-linux-arm64",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The skywake command, built for Linux on arm64. Install `skywake` instead.",
   "homepage": "https://skywake.dev",
   "repository": {

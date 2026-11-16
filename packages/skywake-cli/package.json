@@ -1,6 +1,6 @@
 {
   "name": "skywake",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The skywake command: mount S3 as a fast local disk, give every AI agent its own copy in milliseconds, and merge the changes back.",
   "keywords": [
     "skywake",
@@ -36,7 +36,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "optionalDependencies": {
-    "@skywake/cli-linux-arm64": "0.1.1",
-    "@skywake/cli-linux-x64": "0.1.1"
+    "@skywake/cli-linux-arm64": "0.1.2",
+    "@skywake/cli-linux-x64": "0.1.2"
   }
 }
