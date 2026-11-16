@@ -1,26 +1,26 @@
 use std::io::{BufRead, IsTerminal, Write};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
-use skywake::{Skywake, Whoami};
+use serde_json::json;
+use skywake::{ErrorKind, NewLogin, Skywake, Whoami};
 
 use crate::cli::Global;
 use crate::credentials::{self, Profile};
+use crate::new_key::NewKey;
 use crate::output;
 use crate::session::Session;
 
-pub(crate) async fn login(global: &Global) -> Result<()> {
-    let key = match global.key.clone().filter(|key| !key.is_empty()) {
-        Some(key) => key,
-        None => prompt_key()?,
+const LOGIN_WAIT: Duration = Duration::from_secs(600);
+const POLL: Duration = Duration::from_secs(2);
+
+pub(crate) async fn login(global: &Global, paste: bool) -> Result<()> {
+    let (key, who) = match global.key.clone().filter(|key| !key.is_empty()) {
+        Some(key) => checked(global, key).await?,
+        None if paste || !std::io::stdin().is_terminal() => checked(global, prompt_key()?).await?,
+        None => through_browser(global).await?,
     };
-    let mut builder = Skywake::builder().key(&key);
-    if let Some(url) = &global.url {
-        builder = builder.url(url);
-    }
-    if let Some(environment) = &global.environment {
-        builder = builder.environment(environment);
-    }
-    let who = builder.build()?.whoami().await?;
     let name = credentials::profile_name(global.profile.as_deref());
     let mut profile = Profile::new();
     profile.insert("key".into(), key);
@@ -33,9 +33,82 @@ pub(crate) async fn login(global: &Global) -> Result<()> {
     let mut profiles = credentials::load();
     profiles.insert(name.clone(), profile);
     let path = credentials::store(&profiles)?;
-    println!("Signed in. {}", describe(&who));
-    println!("Saved as profile `{name}` in {}", path.display());
-    Ok(())
+    let saved = json!({ "profile": name, "path": path, "whoami": who });
+    output::either(global.json, &saved, |_| {
+        println!("Signed in. {}", describe(&who));
+        println!("Saved as profile `{name}` in {}", path.display());
+    })
+}
+
+fn client(global: &Global, key: &str) -> Result<Skywake> {
+    let mut builder = Skywake::builder().key(key);
+    if let Some(url) = &global.url {
+        builder = builder.url(url);
+    }
+    if let Some(environment) = &global.environment {
+        builder = builder.environment(environment);
+    }
+    Ok(builder.build()?)
+}
+
+async fn checked(global: &Global, key: String) -> Result<(String, Whoami)> {
+    let who = client(global, &key)?.whoami().await?;
+    Ok((key, who))
+}
+
+async fn through_browser(global: &Global) -> Result<(String, Whoami)> {
+    let made = NewKey::make()?;
+    let sky = client(global, &made.key)?;
+    let login = NewLogin {
+        key_id: made.id.clone(),
+        key_hash: made.hash(),
+        device: device(),
+    };
+    let started = sky.start_login(&login).await?;
+    eprintln!("Your code: {}", started.code);
+    match &started.url {
+        Some(url) => {
+            eprintln!("Check that the browser shows the same code, then allow it: {url}");
+            open_browser(url);
+        }
+        None => eprintln!("Open /cli in the Skywake console, enter the code and allow it."),
+    }
+    eprintln!("Waiting for you to allow it. Ctrl-C stops.");
+    let deadline = Instant::now() + LOGIN_WAIT;
+    loop {
+        tokio::time::sleep(POLL).await;
+        match sky.whoami().await {
+            Ok(who) => return Ok((made.key, who)),
+            Err(error) if error.kind() != Some(&ErrorKind::Auth) => return Err(error.into()),
+            Err(_) if Instant::now() >= deadline => {
+                bail!("the code expired before it was allowed: run `skywake login` again")
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+fn device() -> String {
+    let named = Command::new("hostname")
+        .output()
+        .ok()
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .map(|name| name.trim().chars().take(64).collect::<String>())
+        .filter(|name| !name.is_empty());
+    named.unwrap_or_else(|| "a computer".to_string())
+}
+
+fn open_browser(url: &str) {
+    let opener = match std::env::consts::OS {
+        "macos" => "open",
+        "windows" => "explorer",
+        _ => "xdg-open",
+    };
+    let _ = Command::new(opener)
+        .arg(url)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
 }
 
 pub(crate) fn logout(global: &Global) -> Result<()> {

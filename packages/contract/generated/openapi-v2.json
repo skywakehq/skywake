@@ -448,6 +448,57 @@
           "name"
         ]
       },
+      "StartedLogin": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The code to check in the browser."
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where to approve it. Null when the server does not know the console's address."
+          },
+          "expires": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "code",
+          "url",
+          "expires"
+        ]
+      },
+      "NewLogin": {
+        "type": "object",
+        "properties": {
+          "key_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$",
+            "description": "The id part of the key the CLI made."
+          },
+          "key_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "The BLAKE3 hash of the whole key, in hex. The key stays local."
+          },
+          "device": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The machine signing in, shown to the person who approves it."
+          }
+        },
+        "required": [
+          "key_id",
+          "key_hash",
+          "device"
+        ]
+      },
       "DiskList": {
         "type": "object",
         "properties": {
@@ -2668,6 +2719,88 @@
           },
           "429": {
             "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logins": {
+      "post": {
+        "operationId": "startLogin",
+        "tags": [
+          "account"
+        ],
+        "security": [],
+        "summary": "Starts a sign-in from the CLI. The CLI makes a key and sends only its id and hash; a person approves the code in the console, and the key starts to work.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewLogin"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The code to approve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartedLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is not valid; `hint` names the field.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, or the key is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "It conflicts with the current state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "It cannot be done now. Try again later.",
             "content": {
               "application/json": {
                 "schema": {

@@ -1,29 +1,36 @@
+import { envOf, nameInEnv } from "./names";
 import { withBase } from "./zone";
 
-// Namespace and branch names hold `/`, so they are encoded in page addresses.
+const enc = encodeURIComponent;
 
-export const nsPath = (ns: string, page = "files") => `/n/${encodeURIComponent(ns)}/${page}`;
+const segments = (path: string) => path.split("/").map(enc).join("/");
+
+const place = (kind: "d" | "i", full: string) =>
+  `/e/${enc(envOf(full))}/${kind}/${enc(nameInEnv(full))}`;
+
+export const nsPath = (ns: string, page = "files") =>
+  `${place("d", ns)}${page === "files" ? "" : `/${page}`}`;
 
 export const branchPath = (ns: string, branch: string, query?: Record<string, string>) =>
-  `/n/${encodeURIComponent(ns)}/b/${branch.split("/").map(encodeURIComponent).join("/")}` +
-  (query ? `?${new URLSearchParams(query)}` : "");
+  `${place("d", ns)}@${segments(branch)}` + (query ? `?${new URLSearchParams(query)}` : "");
 
-/** A skywake-api path, through the console's proxy. */
 export const apiPath = (ns: string, rest: string) =>
-  withBase(`/api/skywake/namespaces/${encodeURIComponent(ns)}/${rest}`);
+  withBase(`/api/skywake/namespaces/${enc(ns)}/${rest}`);
 
 export const decode = decodeURIComponent;
 
-/** An environment's pages: its disks (the home), activity and indexes. */
 export const envPath = (env: string, page?: "activity" | "indexes") =>
-  `/e/${encodeURIComponent(env)}${page ? `/${page}` : ""}`;
+  `/e/${enc(env)}${page ? `/${page}` : ""}`;
 
-/** A search index's page, one tab of it. */
 export const indexPath = (index: string, tab = "overview") =>
-  `/i/${encodeURIComponent(index)}${tab === "overview" ? "" : `/${tab}`}`;
+  `${place("i", index)}${tab === "overview" ? "" : `/${tab}`}`;
 
-/** A skywake-api index path, through the console's proxy. */
+export const isIndexPath = (path: string) => /^\/(i|e\/[^/]+\/i)\//.test(path);
+
 export const indexApi = (index?: string, rest = "") =>
   withBase(
-    `/api/skywake/indexes${index === undefined ? "" : `/${encodeURIComponent(index)}`}${rest ? `/${rest}` : ""}`,
+    `/api/skywake/indexes${index === undefined ? "" : `/${enc(index)}`}${rest ? `/${rest}` : ""}`,
   );
+
+export const v2Api = (env: string, rest: string) =>
+  withBase(`/api/v2/${enc(env)}/${rest.replace(/^\/+/, "")}`);

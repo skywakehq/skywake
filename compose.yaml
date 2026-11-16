@@ -68,6 +68,7 @@ services:
       SKYWAKE_API_JWKS_URL: http://console:3100/api/auth/jwks
       SKYWAKE_API_JWT_ISSUER: skywake-console
       SKYWAKE_API_JWT_AUDIENCE: skywake-console
+      SKYWAKE_API_CONSOLE_URL: ${SKYWAKE_API_CONSOLE_URL:-${CONSOLE_URL:-http://localhost:3100}${CONSOLE_BASE_PATH:-}}
       # Prometheus metrics, on the compose network only.
       SKYWAKE_API_METRICS_LISTEN: 0.0.0.0:9464
       # Set an IAM role (and SKYWAKE_API_STS_ENDPOINT for an S3-compatible

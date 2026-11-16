@@ -10,6 +10,7 @@ import * as history from "./history.ts";
 import * as indexes from "./indexes/index.ts";
 import * as keys from "./keys.ts";
 import * as links from "./links.ts";
+import * as logins from "./logins.ts";
 import * as namespaces from "./namespaces.ts";
 import * as orgs from "./orgs.ts";
 import * as sessions from "./sessions.ts";
@@ -30,6 +31,7 @@ export {
   indexes,
   keys,
   links,
+  logins,
   namespaces,
   orgs,
   sessions,
@@ -56,7 +58,15 @@ export const routes = {
     billing.setPlan,
   ],
   sso: [sso.getSsoPolicy, sso.setSsoPolicy, sso.ssoDomainOrgs],
-  keys: [keys.whoami, keys.listKeys, keys.createKey, keys.deleteKey, keys.revokeMemberKeys],
+  keys: [
+    keys.whoami,
+    keys.listKeys,
+    keys.createKey,
+    keys.deleteKey,
+    keys.revokeMemberKeys,
+    logins.getLogin,
+    logins.approveLogin,
+  ],
   audit: [audit.auditLog, audit.recordAuditEvents],
   environments: [
     environments.listRegions,

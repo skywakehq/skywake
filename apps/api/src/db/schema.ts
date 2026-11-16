@@ -97,6 +97,19 @@ export const keys = api.table(
   ],
 );
 
+export const logins = api.table(
+  "logins",
+  {
+    code: text("code").primaryKey(),
+    keyId: text("key_id").notNull().unique("logins_key_id_key"),
+    keyHash: bytea("key_hash").notNull(),
+    device: text("device").notNull(),
+    expires: time("expires").notNull(),
+    created: time("created").notNull().defaultNow(),
+  },
+  (table) => [index("logins_expires").on(table.expires)],
+);
+
 export const environments = api.table(
   "environments",
   {

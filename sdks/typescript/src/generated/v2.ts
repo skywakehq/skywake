@@ -70,6 +70,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/logins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a sign-in from the CLI. The CLI makes a key and sends only its id and hash; a person approves the code in the console, and the key starts to work. */
+        post: operations["startLogin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/disks": {
         parameters: {
             query?: never;
@@ -662,6 +679,22 @@ export interface components {
         } | null;
         NewEnvironment: {
             name: string;
+        };
+        StartedLogin: {
+            /** @description The code to check in the browser. */
+            code: string;
+            /** @description Where to approve it. Null when the server does not know the console's address. */
+            url: string | null;
+            /** Format: date-time */
+            expires: string;
+        };
+        NewLogin: {
+            /** @description The id part of the key the CLI made. */
+            key_id: string;
+            /** @description The BLAKE3 hash of the whole key, in hex. The key stays local. */
+            key_hash: string;
+            /** @description The machine signing in, shown to the person who approves it. */
+            device: string;
         };
         DiskList: {
             data: components["schemas"]["Disk"][];
@@ -1511,6 +1544,75 @@ export interface operations {
             };
             /** @description Too many requests. Wait for `Retry-After` seconds. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startLogin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewLogin"];
+            };
+        };
+        responses: {
+            /** @description The code to approve. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartedLogin"];
+                };
+            };
+            /** @description The request is not valid; `hint` names the field. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No key, or the key is wrong or expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description It conflicts with the current state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description It cannot be done now. Try again later. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

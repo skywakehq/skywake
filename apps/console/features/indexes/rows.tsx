@@ -20,7 +20,8 @@ import {
   DialogTitle,
 } from "@skywake/ui/components/dialog";
 import { cn } from "@skywake/ui/lib/utils";
-import { Button, Checkbox, Empty, Panel, Rows } from "@/components/kit";
+import { Button, Checkbox, Empty, Panel, Rows, plural } from "@/components/kit";
+import { nameInEnv } from "@/lib/names";
 import {
   type AttributeValue,
   type DocId,
@@ -39,8 +40,8 @@ const SIZES = [25, 50, 100];
 // A key that keeps the number id 1 apart from the string id "1".
 const keyOf = (id: DocId) => JSON.stringify(id);
 
-/** The documents of a branch in pages, a lookup by id, a detail panel, writes and deletes. */
-export function Documents({ index, branch }: { index: IndexInfo; branch: string }) {
+/** The rows of a branch in pages, a lookup by id, a detail panel, writes and deletes. */
+export function IndexRows({ index, branch }: { index: IndexInfo; branch: string }) {
   // Another branch starts again from the first page, with nothing picked.
   return <Browser key={branch} index={index} branch={branch} />;
 }
@@ -87,7 +88,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
         branchUrl(index.name, branch, "documents/delete"),
         { ids },
       );
-      toast.success(`Deleted ${count} document${count === 1 ? "" : "s"}`);
+      toast.success(`Deleted ${plural(count, "row")}`);
       setSelected(new Set());
       setOpen(null);
       reload();
@@ -110,7 +111,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
           variant={writing ? "ghost" : "primary"}
           onClick={() => setWriting(!writing)}
         >
-          {writing ? "Close" : "Write documents"}
+          {writing ? "Close" : "Write rows"}
         </Button>
       </div>
 
@@ -126,7 +127,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
       )}
 
       <Panel
-        title="Documents"
+        title="Rows"
         action={
           selected.size > 0 ? (
             <>
@@ -157,7 +158,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
         ) : !page ? (
           <Rows count={6} className="px-4 pt-3" />
         ) : documents.length === 0 ? (
-          <Empty title={`No documents on ${branch}`} columns={["Id", "Fields"]}>
+          <Empty title={`No rows on ${branch}`} columns={["Id", "Fields"]}>
             <p>Write some as JSON here, or with the SDKs. They show by id.</p>
             {!writing && (
               <Button
@@ -166,7 +167,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
                 className="mt-4"
                 onClick={() => setWriting(true)}
               >
-                Write documents
+                Write rows
               </Button>
             )}
           </Empty>
@@ -182,7 +183,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
                 <tr className="h-10 border-b text-left text-xs whitespace-nowrap text-muted-foreground">
                   <th className="w-10 pl-4">
                     <Checkbox
-                      label="Select every document on this page"
+                      label="Select every row on this page"
                       on={allSelected}
                       onClick={() =>
                         setSelected(
@@ -255,7 +256,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
             </span>
             <span className="ml-auto max-sm:hidden">Per page</span>
             <Select
-              aria-label="Documents per page"
+              aria-label="Rows per page"
               value={size}
               onChange={(e) => {
                 setSize(Number(e.target.value));
@@ -296,7 +297,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
   );
 }
 
-/** Opens a document by id, typed or pasted. */
+/** Opens a row by id, typed or pasted. */
 function Lookup({
   index,
   branch,
@@ -329,7 +330,7 @@ function Lookup({
     <form onSubmit={find} className="relative flex min-w-0 items-center max-sm:w-full">
       <Search className="pointer-events-none absolute left-2.5 size-3.5 text-faint" />
       <TextField
-        aria-label="Find a document by id"
+        aria-label="Find a row by id"
         placeholder="Find by id"
         value={id}
         onChange={(e) => (setError(""), setId(e.target.value))}
@@ -345,7 +346,7 @@ function Lookup({
   );
 }
 
-/** One document whole: its attributes, every vector, and its JSON. */
+/** One row whole: its fields, every vector, and its JSON. */
 function Detail({
   index,
   doc: picked,
@@ -380,14 +381,14 @@ function Detail({
                   : typeof doc.id === "number"
                     ? "Number id"
                     : "String id"}{" "}
-                · {index.name}
+                · {nameInEnv(index.name)}
               </DialogDescription>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
               <section className="grid gap-4 px-6 py-5">
                 {attributes.length === 0 && (
-                  <p className="text-sm text-muted-foreground">This index has no attributes.</p>
+                  <p className="text-sm text-muted-foreground">This index has no fields.</p>
                 )}
                 {attributes.map((a) => (
                   <Field key={a.name} name={a.name} type={a.type} value={doc.attributes[a.name]} />
@@ -545,7 +546,7 @@ function Write({
         branchUrl(index.name, branch, "documents"),
         { documents },
       );
-      toast.success(`Wrote ${count} document${count === 1 ? "" : "s"}`);
+      toast.success(`Wrote ${plural(count, "row")}`);
       setText("");
       onWritten();
     } catch (failure) {
@@ -557,8 +558,8 @@ function Write({
 
   return (
     <Panel
-      title="Write documents"
-      action={<span className="text-xs text-faint">Each replaces any document with its id</span>}
+      title="Write rows"
+      action={<span className="text-xs text-faint">Each replaces any row with its id</span>}
     >
       <div className="grid gap-3 px-4 pt-4">
         <TextArea

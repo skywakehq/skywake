@@ -32,6 +32,7 @@ export interface Config {
   prices?: Partial<Prices>;
   peer: Peer;
   billing?: BillingConfig;
+  consoleUrl?: string;
 }
 
 export interface BillingConfig {
@@ -156,6 +157,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     vendors: vendors(values.SKYWAKE_API_PROVIDERS),
     prices: prices(values.SKYWAKE_API_PRICES),
     billing: billing(values),
+    consoleUrl: values.SKYWAKE_API_CONSOLE_URL?.replace(/\/+$/, ""),
     peer: {
       url: (values.SKYWAKE_API_PEER_URL ?? `http://127.0.0.1:${listen.port}`).replace(/\/+$/, ""),
       token: values.SKYWAKE_API_PEER_TOKEN,

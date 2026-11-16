@@ -6,8 +6,8 @@ mod place;
 mod shared;
 
 pub use client::{
-    Builder, CreateDisk, CreateIndex, CreateKey, CreatedKey, Environment, Key, Role, Skywake,
-    Whoami,
+    Builder, CreateDisk, CreateIndex, CreateKey, CreatedKey, Environment, Key, NewLogin, Role,
+    Skywake, StartedLogin, Whoami,
 };
 pub use disk::{
     Change, Commit, Committed, Content, Disk, DiskConfigure, DiskInfo, DiskSummary, Download, Edit,

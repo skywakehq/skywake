@@ -17,11 +17,14 @@ skywake-daemon.workspace = true
 skywake-client = { path = "../../sdks/rust" }
 futures.workspace = true
 anyhow.workspace = true
+blake3.workspace = true
 clap.workspace = true
+crc32fast.workspace = true
 tokio.workspace = true
 bytes.workspace = true
 csv.workspace = true
 parquet = { workspace = true, features = ["json"] }
+ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

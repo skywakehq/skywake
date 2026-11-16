@@ -45,6 +45,9 @@ export function covers(caller: Caller, only: string[]) {
   return only.every((inner) => caller.only.some((outer) => globCovers(outer, inner)));
 }
 
+export const isOrgAdmin = (caller: Caller) =>
+  atLeast(caller.role, "admin") && everyEnvironment(caller) && caller.only.includes("*");
+
 export function allowOrgAdmin(caller: Caller) {
   allow(caller, "admin");
   if (!everyEnvironment(caller) || !caller.only.includes("*")) {

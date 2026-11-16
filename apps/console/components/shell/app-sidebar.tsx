@@ -36,7 +36,7 @@ import {
   SidebarRail,
 } from "@skywake/ui/components/sidebar";
 import { authClient } from "@/features/auth/auth-client";
-import { envPath } from "@/lib/paths";
+import { envPath, isIndexPath } from "@/lib/paths";
 import { useEnvironments } from "@/features/environments/use-environments";
 import { useEnvironment, useNamespace } from "@/hooks/use-ns";
 import { Count, Glide } from "@/components/kit";
@@ -89,7 +89,7 @@ export function AppSidebar() {
             </NavItem>
             <NavItem
               href={envPath(env, "indexes")}
-              active={path === envPath(env, "indexes") || path.startsWith("/i/")}
+              active={path === envPath(env, "indexes") || isIndexPath(path)}
               icon={<ScanSearch />}
             >
               Indexes

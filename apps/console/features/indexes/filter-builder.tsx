@@ -34,7 +34,7 @@ export function toFilter(attributes: AttributeColumn[], rows: Condition[]) {
   return all.length === 1 ? all[0] : { and: all };
 }
 
-/** Rows of attribute, operator and value, all of which must hold. */
+/** Rows of field, operator and value, all of which must hold. */
 export function FilterBuilder({
   attributes,
   rows,
@@ -45,7 +45,7 @@ export function FilterBuilder({
   onChange: (rows: Condition[]) => void;
 }) {
   if (!attributes.length) {
-    return <p className="text-sm text-muted-foreground">This index has no attributes to filter.</p>;
+    return <p className="text-sm text-muted-foreground">This index has no fields to filter.</p>;
   }
   const set = (i: number, change: Partial<Condition>) =>
     onChange(rows.map((row, j) => (i === j ? { ...row, ...change } : row)));
@@ -56,7 +56,7 @@ export function FilterBuilder({
         return (
           <div key={i} className="flex items-center gap-2">
             <Select
-              aria-label="Attribute"
+              aria-label="Field"
               value={row.attribute}
               onChange={(e) => {
                 const next = attributes.find((a) => a.name === e.target.value)?.type ?? "string";

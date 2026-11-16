@@ -42,6 +42,7 @@ import { IndexUsage } from "./features/indexes/usage.ts";
 import { indexWritesFeature } from "./features/indexes/writes.ts";
 import { keysFeature } from "./features/keys/routes.ts";
 import { linksFeature } from "./features/links/routes.ts";
+import { loginsFeature } from "./features/logins/routes.ts";
 import { Syncer } from "./features/links/sync.ts";
 import { Deleter } from "./features/deletions/worker.ts";
 import { namespacesFeature } from "./features/namespaces/routes.ts";
@@ -68,6 +69,7 @@ const FEATURES: Feature[] = [
   billingFeature,
   ssoFeature,
   keysFeature,
+  loginsFeature,
   auditFeature,
   environmentsFeature,
   namespacesFeature,

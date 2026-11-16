@@ -1,7 +1,16 @@
 "use client";
 
 import { useQuery } from "@rocicorp/zero/react";
-import { Activity, FolderOpen, GitBranch, HardDrive, History, Layers, Moon } from "lucide-react";
+import {
+  Activity,
+  FolderOpen,
+  GitBranch,
+  HardDrive,
+  History,
+  Layers,
+  Moon,
+  Search,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -100,6 +109,13 @@ export function CommandMenu() {
               icon: History,
               group: nameInEnv(ns),
               onSelect: () => navigate(nsPath(ns, "history")),
+            },
+            {
+              value: "fs search",
+              label: "Search",
+              icon: Search,
+              group: nameInEnv(ns),
+              onSelect: () => navigate(nsPath(ns, "search")),
             },
             ...branches.map((b) => ({
               value: `branch ${b.name}`,

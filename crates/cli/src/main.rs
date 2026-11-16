@@ -4,6 +4,7 @@ mod credentials;
 mod docs_spec;
 mod input;
 mod local;
+mod new_key;
 mod output;
 mod session;
 mod target;

@@ -1,6 +1,7 @@
 import type { z } from "@hono/zod-openapi";
 import { environments, keys, v2 } from "@skywake/contract";
 
+import * as logins from "../features/logins/queries.ts";
 import type { V2 } from "./app.ts";
 import { segment } from "./forward.ts";
 import { pageOf } from "./pages.ts";
@@ -47,6 +48,20 @@ export function registerAccount(api: V2) {
     return c.json(
       pageOf(all, (env) => env.name, c.req.valid("query")),
       200,
+    );
+  });
+
+  api.openapi(routes.startLogin, async (c) => {
+    const body = c.req.valid("json");
+    const { code, expires } = await logins.start(c.var.services.db, {
+      keyId: body.key_id,
+      keyHash: Buffer.from(body.key_hash, "hex"),
+      device: body.device,
+    });
+    const console = c.var.services.config.consoleUrl;
+    return c.json(
+      { code, url: console ? `${console}/cli/${code}` : null, expires: expires.toISOString() },
+      201,
     );
   });
 

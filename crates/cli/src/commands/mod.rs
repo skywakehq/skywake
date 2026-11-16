@@ -14,7 +14,7 @@ use crate::target::Target;
 
 pub(crate) async fn run(global: &Global, command: Command) -> Result<()> {
     match command {
-        Command::Login => return account::login(global).await,
+        Command::Login { paste } => return account::login(global, paste).await,
         Command::Logout => return account::logout(global),
         Command::Env { name } => return account::env(global, name).await,
         Command::Mcp { args } => return mcp::run(global, args),

@@ -2,6 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 
 import { Environment, NewEnvironment } from "../environments.ts";
 import { CreatedKey, Key, NewKey, Whoami } from "../keys.ts";
+import { NewLogin, StartedLogin } from "../logins.ts";
 import { body, done, errors, json, listOf, PageQuery, security } from "./common.ts";
 
 export const KeyV2 = Key.omit({ namespaces: true }).openapi("KeyV2");
@@ -68,4 +69,25 @@ export const createEnvironment = createRoute({
   responses: { 201: json(Environment, "The environment."), ...errors(400, 403, 409) },
 });
 
-export const routes = [whoami, listKeys, createKey, revokeKey, listEnvironments, createEnvironment];
+export const startLogin = createRoute({
+  method: "post",
+  path: "/logins",
+  operationId: "startLogin",
+  tags: ["account"],
+  security: [],
+  summary:
+    "Starts a sign-in from the CLI. The CLI makes a key and sends only its id and hash; a person " +
+    "approves the code in the console, and the key starts to work.",
+  request: { body: body(NewLogin) },
+  responses: { 201: json(StartedLogin, "The code to approve."), ...errors(400, 409, 503) },
+});
+
+export const routes = [
+  whoami,
+  listKeys,
+  createKey,
+  revokeKey,
+  listEnvironments,
+  createEnvironment,
+  startLogin,
+];

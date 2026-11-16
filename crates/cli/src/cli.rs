@@ -114,8 +114,13 @@ pub(crate) struct Confirm {
 
 #[derive(Subcommand)]
 pub(crate) enum Command {
-    #[command(about = "Save an API key for this machine, checked against the API.")]
-    Login,
+    #[command(
+        about = "Sign in through the browser, or save a key from --key, SKYWAKE_API_KEY or a paste."
+    )]
+    Login {
+        #[arg(long, help = "Paste a key instead of signing in through the browser.")]
+        paste: bool,
+    },
     #[command(about = "Forget the profile's saved key.")]
     Logout,
     #[command(about = "Show the organization, environment and role of the key.")]

@@ -7,7 +7,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 pub use create::{CreateDisk, CreateIndex, CreateKey};
-pub use types::{CreatedKey, Environment, Key, Role, Whoami};
+pub use types::{CreatedKey, Environment, Key, NewLogin, Role, StartedLogin, Whoami};
 
 use crate::place::{MAIN, Place};
 use crate::shared::http::{Http, segment};
@@ -93,6 +93,10 @@ impl Skywake {
 
     pub async fn whoami(&self) -> Result<Whoami> {
         self.http.get("/whoami", Vec::new()).await
+    }
+
+    pub async fn start_login(&self, login: &NewLogin) -> Result<StartedLogin> {
+        self.http.post("/logins", login).await
     }
 
     fn list<T: serde::de::DeserializeOwned + Send + 'static>(&self, path: &str) -> List<T> {

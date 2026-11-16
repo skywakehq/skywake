@@ -60,3 +60,17 @@ pub struct Environment {
     #[serde(default)]
     pub store: Value,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NewLogin {
+    pub key_id: String,
+    pub key_hash: String,
+    pub device: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StartedLogin {
+    pub code: String,
+    pub url: Option<String>,
+    pub expires: String,
+}

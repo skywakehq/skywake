@@ -140,9 +140,26 @@
   "path": [],
   "subcommands": [
     {
-      "about": "Save an API key for this machine, checked against the API.",
+      "about": "Sign in through the browser, or save a key from --key, SKYWAKE_API_KEY or a paste.",
       "afterHelp": null,
       "args": [
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Paste a key instead of signing in through the browser.",
+          "id": "paste",
+          "long": "paste",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
         {
           "default": [
             "false"
