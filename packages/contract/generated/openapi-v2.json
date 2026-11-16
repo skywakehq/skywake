@@ -609,13 +609,21 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "executable": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string",
+            "description": "Where a symlink points."
           }
         },
         "required": [
           "path",
           "kind",
           "size",
-          "modified"
+          "modified",
+          "executable"
         ]
       },
       "CommittedV2": {
@@ -1190,6 +1198,28 @@
         },
         "required": [
           "name"
+        ]
+      },
+      "DiskBranch": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Branch"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "head": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Its newest commit; null while empty."
+              }
+            },
+            "required": [
+              "head"
+            ]
+          }
         ]
       },
       "DiskMerged": {
@@ -4821,6 +4851,95 @@
       }
     },
     "/disks/{disk}/branches/{branch}": {
+      "get": {
+        "tags": [
+          "disks"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "operationId": "getDiskBranch",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]*$",
+              "example": "app"
+            },
+            "required": true,
+            "name": "disk",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9._-]+(\\/[A-Za-z0-9._-]+)*$",
+              "example": "agent-1"
+            },
+            "required": true,
+            "name": "branch",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiskBranch"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key, or the key is wrong or expired.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key's role or environment does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist; `hint` suggests the closest name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "disks"

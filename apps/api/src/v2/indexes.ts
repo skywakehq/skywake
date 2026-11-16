@@ -262,7 +262,7 @@ export function registerIndexes(api: V2) {
     } catch (error) {
       if (error instanceof Failure && error.status === 404) {
         await index.index();
-        throw new Failure(404, `row \`${id}\` does not exist`, { hint: null });
+        throw new Failure(404, `row \`${id}\` does not exist`, { hint: null, path: "id" });
       }
       throw error;
     }

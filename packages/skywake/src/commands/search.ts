@@ -137,11 +137,11 @@ async function served(
   let stopped = false;
   for (const { operand, scope } of scopes) {
     const matches = await trusted(() =>
-      fs.branch.search(asked.pattern, {
+      fs.disk.grep(asked.pattern, {
         path: remote(scope.folder),
         glob: asked.glob,
         ignoreCase: asked.ignoreCase,
-        at: scope.at,
+        at: scope.at || undefined,
         limit: LIMIT,
       }),
     );

@@ -3,357 +3,285 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 
-import { retryingFetch, Skywake, SkywakeError } from "../dist/index.js";
+import {
+  AuthError,
+  MergeConflict,
+  NotFound,
+  PermissionError,
+  RateLimited,
+  ServerError,
+  Skywake,
+} from "../dist/index.js";
 
-type Handler = (request: IncomingMessage, response: ServerResponse, count: number) => void;
+interface Seen {
+  method: string;
+  path: string;
+  query: URLSearchParams;
+  headers: IncomingMessage["headers"];
+  body: Buffer;
+}
 
-/** A fake API that answers with `handler`, and counts requests. */
+type Reply = { status?: number; body?: unknown; headers?: Record<string, string>; raw?: Buffer };
+type Handler = (seen: Seen, count: number) => Reply;
+
 async function fake(handler: Handler) {
-  let count = 0;
-  const server = createServer((request, response) => handler(request, response, ++count));
+  const seen: Seen[] = [];
+  const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const url = new URL(request.url ?? "/", "http://x");
+      const one = {
+        method: request.method ?? "GET",
+        path: url.pathname,
+        query: url.searchParams,
+        headers: request.headers,
+        body: Buffer.concat(chunks),
+      };
+      seen.push(one);
+      const reply = handler(one, seen.length);
+      const status = reply.status ?? 200;
+      if (reply.raw) {
+        response.writeHead(status, { "content-type": "application/octet-stream" });
+        return response.end(reply.raw);
+      }
+      response.writeHead(status, { "content-type": "application/json", ...reply.headers });
+      response.end(reply.body === undefined ? "" : JSON.stringify(reply.body));
+    });
+  });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}`,
-    count: () => count,
+    sky: (options = {}) =>
+      new Skywake({ url: `http://127.0.0.1:${port}`, key: "k", backoffMs: 1, ...options }),
+    seen,
     close: () => new Promise((resolve) => server.close(resolve)),
   };
 }
 
-const json = (response: ServerResponse, status: number, body: unknown, headers = {}) => {
-  response.writeHead(status, { "content-type": "application/json", ...headers });
-  response.end(JSON.stringify(body));
-};
+const failure = (status: number, code: string, extra: Record<string, unknown> = {}) => ({
+  status,
+  body: { error: { code, message: "nope", hint: null, request_id: "req-1", ...extra } },
+});
 
-const failure = (code: string) => ({ error: "nope", code, request_id: "req-1" });
+const json = (seen: Seen) => JSON.parse(seen.body.toString("utf8"));
 
-test("idempotent requests are retried after a 5xx", async (t) => {
-  const api = await fake((_, response, count) =>
-    count < 3 ? json(response, 503, failure("unavailable")) : json(response, 200, []),
+test("requests go to /v2 with the key and the environment", async (t) => {
+  const api = await fake(() => ({ body: { organization: "acme", environment: "prod" } }));
+  t.after(api.close);
+  const me = await api.sky({ environment: "prod" }).whoami();
+  assert.equal(me.environment, "prod");
+  assert.equal(api.seen[0]!.path, "/v2/whoami");
+  assert.equal(api.seen[0]!.headers.authorization, "Bearer k");
+  assert.equal(api.seen[0]!.headers["skywake-environment"], "prod");
+});
+
+test("each status becomes its own error, with the hint in the message", async (t) => {
+  const replies = [
+    failure(401, "unauthorized"),
+    failure(403, "forbidden"),
+    failure(404, "not_found", { hint: "did you mean `products`?" }),
+    failure(500, "internal"),
+  ];
+  const api = await fake((_, count) => replies[Math.min(count, 4) - 1]!);
+  t.after(api.close);
+  const sky = api.sky({ retries: 0 });
+  await assert.rejects(sky.whoami(), AuthError);
+  await assert.rejects(sky.whoami(), PermissionError);
+  await assert.rejects(sky.index("prodcts").info(), (error: NotFound) => {
+    assert.ok(error instanceof NotFound);
+    assert.equal(error.hint, "did you mean `products`?");
+    assert.match(error.message, /did you mean `products`\?/);
+    assert.equal(error.requestId, "req-1");
+    return true;
+  });
+  await assert.rejects(sky.whoami(), ServerError);
+});
+
+test("a 429 is retried as the server asks, then reported with retryAfter", async (t) => {
+  const limited = { ...failure(429, "rate_limited"), headers: { "retry-after": "1" } };
+  const api = await fake(() => limited);
+  t.after(api.close);
+  await assert.rejects(api.sky({ retries: 1 }).whoami(), (error: RateLimited) => {
+    assert.ok(error instanceof RateLimited);
+    assert.equal(error.retryAfter, 1);
+    return true;
+  });
+  assert.equal(api.seen.length, 2);
+});
+
+test("a merge that can't finish is a MergeConflict listing what conflicts", async (t) => {
+  const api = await fake(() => failure(409, "conflict", { conflicts: ["README.md"] }));
+  t.after(api.close);
+  const work = api.sky().disk("app", { branch: "agent-1" });
+  await assert.rejects(work.mergeInto(), (error: MergeConflict) => {
+    assert.ok(error instanceof MergeConflict);
+    assert.deepEqual(error.conflicts, ["README.md"]);
+    return true;
+  });
+  assert.deepEqual(json(api.seen[0]!), { from: "agent-1", into: "main" });
+});
+
+test("lists follow next until the last page", async (t) => {
+  const api = await fake((seen) =>
+    seen.query.get("cursor") === "b"
+      ? { body: { data: [{ name: "c" }], next: null } }
+      : { body: { data: [{ name: "a" }, { name: "b" }], next: "b" } },
   );
   t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", backoffMs: 1 });
-  assert.deepEqual(await sky.namespaces(), []);
-  assert.equal(api.count(), 3);
+  const names = [];
+  for await (const disk of api.sky().listDisks()) names.push(disk.name);
+  assert.deepEqual(names, ["a", "b", "c"]);
 });
 
-test("a POST is not retried after a 5xx, since it may have landed", async (t) => {
-  const api = await fake((_, response) => json(response, 503, failure("unavailable")));
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", backoffMs: 1 });
-  await assert.rejects(sky.createEnvironment("prod"), SkywakeError);
-  assert.equal(api.count(), 1);
-});
-
-test("any request is retried after a 429, waiting as the server asks", async (t) => {
-  const api = await fake((request, response, count) => {
-    if (count === 1) return json(response, 429, failure("rate_limited"), { "retry-after": "1" });
-    let body = "";
-    request.on("data", (chunk) => (body += chunk));
-    request.on("end", () => json(response, 201, { ...JSON.parse(body), created: "" }));
+test("upsert takes any number of rows and sends them in batches", async (t) => {
+  const api = await fake((seen) => {
+    const rows = json(seen) as { id: number }[];
+    return { body: { ids: rows.map((row) => row.id), count: rows.length } };
   });
   t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k" });
-  const started = Date.now();
-  const made = await sky.createEnvironment("prod");
-  assert.equal(made.name, "prod", "the body is sent again");
-  assert.ok(Date.now() - started >= 900);
-  assert.equal(api.count(), 2);
-});
-
-test("retries stop after the last one, and the error says what and which request", async (t) => {
-  const api = await fake((_, response) => json(response, 500, failure("internal")));
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", retries: 2, backoffMs: 1 });
-  const error = await sky.namespaces().catch((caught) => caught);
-  assert.ok(error instanceof SkywakeError);
-  assert.equal(error.status, 500);
-  assert.equal(error.code, "internal");
-  assert.equal(error.requestId, "req-1");
-  assert.equal(error.message, "nope");
-  assert.equal(api.count(), 3);
-});
-
-test("a request that takes too long is cut off and retried", async (t) => {
-  const api = await fake((_, response, count) => {
-    if (count === 1) return; // never answers
-    json(response, 200, []);
-  });
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", timeoutMs: 100, backoffMs: 1 });
-  assert.deepEqual(await sky.namespaces(), []);
-  assert.equal(api.count(), 2);
-
-  const hung = await fake(() => {});
-  t.after(hung.close);
-  const cut = new Skywake({ url: hung.url, key: "k", timeoutMs: 100, retries: 0 });
-  await assert.rejects(cut.namespaces(), (error: Error) => error.name === "TimeoutError");
-});
-
-test("the timeout covers the wait for an answer, not reading a large one", async (t) => {
-  const chunks = ["a", "b", "c", "d"];
-  const api = await fake((_, response) => {
-    response.writeHead(200, { "content-type": "application/octet-stream" });
-    // Each part comes after a pause, so the whole body takes longer than the timeout.
-    const next = () => {
-      const chunk = chunks.shift();
-      if (chunk === undefined) return response.end();
-      response.write(chunk);
-      setTimeout(next, 60);
-    };
-    next();
-  });
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", timeoutMs: 100, retries: 0 });
-  assert.equal(await sky.namespace("x").branch("main").readText("big"), "abcd");
-});
-
-test("a file can be read as a stream", async (t) => {
-  const api = await fake((request, response) => {
-    assert.match(request.url!, /files\/content\?path=a.txt/);
-    response.writeHead(200, { "content-type": "application/octet-stream" });
-    response.write("hello ");
-    response.end("world");
-  });
-  t.after(api.close);
-  const branch = new Skywake({ url: api.url, key: "k" }).namespace("x").branch("main");
-  const parts: string[] = [];
-  for await (const part of (await branch.readStream("a.txt")).pipeThrough(new TextDecoderStream()))
-    parts.push(part);
-  assert.equal(parts.join(""), "hello world");
-
-  const missing = await fake((_, response) => json(response, 404, failure("not_found")));
-  t.after(missing.close);
-  const gone = new Skywake({ url: missing.url, key: "k" }).namespace("x").branch("main");
-  await assert.rejects(gone.readStream("a.txt"), { code: "not_found", status: 404 });
-});
-
-test("a 4xx is not retried", async (t) => {
-  const api = await fake((_, response) => json(response, 404, failure("not_found")));
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", backoffMs: 1 });
-  await assert.rejects(sky.namespace("x").branches(), { code: "not_found", status: 404 });
-  assert.equal(api.count(), 1);
-});
-
-test("a wait the server asks for is kept, up to its longest", async (t) => {
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  let calls = 0;
-  const send = async () =>
-    ++calls === 1
-      ? new Response(null, { status: 429, headers: { "retry-after": "60" } })
-      : new Response("[]");
-  const fetching = retryingFetch({}, send as typeof fetch)(new Request("http://api/v1/x"));
-  const advance = async (ms: number) => {
-    for (let i = 0; i < 10; i++) await Promise.resolve();
-    t.mock.timers.tick(ms);
-  };
-  await advance(59_000);
-  assert.equal(calls, 1, "it retried before the server's wait was over");
-  await advance(1_000);
-  assert.equal((await fetching).status, 200);
-  assert.equal(calls, 2);
-});
-
-test("a DELETE retried after a failure that may have landed takes 404 as done", async (t) => {
-  const api = await fake((_, response, count) =>
-    count === 1
-      ? json(response, 503, failure("unavailable"))
-      : json(response, 404, failure("not_found")),
-  );
-  t.after(api.close);
-  const sky = new Skywake({ url: api.url, key: "k", backoffMs: 1 });
-  await sky.namespace("x").branch("gone").delete();
-  assert.equal(api.count(), 2);
-
-  // A 404 on the first try is still an error.
-  const missing = await fake((_, response) => json(response, 404, failure("not_found")));
-  t.after(missing.close);
-  const other = new Skywake({ url: missing.url, key: "k", backoffMs: 1 });
-  await assert.rejects(other.namespace("x").branch("gone").delete(), { status: 404 });
-});
-
-test("a list takes a page, and `all` follows `after` until a short page", async (t) => {
-  const asked: URLSearchParams[] = [];
-  const names = Array.from({ length: 1001 }, (_, i) => `b${String(i).padStart(4, "0")}`);
-  const api = await fake((request, response) => {
-    const query = new URL(request.url!, "http://x").searchParams;
-    asked.push(query);
-    const after = query.get("after");
-    const start = after ? names.indexOf(after) + 1 : 0;
-    const page = names.slice(start, start + Number(query.get("limit") ?? 1000));
-    json(
-      response,
-      200,
-      page.map((name) => ({ name, forked_from: null, protected: false, created: "" })),
-    );
-  });
-  t.after(api.close);
-  const ns = new Skywake({ url: api.url, key: "k" }).namespace("prod/app");
-
-  const page = await ns.branches({ limit: 2, after: "b0005" });
+  const rows = Array.from({ length: 25_000 }, (_, id) => ({ id, text: `row ${id}` }));
+  const done = await api.sky().index("products").upsert(rows);
+  assert.equal(done.count, 25_000);
+  assert.equal(done.ids.length, 25_000);
   assert.deepEqual(
-    page.map((branch) => branch.name),
-    ["b0006", "b0007"],
+    api.seen.map((seen) => (json(seen) as unknown[]).length),
+    [10_000, 10_000, 5_000],
   );
-  assert.equal(asked[0]!.toString(), "limit=2&after=b0005");
-
-  const all = [];
-  for await (const branch of ns.allBranches()) all.push(branch.name);
-  assert.deepEqual(all, names);
-  assert.deepEqual(
-    asked.slice(1).map((query) => query.toString()),
-    ["limit=1000", "limit=1000&after=b0999"],
-  );
+  assert.equal(api.seen[0]!.query.get("branch"), "main");
 });
 
-test("folder entries are paged by name", async (t) => {
-  const asked: string[] = [];
-  const api = await fake((request, response) => {
-    asked.push(new URL(request.url!, "http://x").search);
-    const entries = Array.from({ length: asked.length === 1 ? 1000 : 3 }, (_, i) => ({
-      name: `${asked.length}-${i}`,
-      kind: "file",
-      size: 0,
-      executable: false,
-      modified: 0,
-    }));
-    json(response, 200, {
-      name: "",
-      kind: "folder",
-      size: 0,
-      executable: false,
-      modified: 0,
-      entries,
-    });
-  });
+test("update and delete take an id, ids, or a filter", async (t) => {
+  const api = await fake(() => ({ body: { count: 1 } }));
   t.after(api.close);
-  const main = new Skywake({ url: api.url, key: "k" }).namespace("app").branch("main");
-  let count = 0;
-  for await (const _ of main.allEntries("src")) count++;
-  assert.equal(count, 1003);
-  assert.deepEqual(asked, ["?path=src&limit=1000", "?path=src&limit=1000&after=1-999"]);
-});
-
-/** A fake API that records each request and its JSON body, and answers with `answer`. */
-async function recording(answer: (method: string, url: string, body: any) => [number, unknown]) {
-  const seen: { method: string; url: string; body: any }[] = [];
-  const api = await fake((request, response) => {
-    let text = "";
-    request.on("data", (chunk) => (text += chunk));
-    request.on("end", () => {
-      const body = text ? JSON.parse(text) : null;
-      seen.push({ method: request.method!, url: request.url!, body });
-      const [status, reply] = answer(request.method!, request.url!, body);
-      if (status === 204) response.writeHead(204).end();
-      else json(response, status, reply);
-    });
-  });
-  return { ...api, seen, sky: new Skywake({ url: api.url, key: "k", backoffMs: 1 }) };
-}
-
-test("an organization and its keys are made, listed and revoked", async (t) => {
-  const api = await recording((method, url) => {
-    if (url === "/v1/orgs") return [201, { id: "org_1", key: "sw_first" }];
-    if (method === "DELETE") return [204, null];
-    if (method === "GET") return [200, [{ id: "key_1", name: "ci", role: "write" }]];
-    return [201, { id: "key_1", key: "sw_new" }];
-  });
-  t.after(api.close);
-  assert.deepEqual(await api.sky.createOrg("acme"), { id: "org_1", key: "sw_first" });
-  const made = await api.sky.keys.create("ci", "write", {
-    namespaces: "prod/*",
-    expiresInDays: 30,
-  });
-  assert.deepEqual(made, { id: "key_1", key: "sw_new" });
-  await api.sky.keys.create("all", "read");
-  assert.equal((await api.sky.keys.list())[0]!.name, "ci");
-  await api.sky.keys.revoke("key_1");
+  const products = api.sky().index("products");
+  await products.update(7, { stock: 3 });
+  await products.update({ tag: { eq: "sale" } }, { stock: 0 });
+  await products.delete([1, 2]);
+  await products.delete({ filter: { stock: { eq: 0 } } });
   assert.deepEqual(
-    api.seen.map(({ method, url, body }) => [method, url, body]),
+    api.seen.map((seen) => [seen.method, seen.path, json(seen)]),
     [
-      ["POST", "/v1/orgs", { name: "acme" }],
+      ["PATCH", "/v2/indexes/products/rows", { id: 7, fields: { stock: 3 } }],
       [
-        "POST",
-        "/v1/keys",
-        { name: "ci", role: "write", namespaces: "prod/*", expires_in_days: 30 },
+        "PATCH",
+        "/v2/indexes/products/rows",
+        { filter: { tag: { eq: "sale" } }, fields: { stock: 0 } },
       ],
-      ["POST", "/v1/keys", { name: "all", role: "read" }],
-      ["GET", "/v1/keys", null],
-      ["DELETE", "/v1/keys/key_1", null],
+      ["POST", "/v2/indexes/products/rows/delete", { ids: [1, 2] }],
+      ["POST", "/v2/indexes/products/rows/delete", { filter: { stock: { eq: 0 } } }],
     ],
   );
 });
 
-test("a merge can be a dry run, and a fork can start at an older commit", async (t) => {
-  const api = await recording((_, url, body) =>
-    url.endsWith("/merges") ? [200, { head: null, conflicts: ["a.txt"] }] : [201, body],
+test("get gives null for a missing row but throws for a missing index", async (t) => {
+  const api = await fake((seen) =>
+    seen.path.includes("/rows/")
+      ? failure(404, "not_found", { path: "id" })
+      : failure(404, "not_found", { hint: "did you mean `products`?" }),
   );
   t.after(api.close);
-  const ns = api.sky.namespace("app");
-  const merged = await ns.branch("try").mergeInto("main", { dryRun: true });
-  assert.deepEqual(merged, { head: null, conflicts: ["a.txt"] });
-  await ns.merge("try", "main", { message: "m" });
-  const forked = await ns.branch("main").fork("old", "c0ffee");
-  assert.equal(forked.name, "old");
-  assert.deepEqual(
-    api.seen.map(({ url, body }) => [url, body]),
-    [
-      ["/v1/namespaces/app/merges", { from: "try", into: "main", dry_run: true }],
-      ["/v1/namespaces/app/merges", { from: "try", into: "main", message: "m" }],
-      ["/v1/namespaces/app/branches", { name: "old", from: "main", at: "c0ffee" }],
-    ],
-  );
+  const sky = api.sky();
+  assert.equal(await sky.index("products").get("a b"), null);
+  assert.equal(api.seen[0]!.path, "/v2/indexes/products/rows/a%20b");
+  await assert.rejects(sky.index("prodcts").info(), NotFound);
 });
 
-test("a revert, a reset, a resolved merge and a diff against the base", async (t) => {
-  const conflict = { conflicts: ["a.txt"], error: "nope", code: "conflict", request_id: "r" };
-  const api = await recording((_, url, body) => {
-    if (url.endsWith("/revert"))
-      return body.commit === "bad" ? [409, conflict] : [201, { head: "h1", changed: true }];
-    if (url.endsWith("/reset")) return [200, { head: "h0", changed: false }];
-    if (url.endsWith("/merges")) return [409, { head: null, ...conflict, conflicts: ["b.txt"] }];
-    return [200, []];
+test("query takes text first, and options on their own", async (t) => {
+  const api = await fake(() => ({
+    body: { data: [{ id: 1, score: 0.9, title: "mug" }], next: null },
+  }));
+  t.after(api.close);
+  const products = api.sky().index("products", { branch: "draft" });
+  const [hit] = await products.query("coffee", { limit: 3, mode: "keywords" });
+  assert.equal(hit!.title, "mug");
+  await products.query({ filter: { price: { lt: 10 } }, sort: { price: "asc" } });
+  assert.deepEqual(json(api.seen[0]!), {
+    text: "coffee",
+    limit: 3,
+    mode: "keywords",
+    branch: "draft",
   });
+  assert.deepEqual(json(api.seen[1]!), {
+    filter: { price: { lt: 10 } },
+    sort: { price: "asc" },
+    branch: "draft",
+  });
+});
+
+test("files are read and written by path, each part of it encoded", async (t) => {
+  const api = await fake((seen) =>
+    seen.method === "GET"
+      ? { raw: Buffer.from("hello") }
+      : { body: { commit: "c1", changed: true } },
+  );
   t.after(api.close);
-  const ns = api.sky.namespace("app");
-  const main = ns.branch("main");
-
-  assert.deepEqual(await main.revert("c1", { message: "undo" }), { head: "h1", changed: true });
-  const error = await main.revert("bad").catch((caught) => caught);
-  assert.ok(error instanceof SkywakeError);
-  assert.equal(error.status, 409);
-  assert.deepEqual(error.conflicts, ["a.txt"]);
-  assert.deepEqual(await main.reset("c0", { session: "s" }), { head: "h0", changed: false });
-
-  const resolve = [{ path: "a.txt", take: "ours" as const }];
-  const merged = await ns.branch("try").mergeInto("main", { resolve });
-  assert.deepEqual(merged.conflicts, ["b.txt"], "the paths still open");
-
-  await main.diff("dev", { against: "base" });
-  assert.deepEqual(
-    api.seen.map(({ url, body }) => [url, body]),
-    [
-      ["/v1/namespaces/app/branches/main/revert", { commit: "c1", message: "undo" }],
-      ["/v1/namespaces/app/branches/main/revert", { commit: "bad" }],
-      ["/v1/namespaces/app/branches/main/reset", { to: "c0", session: "s" }],
-      ["/v1/namespaces/app/merges", { from: "try", into: "main", resolve }],
-      ["/v1/namespaces/app/branches/main/diff?from=dev&against=base", null],
+  const app = api.sky().disk("app");
+  assert.equal(await app.read("/docs/a b.md", { at: "c0" }), "hello");
+  assert.deepEqual(await app.read("x", { as: "bytes" }), new Uint8Array(Buffer.from("hello")));
+  await app.write({ "a.md": "one", "b.bin": new Uint8Array([0xff, 0x00]) }, { message: "two" });
+  assert.equal(api.seen[0]!.path, "/v2/disks/app/files/docs/a%20b.md");
+  assert.equal(api.seen[0]!.query.get("at"), "c0");
+  assert.deepEqual(json(api.seen[2]!), {
+    message: "two",
+    branch: "main",
+    changes: [
+      { path: "a.md", text: "one" },
+      { path: "b.bin", base64: "/wA=" },
     ],
+  });
+});
+
+test("a large file goes up in parts before its commit", async (t) => {
+  const api = await fake((seen) =>
+    seen.path.endsWith("/uploads")
+      ? { status: 201, body: { part: `p${seen.body.length}`, size: seen.body.length } }
+      : { body: { commit: "c1", changed: true } },
+  );
+  t.after(api.close);
+  const big = new Uint8Array(20 * 1024 * 1024);
+  await api.sky().disk("app").write("big.bin", big);
+  const parts = api.seen.filter((seen) => seen.path.endsWith("/uploads"));
+  assert.deepEqual(
+    parts.map((seen) => seen.body.length),
+    [16 * 1024 * 1024, 4 * 1024 * 1024],
+  );
+  const commit = json(api.seen.at(-1)!);
+  assert.deepEqual(commit.changes, [
+    { path: "big.bin", parts: [`p${16 * 1024 * 1024}`, `p${4 * 1024 * 1024}`] },
+  ]);
+});
+
+test("a fork is a handle on the new branch, and destroy removes just the branch", async (t) => {
+  const api = await fake((seen) =>
+    seen.method === "DELETE" ? { status: 204 } : { status: 201, body: { name: "agent-1" } },
+  );
+  t.after(api.close);
+  const work = await api.sky().disk("app").fork("agent-1", { at: "c3" });
+  assert.equal(work.branch, "agent-1");
+  await work.destroy();
+  assert.deepEqual(json(api.seen[0]!), { name: "agent-1", from: "main", at: "c3" });
+  assert.deepEqual(
+    [api.seen[1]!.method, api.seen[1]!.path],
+    ["DELETE", "/v2/disks/app/branches/agent-1"],
   );
 });
 
-test("a branch can be protected and unprotected", async (t) => {
-  const api = await recording(() => [200, { name: "main", protected: true }]);
-  t.after(api.close);
-  const main = api.sky.namespace("app").branch("main");
-  await main.protect();
-  await main.protect(false);
-  assert.deepEqual(
-    api.seen.map(({ method, url, body }) => [method, url, body]),
-    [
-      ["PATCH", "/v1/namespaces/app/branches/main", { protected: true }],
-      ["PATCH", "/v1/namespaces/app/branches/main", { protected: false }],
-    ],
+test("restore to a time picks the newest commit at or before it", async (t) => {
+  const api = await fake((seen) =>
+    seen.method === "GET"
+      ? {
+          body: {
+            data: [
+              { id: "c3", message: "", created: "2026-01-03T00:00:00Z", merged: null },
+              { id: "c2", message: "", created: "2026-01-02T00:00:00Z", merged: null },
+            ],
+            next: null,
+          },
+        }
+      : { body: { commit: "c4", changed: true } },
   );
+  t.after(api.close);
+  await api.sky().disk("app").restore(new Date("2026-01-02T12:00:00Z"));
+  assert.deepEqual(json(api.seen[1]!), { to: "c2", branch: "main" });
 });

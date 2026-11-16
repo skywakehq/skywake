@@ -1,4 +1,4 @@
-import type { Shell } from "./shell.ts";
+import type { SkywakeFs } from "./fs.ts";
 
 const OUTPUT_MAX = 30_000;
 
@@ -13,7 +13,12 @@ export interface RunOptions {
   commit?: string;
 }
 
-export async function run(shell: Shell, command: string, options: RunOptions = {}): Promise<Ran> {
+interface Runs {
+  bash: { exec(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> };
+  fs: SkywakeFs;
+}
+
+export async function run(shell: Runs, command: string, options: RunOptions = {}): Promise<Ran> {
   const result = await shell.bash.exec(command);
   const ran: Ran = {
     stdout: clipped(result.stdout),

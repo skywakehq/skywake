@@ -1,4 +1,4 @@
-import type { Branch } from "@skywake/sdk";
+import type { Disk } from "@skywake/sdk";
 import type {
   BufferEncoding,
   CpOptions,
@@ -40,11 +40,11 @@ export interface Served {
 export class SkywakeFs implements IFileSystem {
   readonly #changes = new Changes();
   readonly #remote: Remote;
-  readonly branch: Branch;
+  readonly disk: Disk;
 
-  constructor(branch: Branch) {
-    this.branch = branch;
-    this.#remote = new Remote(branch);
+  constructor(disk: Disk) {
+    this.disk = disk;
+    this.#remote = new Remote(disk);
   }
 
   get pending(): number {
@@ -55,10 +55,10 @@ export class SkywakeFs implements IFileSystem {
     return this.#remote.head();
   }
 
-  async commit(message: string, session?: string): Promise<string | null> {
+  async commit(message: string): Promise<string | null> {
     if (this.#changes.size === 0) return null;
     const changes = await changesOf(this.#changes, this.#remote);
-    const head = await trusted(() => this.branch.commit(message, changes, session));
+    const { commit: head } = await trusted(() => this.disk.commit(changes, message));
     this.#changes.clear();
     this.#remote.moved(head);
     return head;

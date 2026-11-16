@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
-import { createShell, type Ran } from "skywake/bash";
+import type { Ran } from "skywake/bash";
 import { bashTool } from "skywake/ai";
 import { Skywake } from "@skywake/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -33,9 +33,10 @@ test("the AI SDK tool runs a command and commits what it changed", { skip }, asy
   const client = new Skywake({
     url: "http://api.test",
     key,
+    environment: "prod",
     fetch: (input, init) => Promise.resolve(s.app.fetch(new Request(input, init))),
   });
-  const bash = bashTool(createShell(client.namespace("prod/app").branch("main")));
+  const bash = bashTool(client.disk("app"));
   const call = { toolCallId: "1", messages: [] };
   const found = await bash.execute!({ command: "rg -n greet" }, call);
   assert.deepEqual(found, {
@@ -61,7 +62,8 @@ test("the MCP server offers bash over stdio", { skip }, async () => {
       PATH: process.env.PATH ?? "",
       SKYWAKE_URL: s.services.config.peer.url,
       SKYWAKE_KEY: key,
-      SKYWAKE_NAMESPACE: "prod/app",
+      SKYWAKE_ENV: "prod",
+      SKYWAKE_DISK: "app",
     },
     stderr: "pipe",
   });

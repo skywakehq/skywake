@@ -357,7 +357,7 @@ a branch for the session instead of writing to `main`.
 | `POST /disks/{disk}/revert` · `/restore`                | undo a commit / go back                 |
 | `POST /disks/{disk}/uploads`                            | a large file part                       |
 | `GET/POST /disks/{disk}/branches`                       | list / fork                             |
-| `DELETE /disks/{disk}/branches/{branch}`                | destroy a branch                        |
+| `GET/DELETE /disks/{disk}/branches/{branch}`            | a branch and its head / destroy it      |
 | `POST /disks/{disk}/merges`                             | merge `{ from, into }`                  |
 | `GET/POST /indexes`                                     | list / create                           |
 | `GET/PATCH/DELETE /indexes/{index}`                     | info / settings / destroy               |

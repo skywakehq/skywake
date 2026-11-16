@@ -54,8 +54,14 @@ export const Entry = z
     kind: z.enum(["file", "folder", "symlink"]),
     size: z.number().int(),
     modified: Time.nullable(),
+    executable: z.boolean(),
+    target: z.string().optional().openapi({ description: "Where a symlink points." }),
   })
   .openapi("Entry");
+
+export const DiskBranch = Branch.extend({
+  head: z.string().nullable().openapi({ description: "Its newest commit; null while empty." }),
+}).openapi("DiskBranch");
 
 export const Committed = z
   .object({
@@ -369,6 +375,14 @@ export const forkDisk = route({
   responses: { 201: json(Branch, "The new branch."), ...errors(400, 403, 404, 409) },
 });
 
+export const getDiskBranch = route({
+  method: "get",
+  path: "/disks/{disk}/branches/{branch}",
+  operationId: "getDiskBranch",
+  request: { params: branchParams },
+  responses: { 200: json(DiskBranch, "The branch."), ...errors(403, 404) },
+});
+
 export const destroyDiskBranch = route({
   method: "delete",
   path: "/disks/{disk}/branches/{branch}",
@@ -407,6 +421,7 @@ export const routes = [
   upload,
   listDiskBranches,
   forkDisk,
+  getDiskBranch,
   destroyDiskBranch,
   mergeDisk,
 ];

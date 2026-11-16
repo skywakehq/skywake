@@ -125,6 +125,8 @@ jobs:
       # above; a skipped test fails in CI), the TypeScript SDK and the npm
       # wrapper of the CLI.
       - run: pnpm test
+      - name: Scenario list, TypeScript SDK
+        run: scripts/scenarios.sh
       - name: Python SDK
         run: uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests
       - name: Start the API on S3

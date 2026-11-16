@@ -38,9 +38,6 @@
     "test": "tsc && node --test \"test/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "openapi-fetch": "^0.14.0"
-  },
   "devDependencies": {
     "@skywake/config": "workspace:*",
     "openapi-typescript": "^7.8.0",

@@ -1,31 +1,12 @@
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import { after, test } from "node:test";
 
+import { fakeEmbedder } from "./fake-embed.ts";
 import { server, skip, type Server } from "./helpers.ts";
 
-const TOPICS = ["shoe", "coffee", "invoice", "giraffe"];
-
-function vectorOf(text: string) {
-  const lower = text.toLowerCase();
-  return [...TOPICS.map((word) => lower.split(word).length - 1), 0.05];
-}
-
-const provider = createServer((request, response) => {
-  let raw = "";
-  request.on("data", (part) => (raw += part));
-  request.on("end", () => {
-    const inputs: string[] = JSON.parse(raw).input;
-    response.writeHead(200, { "content-type": "application/json" });
-    response.end(
-      JSON.stringify({ data: inputs.map((text, index) => ({ index, embedding: vectorOf(text) })) }),
-    );
-  });
-});
-await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
-after(() => provider.close());
-const embed = { url: `http://127.0.0.1:${(provider.address() as AddressInfo).port}/v1` };
+const provider = await fakeEmbedder();
+after(() => provider.server.close());
+const embed = { url: provider.url };
 
 type Body = unknown;
 
@@ -451,6 +432,10 @@ test("disk branches: fork, diff, merge, conflicts, revert and restore", { skip }
     branches.data.map((b: any) => b.name),
     ["agent-1", "main"],
   );
+  const main = ok(await api("GET", "/disks/app/branches/main"));
+  assert.equal(main.head, settled.commit);
+  const listing = ok(await api("GET", "/disks/app/files"));
+  assert.equal(listing.data[0].executable, false);
   ok(await api("DELETE", "/disks/app/branches/agent-1"), 204);
 
   const change = ok(await api("PUT", "/disks/app/files/c.txt", undefined, "c"));

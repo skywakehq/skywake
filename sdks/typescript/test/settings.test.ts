@@ -70,7 +70,7 @@ test("a profile from the credentials file is used when no key is given", async (
   assert.deepEqual(api.seen(), {
     authorization: "Bearer sw_file",
     environment: "prod",
-    path: "/v1/whoami",
+    path: "/v2/whoami",
   });
 
   process.env.SKYWAKE_PROFILE = "staging";

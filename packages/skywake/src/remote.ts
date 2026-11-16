@@ -1,14 +1,30 @@
-import type { Branch, Schemas } from "@skywake/sdk";
+import type { Disk, Entry } from "@skywake/sdk";
 
 import { isMissing } from "./errors.ts";
 import { join, name, parent, remote } from "./paths.ts";
 import { trusted } from "./trusted.ts";
 
-export type RemoteEntry = Schemas["FileInfo"];
+export interface RemoteEntry {
+  name: string;
+  kind: Entry["kind"];
+  size: number;
+  executable: boolean;
+  modified: number;
+  target?: string;
+}
 
 const CACHED_BYTES = 1 << 20;
 
 const ROOT: RemoteEntry = { name: "", kind: "folder", size: 0, executable: false, modified: 0 };
+
+const entryOf = (entry: Entry): RemoteEntry => ({
+  name: entry.path.slice(entry.path.lastIndexOf("/") + 1),
+  kind: entry.kind,
+  size: entry.size,
+  executable: entry.executable,
+  modified: entry.modified ? Date.parse(entry.modified) : 0,
+  ...(entry.target === undefined ? {} : { target: entry.target }),
+});
 
 export class Remote {
   #head: Promise<string> | undefined;
@@ -16,14 +32,20 @@ export class Remote {
   #lists = new Map<string, Promise<Map<string, RemoteEntry>>>();
   #reads = new Map<string, Promise<Uint8Array>>();
 
-  readonly branch: Branch;
+  readonly disk: Disk;
 
-  constructor(branch: Branch) {
-    this.branch = branch;
+  constructor(disk: Disk) {
+    this.disk = disk;
   }
 
   head(): Promise<string> {
-    this.#head ??= trusted(() => this.branch.info()).then((info) => info.head);
+    this.#head ??= trusted(() => this.disk.head()).then(
+      (head) => head ?? "",
+      (error) => {
+        if (isMissing(error)) return "";
+        throw error;
+      },
+    );
     return this.#head;
   }
 
@@ -56,20 +78,17 @@ export class Remote {
   async read(path: string): Promise<Uint8Array> {
     const cached = this.#reads.get(path);
     if (cached) return cached;
-    const read = this.head().then((at) => trusted(() => this.branch.read(remote(path), { at })));
+    const read = this.head().then((at) =>
+      trusted(() => this.disk.read(remote(path), { at: at || undefined, as: "bytes" })),
+    );
     const entry = await this.stat(path);
     if (entry && entry.size <= CACHED_BYTES) this.#reads.set(path, read);
     return read;
   }
 
   async #fetchStat(path: string): Promise<RemoteEntry | null> {
-    const listed = this.#lists.get(parent(path));
-    if (listed) return (await listed).get(name(path)) ?? null;
     try {
-      const at = await this.head();
-      const listed = trusted(() => this.branch.list(remote(path), { at, limit: 1 }));
-      const { entries: _, ...entry } = await listed;
-      return entry;
+      return (await this.list(parent(path))).get(name(path)) ?? null;
     } catch (error) {
       if (isMissing(error)) return null;
       throw error;
@@ -79,8 +98,10 @@ export class Remote {
   async #fetchList(path: string): Promise<Map<string, RemoteEntry>> {
     const at = await this.head();
     const entries = new Map<string, RemoteEntry>();
+    if (!at) return entries;
     await trusted(async () => {
-      for await (const entry of this.branch.allEntries(remote(path), { at })) {
+      for await (const found of this.disk.entries(remote(path), { at })) {
+        const entry = entryOf(found);
         entries.set(entry.name, entry);
         this.#stats.set(join(path, entry.name), Promise.resolve(entry));
       }

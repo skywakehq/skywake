@@ -28,10 +28,7 @@ export const operations: SdkOperation[] = [
     examples: {
       typescript: `import { Skywake } from "skywake";
 
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});`,
+const sky = new Skywake({ key: process.env.SKYWAKE_API_KEY! });`,
       python: `import os
 
 from skywake import Skywake
@@ -69,12 +66,14 @@ using var sky = new SkywakeClient(
     description:
       "Make an index with a vector column and two attributes. Needs an admin key. The part of the name before the first slash is the environment; products has none, so it goes in default.",
     examples: {
-      typescript: `const products = await sky.indexes.create("products", {
-  vectors: [{ name: "embedding", dims: 3 }],
-  attributes: [
-    { name: "title", type: "text" },
-    { name: "price", type: "number" },
-  ],
+      typescript: `const products = await sky.createIndex("products", {
+  schema: {
+    vectors: [{ name: "embedding", dims: 3 }],
+    attributes: [
+      { name: "title", type: "text" },
+      { name: "price", type: "number" },
+    ],
+  },
 });`,
       python: `products = sky.indexes.create(
     "products",
@@ -115,9 +114,9 @@ let products = sky.indexes().create("products", schema, &IndexOptions::default()
     title: "Upsert documents",
     description: "Write documents. Each replaces any earlier one with its id.",
     examples: {
-      typescript: `const count = await sky.index("products").upsert([
-  { id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { title: "Desk lamp", price: 40 } },
-  { id: 2, vectors: { embedding: [0.3, 0.1, 0.2] }, attributes: { title: "Red mug", price: 9 } },
+      typescript: `const { count } = await sky.index("products").upsert([
+  { id: 1, embedding: [0.1, 0.2, 0.3], title: "Desk lamp", price: 40 },
+  { id: 2, embedding: [0.3, 0.1, 0.2], title: "Red mug", price: 9 },
 ]);`,
       python: `count = sky.index("products").upsert([
     {"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"title": "Desk lamp", "price": 40}},
@@ -168,11 +167,8 @@ let count = sky.index("products").upsert(&docs).await?;`,
     title: "Query by vector",
     description: "Find the documents nearest to a vector, nearest first.",
     examples: {
-      typescript: `const hits = await sky.index("products").query({
-  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
-  topK: 5,
-});
-for (const hit of hits) console.log(hit.id, hit.distance);`,
+      typescript: `const hits = await sky.index("products").query({ vector: [0.1, 0.2, 0.3], limit: 5 });
+for (const hit of hits) console.log(hit.id, hit.score);`,
       python: `hits = sky.index("products").query("embedding", [0.1, 0.2, 0.3], top_k=5)
 for hit in hits:
     print(hit["id"], hit["distance"])`,
@@ -215,11 +211,7 @@ foreach (var hit in hits)
     title: "Full-text search",
     description: "Find the documents that best match words by BM25, best first.",
     examples: {
-      typescript: `const hits = await sky.index("products").search({
-  query: "desk lamp",
-  fields: ["title"],
-  topK: 5,
-});
+      typescript: `const hits = await sky.index("products").query("desk lamp", { mode: "keywords", limit: 5 });
 for (const hit of hits) console.log(hit.id, hit.score);`,
       python: `hits = sky.index("products").search("desk lamp", fields=["title"], top_k=5)
 for hit in hits:
@@ -265,13 +257,7 @@ foreach (var hit in hits)
     title: "Hybrid search",
     description: "Run a vector query and a text search on one snapshot and fuse their ranks.",
     examples: {
-      typescript: `const hits = await sky.index("products").hybrid({
-  searches: {
-    meaning: { vector: { column: "embedding", value: [0.1, 0.2, 0.3] }, topK: 50 },
-    words: { query: "desk lamp", topK: 50 },
-  },
-  topK: 5,
-});
+      typescript: `const hits = await sky.index("products").query("desk lamp", { limit: 5 });
 for (const hit of hits) console.log(hit.id, hit.score);`,
       python: `hits = sky.index("products").hybrid(
     {
@@ -322,8 +308,8 @@ let hits = sky.index("products").hybrid(&hybrid).await?;`,
     description: "Keep only the hits whose attributes pass a filter.",
     examples: {
       typescript: `const hits = await sky.index("products").query({
-  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
-  topK: 5,
+  vector: [0.1, 0.2, 0.3],
+  limit: 5,
   filter: { and: [{ price: { gte: 20 } }, { price: { lt: 50 } }] },
 });`,
       python: `hits = sky.index("products").query(
@@ -371,8 +357,8 @@ let hits = sky.index("products").query(&query).await?;`,
     title: "Fork an index branch",
     description: "Fork a branch to change it in isolation. Nothing is copied.",
     examples: {
-      typescript: `const trial = await sky.index("products").fork("agents/try");
-await trial.deleteBy({ price: { gt: 100 } });`,
+      typescript: `const trial = await sky.index("products").fork("try");
+await trial.delete({ filter: { price: { gt: 100 } } });`,
       python: `trial = sky.index("products").fork("agents/try")
 trial.delete_by({"price": {"gt": 100}})`,
       go: `trial, err := sky.Index("products").Fork(ctx, "agents/try")
@@ -397,9 +383,9 @@ await trial.DeleteByAsync(new { price = new { gt = 100 } });`,
     title: "Merge an index branch",
     description: "Bring a branch's writes back into the branch it forked from.",
     examples: {
-      typescript: `const products = sky.index("products");
-const added = await products.merge("agents/try");
-await products.at("agents/try").deleteBranch();`,
+      typescript: `const trial = sky.index("products", { branch: "try" });
+const { rows } = await trial.mergeInto("main");
+await trial.destroy();`,
       python: `products = sky.index("products")
 added = products.merge("agents/try")
 products.at("agents/try").delete_branch()`,
@@ -428,9 +414,8 @@ await products.At("agents/try").DeleteBranchAsync();`,
     title: "Fork a filesystem branch",
     description: "Fork a branch of a namespace. No data is copied.",
     examples: {
-      typescript: `const main = sky.namespace("acme").branch("main");
-const fork = await main.fork("agents/42");
-console.log(fork.name);`,
+      typescript: `const work = await sky.disk("acme").fork("agent-42");
+console.log(work.branch);`,
       python: `main = sky.namespace("acme").branch("main")
 fork = main.fork("agents/42")
 print(fork.name)`,
@@ -441,9 +426,9 @@ print(fork.name)`,
     title: "Commit files",
     description: "Write, change or remove files on a branch as one commit.",
     examples: {
-      typescript: `const branch = sky.namespace("acme").branch("agents/42");
-const head = await branch.write({ "notes.md": "hello", "todo.md": "ship docs" }, "add notes");
-await branch.commit("drop the todo", [{ path: "todo.md", delete: true }]);`,
+      typescript: `const work = sky.disk("acme", { branch: "agent-42" });
+const { commit } = await work.write({ "notes.md": "hello", "todo.md": "ship docs" }, { message: "add notes" });
+await work.delete("todo.md", { message: "drop the todo" });`,
       python: `branch = sky.namespace("acme").branch("agents/42")
 head = branch.write({"notes.md": "hello", "todo.md": "ship docs"}, "add notes")
 branch.commit("drop the todo", [{"path": "todo.md", "delete": True}])`,
@@ -454,9 +439,9 @@ branch.commit("drop the todo", [{"path": "todo.md", "delete": True}])`,
     title: "Read a file",
     description: "Read a file from a branch, whole or a range of its bytes.",
     examples: {
-      typescript: `const branch = sky.namespace("acme").branch("agents/42");
-const text = await branch.readText("notes.md");
-const bytes = await branch.read("notes.md", { offset: 0, length: 5 });`,
+      typescript: `const work = sky.disk("acme", { branch: "agent-42" });
+const text = await work.read("notes.md");
+const bytes = await work.read("notes.md", { as: "bytes", offset: 0, length: 5 });`,
       python: `branch = sky.namespace("acme").branch("agents/42")
 text = branch.read_text("notes.md")
 data = branch.read("notes.md", offset=0, length=5)`,

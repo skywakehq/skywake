@@ -20,7 +20,14 @@ type Namespace = {
 };
 type Branch = { name: string; forked_from: string | null; created: string };
 type Committed = { head: string; changed: boolean };
-type Entry = { name: string; kind: "file" | "folder" | "symlink"; size: number; modified: number };
+type Entry = {
+  name: string;
+  kind: "file" | "folder" | "symlink";
+  size: number;
+  modified: number;
+  executable: boolean;
+  target?: string;
+};
 type Link = { index: string; embed: { model: string } | null };
 type Hit = {
   id: string | number;
@@ -216,7 +223,7 @@ export function registerDisks(api: V2) {
           { glob: "**", path, at, limit: 100_000 },
         ),
       );
-      const entries = found.map((f) => ({ ...f, modified: null }));
+      const entries = found.map((f) => ({ ...f, modified: null, executable: false }));
       return c.json(
         pageOf(entries, (e) => e.path, { limit: size, cursor }),
         200,
@@ -238,6 +245,8 @@ export function registerDisks(api: V2) {
           kind: e.kind,
           size: e.size,
           modified: isoOf(e.modified),
+          executable: e.executable,
+          ...(e.target === undefined ? {} : { target: e.target }),
         })),
         next: page.next,
       },
@@ -450,6 +459,13 @@ export function registerDisks(api: V2) {
       }),
     );
     return c.json(branchOf(await disk.scope.v1.get<Branch>(disk.branch(name))), 201);
+  });
+
+  api.openapi(routes.getDiskBranch, async (c) => {
+    const { disk: name, branch } = c.req.valid("param");
+    const disk = await open(c, name);
+    const info = await disk.run(disk.scope.v1.get<Branch & { head: string }>(disk.branch(branch)));
+    return c.json({ ...branchOf(info), head: info.head || null }, 200);
   });
 
   api.openapi(routes.destroyDiskBranch, async (c) => {
