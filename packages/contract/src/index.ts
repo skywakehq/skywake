@@ -16,6 +16,7 @@ import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
 
 export * from "./http.ts";
+export * from "./names.ts";
 export * from "./schemas.ts";
 export {
   audit,
@@ -53,7 +54,7 @@ export const routes = {
     billing.setPlan,
   ],
   sso: [sso.getSsoPolicy, sso.setSsoPolicy, sso.ssoDomainOrgs],
-  keys: [keys.listKeys, keys.createKey, keys.deleteKey, keys.revokeMemberKeys],
+  keys: [keys.whoami, keys.listKeys, keys.createKey, keys.deleteKey, keys.revokeMemberKeys],
   audit: [audit.auditLog, audit.recordAuditEvents],
   environments: [
     environments.listRegions,

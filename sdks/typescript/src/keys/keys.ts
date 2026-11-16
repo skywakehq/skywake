@@ -4,7 +4,8 @@ import { unwrap } from "../core/errors.js";
 export type Role = Schemas["Role"];
 
 export interface NewKeyOptions {
-  /** A namespace name, `<folder>/*` for every namespace under a folder, or `*` for all, the default. */
+  environment?: string | null;
+  only?: string[];
   namespaces?: string;
   /** Whole days, 1 to 3650. Without it, it expires when the key that makes it does, or never. */
   expiresInDays?: number;
@@ -26,6 +27,8 @@ export class Keys {
     const body = {
       name,
       role,
+      environment: options.environment,
+      only: options.only,
       namespaces: options.namespaces,
       expires_in_days: options.expiresInDays,
     };

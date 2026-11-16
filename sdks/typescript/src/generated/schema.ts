@@ -231,6 +231,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/whoami": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Who is calling: the organization, environment and role the key or person has. */
+        get: operations["whoami"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/keys": {
         parameters: {
             query?: never;
@@ -436,6 +453,40 @@ export interface paths {
         post?: never;
         /** Stops indexing the files. The index and what it holds stay. */
         delete: operations["unlinkIndex"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/index-links/defaults": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What a new link does when not told: the model it embeds with. */
+        get: operations["getLinkDefaults"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/indexes/{index}/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The namespace whose files keep this index up to date, if one does. */
+        get: operations["getLinkOfIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1489,11 +1540,34 @@ export interface components {
             /** @description The organizations whose people at this domain must use single sign-on. */
             orgs: string[];
         };
+        Whoami: {
+            organization: string;
+            /** @description The environment requests work in: the key's own, or the `Skywake-Environment` header for a key or person that may use every environment. Null when neither says. */
+            environment: string | null;
+            role: components["schemas"]["Role"];
+            only: string[];
+            /** @description The key's id, when a key is used. */
+            key: string | null;
+            /** @description The person, when the console calls. */
+            user: string | null;
+            email: string | null;
+            /** Format: date-time */
+            expires: string | null;
+        };
+        /**
+         * @description What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge and start sessions. `admin`: also keys, namespaces, protected branches and the audit log.
+         * @enum {string}
+         */
+        Role: "read" | "write" | "admin";
         Key: {
             id: string;
             name: string;
             role: components["schemas"]["Role"];
-            /** @description A namespace name, `<folder>/*` for every namespace under it, or `*`. */
+            /** @description The environment the key works in. Null for a key that works in every one. */
+            environment: string | null;
+            /** @description Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, or `*` for all. */
+            only: string[];
+            /** @description Deprecated: the same reach as one pattern of full names. Use `environment` and `only`. */
             namespaces: string;
             /** Format: date-time */
             expires: string | null;
@@ -1506,11 +1580,6 @@ export interface components {
             /** @description The email of the person who made it, when a person did. */
             created_by_email: string | null;
         };
-        /**
-         * @description What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge and start sessions. `admin`: also keys, namespaces, protected branches and the audit log.
-         * @enum {string}
-         */
-        Role: "read" | "write" | "admin";
         CreatedKey: {
             id: string;
             /** @description The key. It is shown only this once. */
@@ -1520,9 +1589,13 @@ export interface components {
             name: string;
             role: components["schemas"]["Role"];
             /**
-             * @description A namespace name, `<folder>/*` for every namespace under a folder, or `*` for all of them, the default.
-             * @default *
+             * @description The environment it works in. A key made by a key of one environment gets that one. Null makes a key for every environment, which only an organization admin may make.
+             * @example prod
              */
+            environment?: string | null;
+            /** @description Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, or `*` for all, the default. */
+            only?: string[];
+            /** @description Deprecated: one pattern of full names, such as `prod/*`. Use `environment` and `only`. */
             namespaces?: string;
             /** @description Whole days, 1 to 3650. Without it, the key does not expire. A key never outlives the key that makes it: it expires then at the latest. */
             expires_in_days?: number;
@@ -1689,10 +1762,20 @@ export interface components {
             include: string[];
             exclude: string[];
             maxBytes: number;
+            embed: components["schemas"]["LinkEmbed"];
+            /** @description Whether the link made its index. */
+            made: boolean;
             /** Format: date-time */
             created: string;
             branches: components["schemas"]["LinkedBranch"][];
         };
+        /** @description How files are embedded; null for words only. */
+        LinkEmbed: {
+            model: string;
+            dims: number;
+            /** @description Whether image files are embedded too. */
+            images: boolean;
+        } | null;
         LinkedBranch: {
             branch: string;
             /** @description The commit the index matches. */
@@ -1703,6 +1786,17 @@ export interface components {
             syncedAt: string | null;
             /** @description Why the last try failed, if it did. */
             error: string | null;
+            /** @description Files indexed, once synced. */
+            files: number | null;
+            /** @description Rows those files became: one per chunk embedded. */
+            chunks: number | null;
+            /** @description Files left out of the last syncs and why; the first 50. */
+            skipped: components["schemas"]["SkippedFile"][];
+        };
+        SkippedFile: {
+            path: string;
+            /** @example larger than 1024 KiB */
+            reason: string;
         };
         NewIndexLink: {
             /**
@@ -1721,15 +1815,22 @@ export interface components {
              */
             exclude?: string[];
             /**
-             * @description Larger files are left out. 1 MiB when not given.
-             * @default 1048576
+             * @description Larger files are left out, at most 64 MiB. 16 MiB when not given. All of a file's text is searchable, and documents are measured by the text taken from them.
+             * @default 16777216
              */
             maxBytes?: number;
-            /** @description Also embed each file (its first 8,000 characters) for vector search, when the index is made. Billed as embeddings. */
+            /** @description Search by meaning: each file is split into overlapping chunks and every chunk is embedded; images are embedded too when the model takes them. On by default with the server's model; `false` keeps the index to words. Turning it on for an index the link made rebuilds it. Billed as embeddings. */
             embed?: {
+                model?: string;
+                dims?: number;
+            } | false;
+        };
+        LinkDefaults: {
+            /** @description The model a new link embeds with; null when none is set up. */
+            embed: {
                 model: string;
-                dims: number;
-            };
+                images: boolean;
+            } | null;
         };
         BranchIndex: components["schemas"]["LinkedBranch"] & {
             /** @description The branch's head now. */
@@ -3983,6 +4084,53 @@ export interface operations {
             };
         };
     };
+    whoami: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Whoami"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     listKeys: {
         parameters: {
             query?: never;
@@ -5115,6 +5263,103 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description The caller may not do this. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description It does not exist, or the caller cannot see it. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getLinkDefaults: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The defaults. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkDefaults"];
+                };
+            };
+            /** @description A valid API key or token is needed. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description Too many requests. Wait for `Retry-After` seconds. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    getLinkOfIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description An index of your organization, such as `prod/products`. Encode `/` as `%2F`. */
+                index: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The link. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexLink"];
+                };
             };
             /** @description A valid API key or token is needed. */
             401: {

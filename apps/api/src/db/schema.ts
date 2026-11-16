@@ -78,6 +78,11 @@ export const keys = api.table(
     name: text("name").notNull(),
     role: text("role").notNull(),
     namespaces: text("namespaces").notNull(),
+    environment: text("environment"),
+    only: text("only")
+      .array()
+      .notNull()
+      .default(sql`'{*}'::text[]`),
     expires: time("expires"),
     lastUsed: time("last_used"),
     created: time("created").notNull().defaultNow(),

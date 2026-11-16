@@ -225,6 +225,13 @@
       "when": 1794777916725,
       "tag": "0031_link_chunks",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794856238344,
+      "tag": "0032_key_environments",
+      "breakpoints": true
     }
   ]
 }

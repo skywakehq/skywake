@@ -1,3 +1,4 @@
+import { patternOfScope } from "@skywake/contract";
 import { eq } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
@@ -12,7 +13,9 @@ export async function create(db: Db, id: string, name: string, firstKey?: NewKey
       .onConflictDoNothing()
       .returning({ id: orgs.id });
     if (added.length === 0) return false;
-    if (firstKey) await tx.insert(keys).values({ ...firstKey, org: id });
+    if (firstKey) {
+      await tx.insert(keys).values({ ...firstKey, org: id, namespaces: patternOfScope(firstKey) });
+    }
     return true;
   });
 }

@@ -2,30 +2,51 @@ import httpx
 
 from ._encode import compact
 from ._http import check, send_with_retries
+from ._settings import resolve_settings
 from .namespace import Namespace
 from .search_index import Indexes, SearchIndex
 
 
 class Skywake:
-    def __init__(self, url, key, timeout=60.0, retries=3, backoff=0.2, transport=None):
-        """`key` is an API key (`sw_...`) or a console token. `timeout` is
-        in seconds: how long one try may wait to connect, and then for each
-        piece of the answer. A large file that keeps arriving is never cut
-        off. Failed requests are tried up to `retries` more times when that
-        is safe, waiting about `backoff` seconds, doubled each time, or as
-        long as the server asks (at most 60 seconds)."""
-        # Every route lives under /v1.
-        url = url.rstrip("/").removesuffix("/v1")
+    def __init__(
+        self,
+        url=None,
+        key=None,
+        timeout=60.0,
+        retries=3,
+        backoff=0.2,
+        transport=None,
+        environment=None,
+        profile=None,
+    ):
+        """With no arguments, the key comes from SKYWAKE_API_KEY or the
+        profile `skywake login` saved, and the URL defaults to the cloud.
+        `timeout` is in seconds per try; failed requests are retried up to
+        `retries` times when that is safe."""
+        settings = resolve_settings(key=key, url=url, environment=environment, profile=profile)
+        self.url = settings["url"].rstrip("/").removesuffix("/v1")
+        self.environment = settings["environment"]
         self.retries = retries
         self.backoff = backoff
+        headers = {"Authorization": f"Bearer {settings['key']}"}
+        if self.environment:
+            headers["Skywake-Environment"] = self.environment
         self.http = httpx.Client(
-            base_url=f"{url}/v1",
-            headers={"Authorization": f"Bearer {key}"},
+            base_url=f"{self.url}/v1",
+            headers=headers,
             timeout=timeout,
             transport=transport,
         )
-        # Make, list, read and delete search indexes.
         self.indexes = Indexes(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def whoami(self):
+        return self.call("GET", "/whoami").json()
 
     def send(self, method, path, json=None, **kwargs):
         """Sends a request and returns the response, even an error. Fields

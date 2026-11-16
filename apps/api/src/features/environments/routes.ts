@@ -5,7 +5,7 @@ import { forgetStoreKeys } from "@skywake/engine";
 
 import type { StoreAccess } from "../../db/schema.ts";
 import { note } from "../../audit/note.ts";
-import { allow, mayUse } from "../../auth/roles.ts";
+import { allowEnvironment, mayUseEnvironment } from "../../auth/roles.ts";
 import type { Feature } from "../../http/context.ts";
 import { HttpError, badRequest, conflict, messageOf, notFound } from "../../http/errors.ts";
 import { signedIn } from "../../http/request.ts";
@@ -29,7 +29,7 @@ export const environmentsFeature: Feature = {
       const caller = await signedIn(c);
       const all = await environments.list(c.var.services.db, caller.org);
       return c.json(
-        all.filter((env) => mayUse(caller, `${env.name}/`)),
+        all.filter((env) => mayUseEnvironment(caller, env.name)),
         200,
       );
     });
@@ -37,7 +37,7 @@ export const environmentsFeature: Feature = {
     api.openapi(routes.createEnvironment, async (c) => {
       const caller = await signedIn(c);
       const { name } = c.req.valid("json");
-      allow(caller, "admin", `${name}/`);
+      allowEnvironment(caller, "admin", name);
       const { db } = c.var.services;
       if (!(await environments.ensure(db, caller.org, name))) {
         throw conflict(`environment \`${name}\` exists`);
@@ -52,7 +52,7 @@ export const environmentsFeature: Feature = {
     api.openapi(routes.getStoreTrust, async (c) => {
       const caller = await signedIn(c);
       const { environment } = c.req.valid("param");
-      allow(caller, "admin", `${environment}/`);
+      allowEnvironment(caller, "admin", environment);
       const principal = c.var.services.config.byobPrincipal ?? null;
       return c.json({ principal, externalId: externalIdOf(caller.org) }, 200);
     });
@@ -60,7 +60,7 @@ export const environmentsFeature: Feature = {
     api.openapi(routes.setEnvironmentStore, async (c) => {
       const caller = await signedIn(c);
       const { environment } = c.req.valid("param");
-      allow(caller, "admin", `${environment}/`);
+      allowEnvironment(caller, "admin", environment);
       const { store, access: asked } = c.req.valid("json");
       const { db, config, stores, buckets } = c.var.services;
       const found = (await environments.list(db, caller.org)).find(
@@ -119,7 +119,7 @@ export const environmentsFeature: Feature = {
     api.openapi(routes.removeEnvironmentStore, async (c) => {
       const caller = await signedIn(c);
       const { environment } = c.req.valid("param");
-      allow(caller, "admin", `${environment}/`);
+      allowEnvironment(caller, "admin", environment);
       const { db, stores, buckets } = c.var.services;
       const found = (await environments.list(db, caller.org)).find(
         (env) => env.name === environment,

@@ -3,37 +3,42 @@ import createClient from "openapi-fetch";
 import type { Client, Schemas } from "./core/api.js";
 import { unwrap } from "./core/errors.js";
 import { retryingFetch, type RetryOptions } from "./core/retry.js";
+import { resolveSettings, type Asked } from "./core/settings.js";
 import { Namespace } from "./filesystem/namespace.js";
 import type { paths } from "./generated/schema.js";
 import { Indexes } from "./indexes/indexes.js";
 import { SearchIndex } from "./indexes/search-index.js";
 import { Keys } from "./keys/keys.js";
 
-export interface Options extends RetryOptions {
-  /** Where the API listens, such as `https://api.skywake.dev`. */
-  url: string;
-  /** An API key (`sw_...`) or a console token. */
-  key: string;
-  /** Sends requests. `globalThis.fetch` by default. */
+export interface Options extends RetryOptions, Asked {
   fetch?: typeof fetch;
 }
 
 export class Skywake {
   readonly client: Client;
-  /** Make, list, read and delete search indexes. */
   readonly indexes: Indexes;
-  /** Make, list and revoke the organization's API keys. */
   readonly keys: Keys;
+  readonly url: string;
+  readonly environment: string | undefined;
 
-  constructor(options: Options) {
+  constructor(options: Options = {}) {
+    const { key, url, environment } = resolveSettings(options);
+    this.url = url.replace(/\/+$/, "").replace(/\/v1$/, "");
+    this.environment = environment;
     this.client = createClient<paths>({
-      // Every route lives under /v1.
-      baseUrl: `${options.url.replace(/\/+$/, "").replace(/\/v1$/, "")}/v1`,
-      headers: { Authorization: `Bearer ${options.key}` },
+      baseUrl: `${this.url}/v1`,
+      headers: {
+        Authorization: `Bearer ${key}`,
+        ...(environment ? { "Skywake-Environment": environment } : {}),
+      },
       fetch: retryingFetch(options, options.fetch),
     });
     this.indexes = new Indexes(this.client);
     this.keys = new Keys(this.client);
+  }
+
+  async whoami(): Promise<Schemas["Whoami"]> {
+    return unwrap(await this.client.GET("/whoami"));
   }
 
   /** A search index, on its `main` branch. */

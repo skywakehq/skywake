@@ -25,18 +25,8 @@ const BATCH_MAX: usize = 1000;
 
 #[derive(Args)]
 pub(crate) struct IndexArgs {
-    /// The API.
-    #[arg(
-        long,
-        env = "SKYWAKE_URL",
-        default_value = "http://localhost:8080",
-        global = true
-    )]
-    url: String,
-
-    /// An API key (`sw_...`), made in the console.
-    #[arg(long, env = "SKYWAKE_KEY", hide_env_values = true, global = true)]
-    key: Option<String>,
+    #[command(flatten)]
+    account: crate::account::Account,
 
     /// Print the API's JSON instead of a table, for scripts.
     #[arg(long, global = true)]
@@ -181,7 +171,7 @@ enum IndexCommand {
 }
 
 pub(crate) async fn run(args: IndexArgs) -> Result<()> {
-    let api = Api::new(&args.url, args.key.filter(|key| !key.is_empty()))?;
+    let api = args.account.api()?;
     let json = args.json;
     let show = |value: &Value| {
         println!(

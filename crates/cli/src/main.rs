@@ -1,7 +1,9 @@
 //! The `skywake` command line.
 
+mod account;
 mod api;
 mod branch;
+mod credentials;
 mod docs_spec;
 mod index;
 mod mount;
@@ -164,8 +166,19 @@ enum Command {
         message: String,
     },
     /// Search indexes: make them, write and query documents, fork branches.
-    /// Talks to the API at SKYWAKE_URL with the key in SKYWAKE_KEY.
     Index(index::IndexArgs),
+    /// Save an API key for this machine, checked against the API.
+    Login(account::Account),
+    /// Forget a saved key.
+    Logout(account::Account),
+    /// Show the organization, environment and role the key has.
+    Whoami {
+        #[command(flatten)]
+        account: account::Account,
+        /// Print the API's JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print the command tree as JSON, for the docs site.
     #[command(name = "__docs-spec", hide = true)]
     DocsSpec,
@@ -176,6 +189,9 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Index(args) => return index::run(args).await,
+        Command::Login(account) => return account::login(&account).await,
+        Command::Logout(account) => return account::logout(&account),
+        Command::Whoami { account, json } => return account::whoami(&account, json).await,
         Command::DocsSpec => {
             let spec = docs_spec::spec(Cli::command());
             println!("{}", serde_json::to_string_pretty(&spec)?);
@@ -204,7 +220,11 @@ async fn main() -> Result<()> {
         | Command::Unmount { .. }
         | Command::Mounts
         | Command::Status) => return mount::run(&cli.root, command).await,
-        Command::Index(_) | Command::DocsSpec => unreachable!("handled above"),
+        Command::Index(_)
+        | Command::Login(_)
+        | Command::Logout(_)
+        | Command::Whoami { .. }
+        | Command::DocsSpec => unreachable!("handled above"),
         command => command,
     };
     let via_daemon = cli.store.is_none() && socket_path(&cli.root).exists();

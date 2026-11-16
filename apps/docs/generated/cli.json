@@ -1461,16 +1461,14 @@
       "usage": "skywake recover [OPTIONS] <FOLDER> <BRANCH>"
     },
     {
-      "about": "Search indexes: make them, write and query documents, fork branches. Talks to the API at SKYWAKE_URL with the key in SKYWAKE_KEY",
+      "about": "Search indexes: make them, write and query documents, fork branches",
       "afterHelp": null,
       "args": [
         {
-          "default": [
-            "http://localhost:8080"
-          ],
+          "default": [],
           "env": "SKYWAKE_URL",
           "global": true,
-          "help": "The API",
+          "help": "Where the API is. Defaults to the profile's, then the cloud",
           "id": "url",
           "long": "url",
           "longHelp": null,
@@ -1485,9 +1483,9 @@
         },
         {
           "default": [],
-          "env": "SKYWAKE_KEY",
+          "env": "SKYWAKE_API_KEY",
           "global": true,
-          "help": "An API key (`sw_...`), made in the console",
+          "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
           "id": "key",
           "long": "key",
           "longHelp": null,
@@ -1497,6 +1495,40 @@
           "short": null,
           "valueNames": [
             "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_ENV",
+          "global": true,
+          "help": "The environment, for a key that may use every one",
+          "id": "environment",
+          "long": "env",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "ENVIRONMENT"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_PROFILE",
+          "global": true,
+          "help": "Which saved profile to use",
+          "id": "profile",
+          "long": "profile",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "PROFILE"
           ],
           "values": []
         },
@@ -1563,12 +1595,10 @@
           "afterHelp": null,
           "args": [
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -1583,9 +1613,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -1595,6 +1625,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -1749,12 +1813,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -1769,9 +1831,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -1781,6 +1843,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -1867,12 +1963,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -1887,9 +1981,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -1899,6 +1993,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2004,12 +2132,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2024,9 +2150,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2036,6 +2162,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2139,12 +2299,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2159,9 +2317,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2171,6 +2329,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2333,12 +2525,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2353,9 +2543,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2365,6 +2555,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2487,12 +2711,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2507,9 +2729,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2519,6 +2741,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2745,12 +3001,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2765,9 +3019,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2777,6 +3031,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -2899,12 +3187,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -2919,9 +3205,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -2931,6 +3217,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -3017,12 +3337,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -3037,9 +3355,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -3049,6 +3367,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -3152,12 +3504,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -3172,9 +3522,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -3184,6 +3534,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -3289,12 +3673,10 @@
               "values": []
             },
             {
-              "default": [
-                "http://localhost:8080"
-              ],
+              "default": [],
               "env": "SKYWAKE_URL",
               "global": true,
-              "help": "The API",
+              "help": "Where the API is. Defaults to the profile's, then the cloud",
               "id": "url",
               "long": "url",
               "longHelp": null,
@@ -3309,9 +3691,9 @@
             },
             {
               "default": [],
-              "env": "SKYWAKE_KEY",
+              "env": "SKYWAKE_API_KEY",
               "global": true,
-              "help": "An API key (`sw_...`), made in the console",
+              "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
               "id": "key",
               "long": "key",
               "longHelp": null,
@@ -3321,6 +3703,40 @@
               "short": null,
               "valueNames": [
                 "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
               ],
               "values": []
             },
@@ -3387,6 +3803,368 @@
         }
       ],
       "usage": "skywake index [OPTIONS] <COMMAND>"
+    },
+    {
+      "about": "Save an API key for this machine, checked against the API",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": true,
+          "help": "Where the API is. Defaults to the profile's, then the cloud",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_API_KEY",
+          "global": true,
+          "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_ENV",
+          "global": true,
+          "help": "The environment, for a key that may use every one",
+          "id": "environment",
+          "long": "env",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "ENVIRONMENT"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_PROFILE",
+          "global": true,
+          "help": "Which saved profile to use",
+          "id": "profile",
+          "long": "profile",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "PROFILE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "login",
+      "path": [
+        "login"
+      ],
+      "subcommands": [],
+      "usage": "skywake login [OPTIONS]"
+    },
+    {
+      "about": "Forget a saved key",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": true,
+          "help": "Where the API is. Defaults to the profile's, then the cloud",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_API_KEY",
+          "global": true,
+          "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_ENV",
+          "global": true,
+          "help": "The environment, for a key that may use every one",
+          "id": "environment",
+          "long": "env",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "ENVIRONMENT"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_PROFILE",
+          "global": true,
+          "help": "Which saved profile to use",
+          "id": "profile",
+          "long": "profile",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "PROFILE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "logout",
+      "path": [
+        "logout"
+      ],
+      "subcommands": [],
+      "usage": "skywake logout [OPTIONS]"
+    },
+    {
+      "about": "Show the organization, environment and role the key has",
+      "afterHelp": null,
+      "args": [
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": true,
+          "help": "Where the API is. Defaults to the profile's, then the cloud",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_API_KEY",
+          "global": true,
+          "help": "An API key (`sw_...`). Defaults to the one `skywake login` saved",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_ENV",
+          "global": true,
+          "help": "The environment, for a key that may use every one",
+          "id": "environment",
+          "long": "env",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "ENVIRONMENT"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_PROFILE",
+          "global": true,
+          "help": "Which saved profile to use",
+          "id": "profile",
+          "long": "profile",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "PROFILE"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Print the API's JSON",
+          "id": "json",
+          "long": "json",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "bucket"
+          ],
+          "env": "SKYWAKE_HEADS",
+          "global": true,
+          "help": "Where branch heads live: `bucket`, or `tier` when the cache nodes keep them. Every machine using a store must agree",
+          "id": "heads",
+          "long": "heads",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HEADS"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "whoami",
+      "path": [
+        "whoami"
+      ],
+      "subcommands": [],
+      "usage": "skywake whoami [OPTIONS]"
     }
   ],
   "usage": "skywake [OPTIONS] <COMMAND>"

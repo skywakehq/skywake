@@ -1,5 +1,3 @@
-//! A client for the HTTP API, with the key from SKYWAKE_KEY.
-
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -14,9 +12,16 @@ pub(crate) struct Api {
     http: reqwest::Client,
     url: String,
     key: Option<String>,
+    environment: Option<String>,
 }
 
 impl Api {
+    pub(crate) fn connect(settings: &crate::credentials::Settings) -> Result<Self> {
+        let mut api = Self::new(&settings.url, settings.key.clone())?;
+        api.environment = settings.environment.clone();
+        Ok(api)
+    }
+
     pub(crate) fn new(url: &str, key: Option<String>) -> Result<Self> {
         let http = reqwest::Client::builder()
             .user_agent(concat!("skywake-cli/", env!("CARGO_PKG_VERSION")))
@@ -27,7 +32,12 @@ impl Api {
             .trim_end_matches('/')
             .trim_end_matches("/v1")
             .to_string();
-        Ok(Self { http, url, key })
+        Ok(Self {
+            http,
+            url,
+            key,
+            environment: None,
+        })
     }
 
     pub(crate) async fn get(&self, path: &str) -> Result<Value> {
@@ -80,12 +90,15 @@ impl Api {
         again: bool,
     ) -> Result<reqwest::Response> {
         let key = self.key.as_deref().ok_or_else(|| {
-            anyhow!("no API key: set SKYWAKE_KEY, or pass --key (make one in the console under Settings → API keys)")
+            anyhow!("no API key: run `skywake login`, set SKYWAKE_API_KEY, or pass --key")
         })?;
         let url = format!("{}/v1{path}", self.url);
         let mut attempt = 0;
         loop {
             let mut request = self.http.request(method.clone(), &url).bearer_auth(key);
+            if let Some(environment) = &self.environment {
+                request = request.header("skywake-environment", environment);
+            }
             if let Some((kind, body)) = &body {
                 request = request
                     .header(reqwest::header::CONTENT_TYPE, *kind)
@@ -129,8 +142,8 @@ fn refused(status: StatusCode, text: &str) -> anyhow::Error {
     let body: Value = serde_json::from_str(text).unwrap_or(Value::Null);
     let message = body["error"].as_str().unwrap_or(text).trim();
     let hint = match status {
-        StatusCode::UNAUTHORIZED => "; check SKYWAKE_KEY",
-        StatusCode::FORBIDDEN => "; the key's role does not allow this",
+        StatusCode::UNAUTHORIZED => "; check the key: `skywake whoami`",
+        StatusCode::FORBIDDEN => "; see what the key may do: `skywake whoami`",
         _ => "",
     };
     anyhow!("{message} ({}){hint}", status.as_u16())
@@ -167,6 +180,9 @@ mod tests {
         );
         assert_eq!(error.to_string(), "filter.price.lt: must be a number (400)");
         let error = refused(StatusCode::UNAUTHORIZED, "nope");
-        assert_eq!(error.to_string(), "nope (401); check SKYWAKE_KEY");
+        assert_eq!(
+            error.to_string(),
+            "nope (401); check the key: `skywake whoami`"
+        );
     }
 }
