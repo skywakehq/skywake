@@ -11,8 +11,15 @@ type Guide = { code: Record<string, string>; setup?: string };
 const IMPORT = /^import\s[^;]*;\s*$/gm;
 
 function program({ code, setup = "" }: Guide) {
-  const parts = [setup, ...Object.entries(code).filter(([file]) => file.endsWith(".ts")).map(([, body]) => body)];
-  const imports = new Set(parts.flatMap((part) => part.match(IMPORT) ?? []).map((line) => line.trim()));
+  const parts = [
+    setup,
+    ...Object.entries(code)
+      .filter(([file]) => file.endsWith(".ts"))
+      .map(([, body]) => body),
+  ];
+  const imports = new Set(
+    parts.flatMap((part) => part.match(IMPORT) ?? []).map((line) => line.trim()),
+  );
   const bodies = parts.map((part) => part.replace(IMPORT, "").trim()).filter(Boolean);
   return [...imports, "", ...bodies, ""].join("\n");
 }

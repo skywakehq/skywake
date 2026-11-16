@@ -32,7 +32,9 @@ for (const page of files(content, (name) => name.endsWith(".mdx"))) {
     }
     open = ticks!;
     if (RUNNABLE.has(lang!) && !/\bnorun\b/.test(meta!)) {
-      problems.push(`${where}: \`${line.trim()}\` is inline; put it in examples/ and <include> it, or mark it norun`);
+      problems.push(
+        `${where}: \`${line.trim()}\` is inline; put it in examples/ and <include> it, or mark it norun`,
+      );
     }
   }
   for (const [, target] of text.matchAll(INCLUDE)) {

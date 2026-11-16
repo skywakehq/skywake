@@ -17,14 +17,16 @@ docs = sky.create_index(
     },
 )
 
-docs.upsert({
-    "id": "4f1c2a9e-8b3d-4e5f-9a1b-2c3d4e5f6a7b",
-    "embedding": [0.1, 0.2, 0.3],
-    "tenant": "acme",
-    "stars": 4,
-    "published": "2026-11-09T10:00:00Z",
-    "labels": ["guide"],
-    "body": "How to reset a password",
-})
+docs.upsert(
+    {
+        "id": "4f1c2a9e-8b3d-4e5f-9a1b-2c3d4e5f6a7b",
+        "embedding": [0.1, 0.2, 0.3],
+        "tenant": "acme",
+        "stars": 4,
+        "published": "2026-11-09T10:00:00Z",
+        "labels": ["guide"],
+        "body": "How to reset a password",
+    }
+)
 
 print(docs.get("4f1c2a9e-8b3d-4e5f-9a1b-2c3d4e5f6a7b"))

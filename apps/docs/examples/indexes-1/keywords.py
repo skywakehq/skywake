@@ -13,11 +13,13 @@ articles = sky.create_index(
     embed=False,
 )
 
-articles.upsert([
-    {"id": 1, "title": "Reset your password", "body": "Open Settings and choose a new password."},
-    {"id": 2, "title": "Change your email", "body": "Your password is needed to change your email."},
-    {"id": 3, "title": "Delete your account", "body": "Deleting an account can't be undone."},
-])
+articles.upsert(
+    [
+        {"id": 1, "title": "Reset your password", "body": "Open Settings and choose a new password."},
+        {"id": 2, "title": "Change your email", "body": "Your password is needed to change your email."},
+        {"id": 3, "title": "Delete your account", "body": "Deleting an account can't be undone."},
+    ]
+)
 
 hits = articles.query("resetting passwords", mode="keywords", fields=["title"])
 print(hits)
