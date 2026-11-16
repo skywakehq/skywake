@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-benchmarks"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2955,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-cache"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2983,7 +2983,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-cli"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -3005,7 +3005,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-client"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "axum",
  "fastrand",
@@ -3022,7 +3022,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "bao",
@@ -3050,7 +3050,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-daemon"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-index"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3099,7 +3099,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-mount"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "async-trait",
  "blake3",
@@ -3124,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "skywake-node"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "blake3",
  "futures",

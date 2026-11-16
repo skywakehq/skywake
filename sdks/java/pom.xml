@@ -6,7 +6,7 @@
 
   <groupId>dev.skywake</groupId>
   <artifactId>skywake</artifactId>
-  <version>0.1.2</version>
+  <version>0.1.3</version>
   <name>Skywake</name>
   <description>Skywake for Java: vector, full-text and hybrid search over indexes on your own S3 bucket, with branches.</description>
   <url>https://skywake.dev</url>
