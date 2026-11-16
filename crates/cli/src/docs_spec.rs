@@ -1,17 +1,11 @@
-//! `skywake __docs-spec`: the command tree as JSON. The docs site renders its
-//! CLI reference from it, so the pages say what `--help` says.
-
 use clap::{Arg, ArgAction, Command};
 use serde_json::{Value, json};
 
 pub(crate) fn spec(mut command: Command) -> Value {
-    // Building adds the help and version flags and copies global flags down,
-    // as `--help` shows them.
     command.build();
     describe(&mut command, Vec::new())
 }
 
-/// `path` is the subcommand names after `skywake`, empty for the root.
 fn describe(command: &mut Command, path: Vec<String>) -> Value {
     let args: Vec<Value> = command
         .get_arguments()
@@ -77,8 +71,6 @@ mod tests {
 
     use super::spec;
 
-    /// The docs site reads this file. Rewrite it with
-    /// `UPDATE_DOCS_SPEC=1 cargo test -p skywake-cli docs_spec`.
     #[test]
     fn docs_spec_is_current() {
         let path = concat!(

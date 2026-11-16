@@ -27,7 +27,7 @@ def run(ctx):
         suite.note(f"{name}: {size / 1e6:,.0f} MB in {files:,} files")
         suite.setting(name, {"bytes": size, "files": files})
         branch = f"{ctx.run}-{name}"
-        ctx.skywake("new", branch, root=no_daemon)
+        ctx.skywake("create", "disk", f"@{branch}", root=no_daemon)
 
         def op(label, *command, rate=True):
             with ctx.requests() as requests:
@@ -35,18 +35,18 @@ def run(ctx):
             metrics = {"ms": seconds * 1000, "MB/s": size / seconds / 1e6 if rate else None}
             return suite.row(f"{name}: {label}", {**metrics, **requests.summary()})
 
-        rates[name] = op("commit", "commit", branch, data, "-m", "base")
-        unchanged = op("commit, nothing changed", "commit", branch, data, "-m", "same", rate=False)
+        rates[name] = op("commit", "upload", data, f"@{branch}", "-m", "base")
+        unchanged = op("commit, nothing changed", "upload", data, f"@{branch}", "-m", "same", rate=False)
         suite.check(f"{name}: a commit with nothing changed takes under 1 s", unchanged["ms"] < 1000)
         edited = edit(data, every=100)
-        op(f"commit, {edited:,} small files changed", "commit", branch, data, "-m", "edit", rate=False)
-        op("checkout", "checkout", branch, ctx.scratch / f"{name}-checkout")
+        op(f"commit, {edited:,} small files changed", "upload", data, f"@{branch}", "-m", "edit", rate=False)
+        op("checkout", "download", f"@{branch}", ctx.scratch / f"{name}-checkout")
 
         forks = ctx.size(100, 20)
         suite.setting("forks", forks)
         with ctx.requests() as requests:
             times = [
-                timed(lambda i=i: ctx.skywake("new", f"{branch}-fork-{i}", "--from", branch, root=no_daemon))
+                timed(lambda i=i: ctx.skywake("fork", f"@{branch}", f"{branch}-fork-{i}", root=no_daemon))
                 for i in range(forks)
             ]
         per_fork = {key: value / forks for key, value in requests.summary().items()}

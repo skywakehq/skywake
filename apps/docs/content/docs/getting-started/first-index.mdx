@@ -1,84 +1,55 @@
 ---
 title: Your first index
 icon: Search
-description: Make a search index, write documents, query it, and fork it.
+description: Write rows to a search index, query it, and fork it.
 ---
 
-This page makes a small search index, writes documents to it, queries it, and then forks it so you can write without touching `main`.
+This page writes a few products to a new index, queries them, and then forks the index so you can write without touching `main`.
 
-```bash
-export SKYWAKE_URL=http://localhost:8080 SKYWAKE_KEY=sw_...
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/getting-started/first-index.ts
+</include>
 
-skywake index create prod/products --vector embedding:3 --attr tag:string --attr price:number
-skywake index upsert prod/products products.jsonl
-skywake index query prod/products --vector-file q.json -k 5 -f "tag = billing and price < 10" -i '*'
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/getting-started/first-index.py
+</include>
+
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/getting-started/first-index.sh
+</include>
+
+The CLI tab reads the same three rows from `products.jsonl`, one JSON object per line:
+
+```json
+{ "id": 1, "text": "red running shoes", "category": "shoes", "price": 89 }
 ```
-
-Indexes are served by the API, so you need an API key. Make one in the console under Settings → API keys, or see [API keys](../security/api-keys.mdx). If you want to run the API yourself, see [Docker Compose](../self-hosting/docker-compose.mdx).
-
-## Create
-
-`prod/products` is the index's name. The part before `/` is its environment, `prod`, so any key for `prod/*` can use the index. You need an `admin` key to create it. See [names and environments](../indexes/index.mdx#names-and-environments).
-
-Each `--vector` is `NAME:DIMS` or `NAME:DIMS:METRIC`, where the metric is `cosine` (the default), `euclidean` or `dot`. Each `--attr` is `NAME:TYPE`, where the type is `string`, `number`, `bool` or `strings`. Choose the [vector columns](../indexes/schemas.mdx#vector-columns) carefully, because you can't change them later.
 
 ## Write
 
-Each line of `products.jsonl` is one document: its `id`, then each column by name. Real embeddings have hundreds of numbers. This example uses three to stay short.
+There is no create step. The first `upsert` makes the index `products` and works out its schema from the rows: `text` and `category` become text fields, which are searchable by keywords and filterable, and `price` becomes a number. Text fields are embedded for you, so you can search by meaning without bringing vectors. A field you add on a later upsert is added to the schema.
 
-```json
-{ "id": 1, "embedding": [0.1, 0.2, 0.3], "tag": "billing", "price": 4 }
-```
-
-CSV and Parquet files work too. The format is chosen by the file's extension. If you don't give a file, [`upsert`](/reference/cli/index/upsert) reads stdin. Each document [replaces any earlier one](../indexes/write.mdx) with the same id, so you can safely run the same upsert again.
+Each row replaces any earlier one with the same id, so you can safely run the same upsert again. In the CLI, [`upsert`](/reference/cli/upsert) reads JSON lines, CSV or Parquet, chosen by the file's extension, or stdin with `-`. To choose the schema up front, see [create an index](../indexes/create.mdx).
 
 ## Query
 
-[`query`](/reference/cli/index/query) takes the vector inline as `--vector '[0.1, 0.2, 0.3]'`, or from a file with `--vector-file`. The other flags in the example:
+`query("shoes for running")` searches by meaning and keywords together and merges the results. Each hit is the row's fields plus its `id` and `score`. The other options:
 
-- `-f` sets a [filter](../indexes/filters.mdx#in-the-cli).
-- `-k` sets how many hits you get back (10 by default).
-- `-i` picks which attributes to show (`*` for all).
+- `filter` keeps only matching rows: `{ price: { lt: 100 } }` in the SDKs, `--filter "price < 100"` in the CLI. See [filters](../indexes/filters.mdx).
+- `limit` sets how many hits you get back (10 by default).
+- `mode` is `"auto"` (the default), `"meaning"` or `"keywords"`.
+- `sort` orders by a field instead of by score.
 
-Add `--json` to any command to print the API's JSON response.
+Add `--json` to any CLI command to print JSON.
 
 ## Fork
 
-```bash
-skywake index fork prod/products agents/try-1
-skywake index upsert prod/products changes.jsonl -b agents/try-1
-skywake index query prod/products --vector-file q.json -b agents/try-1
-```
-
-The fork copies no data. Writes to `agents/try-1` stay on the fork, and `main` never sees them. See [time travel and branches](../indexes/time-travel.mdx).
-
-## From Python
-
-Here is how to create, write and query the same index with the Python SDK:
-
-```py
-from skywake import Skywake
-
-sky = Skywake("http://localhost:8080", "sw_...")
-products = sky.indexes.create(
-    "prod/products",
-    vectors=[{"name": "embedding", "dims": 3}],
-    attributes=[{"name": "tag", "type": "string"}, {"name": "price", "type": "number"}],
-)
-products.upsert([
-    {"id": 1, "vectors": {"embedding": [0.1, 0.2, 0.3]}, "attributes": {"tag": "billing", "price": 4}},
-])
-hits = products.query(
-    "embedding", [0.1, 0.2, 0.3], top_k=5,
-    filter={"and": [{"tag": {"eq": "billing"}}, {"price": {"lt": 10}}]},
-)
-```
+`fork("draft")` makes a branch of the index and copies no data. Writes to `draft` stay on the fork, and `main` never sees them until `mergeInto("main")`, or `skywake merge products@draft`. Query a branch through its handle, or as `products@draft` in the CLI. See [time travel and branches](../indexes/time-travel.mdx).
 
 ## Next
 
 <Cards>
   <Card href="../indexes/index.mdx" />
   <Card href="../indexes/create.mdx" />
-  <Card href="/reference/cli/index" />
+  <Card href="/reference/cli/query" />
   <Card href="/reference/sdk" />
 </Cards>

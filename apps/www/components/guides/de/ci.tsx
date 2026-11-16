@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/ci";
 
 export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; title: string }) {
   return (
@@ -80,8 +81,8 @@ export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
         </div>
         <p>
           Sie brauchen einen Skywake-API-Key und Node in Ihrer CI. Setzen Sie{" "}
-          <code>SKYWAKE_URL</code> und <code>SKYWAKE_KEY</code> als CI-Secrets und installieren Sie
-          dann das SDK mit <code>npm i @skywake/sdk</code>.
+          <code>SKYWAKE_API_KEY</code> als CI-Secret und installieren Sie dann das SDK mit{" "}
+          <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Jede Nacht einen warmen Workspace speichern" />
@@ -104,41 +105,17 @@ export function CiGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           ]}
         />
         <p>
-          Zuerst eine einmalige Einrichtung. Wir legen einen <b>Namespace</b> an, also ein
-          Repository für Dateien, und darin einen Branch namens <code>warm</code>. Ein Branch
-          funktioniert wie ein Git-Branch für Dateien: Jedes Speichern ist ein Commit, und ältere
-          Commits bleiben erhalten.
+          Zuerst eine einmalige Einrichtung. Wir legen eine <b>Disk</b> an, also einen Satz Dateien
+          mit Branches und Historie, und forken ihren Branch <code>main</code> in einen Branch
+          namens <code>warm</code>. Ein Branch funktioniert wie ein Git-Branch für Dateien: Jedes
+          Speichern ist ein Commit, und ältere Commits bleiben erhalten.
         </p>
-        <Code
-          file="setup.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const ci = await sky.createNamespace("ci/web-app");
-await ci.createBranch("warm");
-`}
-        />
+        <Code file="setup.ts" code={code["setup.ts"]} />
         <p>
           Dann checkt jede Nacht ein geplanter Job <code>main</code> so aus, wie Sie es heute tun,
-          baut es und speichert den ganzen Ordner, Cache inklusive:
+          baut es und lädt den ganzen Ordner hoch, Cache inklusive:
         </p>
-        <Code
-          file="nightly.ts"
-          code={`
-import { execSync } from "node:child_process";
-
-const warm = sky.namespace("ci/web-app").branch("warm");
-
-// Build main first, so the cache is full when we save it.
-execSync("npm run build", { cwd: "./web-app", stdio: "inherit" });
-await warm.commitFolder("./web-app", { message: "Nightly build" });
-`}
-        />
+        <Code file="nightly.ts" code={code["nightly.ts"]} />
         <p>
           Jetzt enthält <code>warm</code> den Quellcode der letzten Nacht und den daraus gebauten
           Cache, in einem Commit. Der Ordner <code>.git</code> bleibt außen vor; der Branch führt
@@ -151,13 +128,7 @@ await warm.commitFolder("./web-app", { message: "Nightly build" });
           der beim selben Commit beginnt. Er kopiert keine Dateien, ist also sofort da, egal wie
           groß der Cache ist.
         </p>
-        <Code
-          file="job.ts"
-          code={`
-const id = process.env.CI_JOB_ID;
-const job = await warm.fork(\`jobs/\${id}\`);
-`}
-        />
+        <Code file="job.ts" code={code["job.ts"]} />
         <p>
           Jeder Job hat jetzt einen eigenen Branch, etwa <code>jobs/4812</code>. Was er schreibt,
           bleibt dort. Jobs sehen also nie die Dateien der anderen, und <code>warm</code> ändert
@@ -171,36 +142,12 @@ const job = await warm.fork(\`jobs/\${id}\`);
           und <code>git diff --name-only</code> listet auf, was er geändert hat. Der Quellcode ist
           meist der kleine Teil; der Cache ist der große.
         </p>
-        <Code
-          file="pull-request.ts"
-          code={`
-import { readFileSync } from "node:fs";
-
-// The files this pull request changed, from its shallow fetch.
-const files = ["src/cart.ts"];
-await job.write(
-  Object.fromEntries(
-    files.map((f) => [f, readFileSync(\`./pr/\${f}\`, "utf8")]),
-  ),
-  \`Job \${id}: pull request files\`,
-);
-`}
-        />
+        <Code file="pull-request.ts" code={code["pull-request.ts"]} />
         <p>
-          Schreiben Sie jetzt den Branch des Jobs in einen normalen Ordner und führen Sie Ihren
+          Laden Sie jetzt den Branch des Jobs in einen normalen Ordner herunter und führen Sie Ihren
           Build aus, genau wie auf einem Laptop:
         </p>
-        <Code
-          file="build.ts"
-          code={`
-await job.checkout("./work");
-const log = execSync("npm run build", {
-  cwd: "./work",
-  encoding: "utf8",
-});
-console.log(log);
-`}
-        />
+        <Code file="build.ts" code={code["build.ts"]} />
         <p>
           Der Build findet den Cache der letzten Nacht direkt neben dem Quellcode, aus dem er
           entstanden ist. Nur die Datei, die der Pull Request berührt hat, wird neu kompiliert:
@@ -208,7 +155,7 @@ console.log(log);
         <BuildLogs />
         <Note title="Tipp: einen Cache verwenden, der Inhalte prüft">
           <p>
-            <code>checkout</code> schreibt jede Datei neu, also hat jede Datei eine neue
+            <code>download</code> schreibt jede Datei neu, also hat jede Datei eine neue
             Änderungszeit. Build-Tools, die anhand von Dateiinhalten oder deren Hashes entscheiden,
             was neu gebaut wird, nutzen den Cache gut. Tools, die nur Zeitstempel vergleichen, bauen
             womöglich mehr neu als nötig.
@@ -217,18 +164,11 @@ console.log(log);
 
         <Chapter id="keep" step={4} title="Behalten, was der Job erzeugt hat" />
         <p>
-          Wenn der Build fertig ist, speichern Sie den Ordner zurück auf den Branch des Jobs. Fragen
-          Sie dann, was sich gegenüber <code>warm</code> geändert hat. Mit{" "}
-          <code>{`against: "base"`}</code> zeigt der Diff nur, was dieser Job getan hat, nicht was
-          seit dem Fork auf <code>warm</code> passiert ist.
+          Wenn der Build fertig ist, laden Sie den Ordner zurück auf den Branch des Jobs hoch.
+          Fragen Sie dann, was sich gegenüber <code>warm</code> geändert hat. Während der Job läuft,
+          schreibt nichts auf <code>warm</code>, also zeigt der Diff nur, was dieser Job getan hat.
         </p>
-        <Code
-          file="save.ts"
-          code={`
-await job.commitFolder("./work", { message: \`Job \${id}: output\` });
-const changed = await job.diff("warm", { against: "base" });
-`}
-        />
+        <Code file="save.ts" code={code["save.ts"]} />
         <p>
           Für unseren Pull Request enthält <code>changed</code> drei Pfade und sonst nichts:
         </p>
@@ -237,13 +177,13 @@ const changed = await job.diff("warm", { against: "base" });
           items={[
             ["src/cart.ts", "geändert: der Pull Request"],
             ["dist/cart.js", "geändert: seine Build-Ausgabe"],
-            [".cache/55913ced090c339a.js", "hinzugefügt: ein neuer Cache-Eintrag"],
+            [".cache/832110c92aba50b7.js", "hinzugefügt: ein neuer Cache-Eintrag"],
           ]}
         />
         <p>
           Das ist praktisch, wenn ein Job fehlschlägt. Der Branch ist genau der Workspace, den der
-          Build gesehen hat. Jeder kann ihn später auschecken und nachsehen, statt aus einem Log zu
-          raten.
+          Build gesehen hat. Jeder kann ihn später herunterladen und nachsehen, statt aus einem Log
+          zu raten.
         </p>
 
         <Chapter id="clean" step={5} title="Aufräumen und in der Zeit zurückgehen" />
@@ -251,12 +191,7 @@ const changed = await job.diff("warm", { against: "base" });
           Wenn der Job erfolgreich war und Sie seinen Workspace nicht mehr brauchen, löschen Sie
           seinen Branch:
         </p>
-        <Code
-          file="cleanup.ts"
-          code={`
-await job.delete();
-`}
-        />
+        <Code file="cleanup.ts" code={code["cleanup.ts"]} />
         <p>
           Der nächtliche Job führt <code>nightly.ts</code> erneut aus, und jede Nacht, in der sich
           etwas geändert hat, wird zu einem neuen Commit auf <code>warm</code>. Eine Nacht ohne
@@ -264,14 +199,7 @@ await job.delete();
           der gestern lief, heute fehlschlägt, können Sie den Workspace von gestern forken und
           erneut bauen:
         </p>
-        <Code
-          file="yesterday.ts"
-          code={`
-const [, lastNight] = await warm.log(2);
-const old = await warm.fork("jobs/yesterday", lastNight.hash);
-await old.checkout("./old");
-`}
-        />
+        <Code file="yesterday.ts" code={code["yesterday.ts"]} />
         <p>
           <code>log</code> listet Commits vom neuesten zum ältesten, der zweite ist also der Build
           vor dem letzten. Der Ordner, den Sie bekommen, enthält den Quellcode und den Cache jener
@@ -286,7 +214,7 @@ await old.checkout("./old");
             Dateien zu forken dauert etwa 10 ms.
           </li>
           <li>
-            <b>Immer aufräumen.</b> Setzen Sie <code>job.delete()</code> in einen{" "}
+            <b>Immer aufräumen.</b> Setzen Sie <code>job.destroy()</code> in einen{" "}
             <code>finally</code>-Block oder löschen Sie alte <code>jobs/</code>-Branches nach
             Zeitplan. Behalten Sie fehlgeschlagene, bis jemand sie sich angesehen hat.
           </li>
@@ -330,7 +258,7 @@ await old.checkout("./old");
             [
               "Wie sehe ich, warum ein Job letzte Woche fehlgeschlagen ist?",
               <p key="a">
-                Wenn Sie seinen Branch behalten haben, checken Sie ihn aus: Er enthält genau die
+                Wenn Sie seinen Branch behalten haben, laden Sie ihn herunter: Er enthält genau die
                 Dateien, die der Build gesehen hat. Wenn Sie ihn gelöscht haben, forken Sie{" "}
                 <code>warm</code> beim Commit jener Nacht und fügen dieselben Pull-Request-Dateien
                 erneut hinzu.
@@ -350,7 +278,7 @@ function CiCover() {
   return (
     <div className="grid">
       <div className={`${row} text-muted-foreground`}>
-        <span className={mono}>ci/web-app</span>
+        <span className={mono}>web-app</span>
         <span className="ml-auto text-[12px]">Branches</span>
       </div>
       <div className={`${row} rounded-md border-transparent bg-foreground/[0.06] px-2`}>

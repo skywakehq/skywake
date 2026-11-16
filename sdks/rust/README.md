@@ -1,6 +1,7 @@
 # Skywake for Rust
 
-An async client for Skywake search indexes.
+An async client for Skywake: disks of files and search indexes, both with
+branches.
 
 ```toml
 [dependencies]
@@ -9,42 +10,34 @@ skywake-client = "0.1"
 
 ```rust
 use serde_json::json;
-use skywake::{Client, Document, Query, Rank};
+use skywake::Skywake;
 
-let sky = Client::new("https://api.skywake.dev", "sw_...")?;
+let sky = Skywake::new()?;
+
 let products = sky.index("products");
+products.upsert(json!({ "id": 1, "text": "red running shoes", "price": 89 })).await?;
+let hits = products.query("shoes for running").limit(5).await?;
 
-let doc: Document = serde_json::from_value(json!({
-    "id": 1,
-    "vectors": { "embedding": [0.1, 0.2] },
-    "attributes": { "title": "Blue mug", "price": 12 },
-}))?;
-products.upsert(&[doc]).await?;
-
-let query = Query {
-    top_k: Some(5),
-    filter: Some(json!({ "price": { "lt": 20 } })),
-    ..Query::new("embedding", [0.1, 0.2])
-};
-for hit in products.query(&query).await?.iter() {
-    println!("{} {}", hit.id, hit.distance);
-}
+let app = sky.disk("app");
+app.write("notes.md", "hello").await?;
+let work = app.fork("agent-1").await?;
+work.write("notes.md", "changed").await?;
+work.merge_into("main").await?;
 ```
 
-- **Branches.** `sky.index(name)` is `main`; `.at(branch)` is another.
-  `fork`, `merge` and `delete_branch` work on them. Nothing is copied.
-- **Reads.** `query`, `search` (BM25), `hybrid`, `order`, `rank` (sparse and
-  late-interaction scores), `aggregate` and `multi` (several on one
-  snapshot). Each returns its items with `performance` and `billing`.
-- **Writes.** `upsert`, `delete` and `patch` send 1000 to a request; `write`
-  makes one change of upserts, patches, deletes and conditions.
-- **Filters, scores and attribute values** are `serde_json::Value`, as the
-  API documents them. Fields left `None` are not sent, so the server uses
-  its defaults.
-- **Lists.** `indexes().list`, `branches` and `documents` read one page;
-  `all`, `all_branches`, `all_documents` and `export` are streams.
-- **Retries.** Network errors and 5xx answers are tried again when that is
-  safe, 429 always, waiting as long as the server asks (at most 60 s).
-  Set `Options { retries, backoff, timeout }` with `Client::with_options`.
-- **Errors.** `Error::Api` has the `status`, `code`, `request_id` and, for
-  an invalid request, the JSON `path` of the field that is wrong.
+- **Settings.** `Skywake::new()` reads the key from `SKYWAKE_API_KEY`, or the
+  profile `skywake login` saved. `Skywake::builder()` sets `key`, `url`,
+  `environment`, `profile`, `retries` and `timeout`.
+- **Handles.** `sky.disk(name)` and `sky.index(name)` make no network call.
+  `.on(branch)` is a handle on another branch; `fork` makes one.
+- **Options** are builder methods, and a builder is awaited directly:
+  `products.query("words").limit(5).await?`.
+- **Rows and hits** are `serde_json::Map`. Filters are `serde_json::Value`.
+- **Lists** (`list_disks`, `list_indexes`, `list_keys`, `rows().stream()`,
+  `log().stream()`) are `futures::Stream`s.
+- **Errors.** `Error::Api` carries `kind` (`Auth`, `Permission`, `NotFound`,
+  `Conflict`, `MergeConflict { conflicts }`, `InvalidRequest`,
+  `RateLimited { retry_after }`, `Server`), `status`, `code`, `message`,
+  `hint`, `request_id` and `path`.
+- **Retries.** Network errors and 5xx answers are retried when that is safe,
+  429 always, waiting as long as the server asks.

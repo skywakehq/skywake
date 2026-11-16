@@ -68,6 +68,19 @@ export const NamespacePattern = z
     message: "use a namespace name, `<folder>/*` or `*`",
   });
 
+export const EnvironmentName = z
+  .string()
+  .regex(/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$/, "use letters, digits, `.`, `_` and `-`")
+  .openapi({ example: "prod" });
+
+export const NamePattern = z
+  .string()
+  .max(200)
+  .refine((text) => text === "*" || NAME.test(text.replace(/\*$/, "").replace(/[-_./]$/, "a")), {
+    message: "use a name, a prefix ending in `*` such as `docs-*`, or `*`",
+  })
+  .openapi({ example: "docs-*" });
+
 export const Hash = z.string().regex(/^[0-9a-f]{64}$/, "not a commit hash");
 
 export const Time = z.string().openapi({ format: "date-time" });

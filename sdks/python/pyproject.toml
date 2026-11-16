@@ -26,12 +26,9 @@ Documentation = "https://skywake.dev/docs"
 Repository = "https://github.com/skywakehq/skywake"
 Issues = "https://github.com/skywakehq/skywake/issues"
 
-[project.optional-dependencies]
-mcp = ["mcp>=2.3"]
+[project.scripts]
+skywake = "skywake._cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.sdist]
-exclude = ["mcp"]

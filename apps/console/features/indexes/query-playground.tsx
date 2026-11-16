@@ -11,6 +11,9 @@ import {
   type Hit,
   INTERNAL,
   type IndexInfo,
+  type QueryBody,
+  type Request,
+  type SearchBody,
   type SearchHit,
   branchUrl,
   call,
@@ -19,9 +22,9 @@ import {
 import { apiPath, indexApi } from "@/lib/paths";
 import { CodeBlock, LangChoice } from "./code";
 import { Label, Select, TextArea, TextField } from "./fields";
-import { ImagePick, type Picked, SHOWN_IMAGE } from "./image-pick";
+import { ImagePick, type Picked } from "./image-pick";
 import { type Condition, FilterBuilder, toFilter } from "./filter-builder";
-import { type Lang, type QueryBody, type Request, type SearchBody, snippet } from "./snippets";
+import { type Lang, type Query, snippet } from "./snippets";
 
 /** `[0.1, 0.2]`, or numbers split by commas or spaces. */
 function parseVector(text: string, embeds: boolean): number[] | string {
@@ -38,16 +41,12 @@ function parseVector(text: string, embeds: boolean): number[] | string {
 
 type Kind = "vector" | "text" | "hybrid";
 
-const KINDS: { value: Kind; label: string }[] = [
-  { value: "vector", label: "Vector" },
-  { value: "text", label: "Text" },
-  { value: "hybrid", label: "Hybrid" },
-];
+const KINDS: Kind[] = ["vector", "text", "hybrid"];
 
 function labelOf(kind: Kind, embeds: boolean) {
-  if (kind === "text") return "Words";
+  if (kind === "text") return "Keywords";
   if (kind === "vector") return embeds ? "Meaning" : "Vector";
-  return embeds ? "Meaning and words" : "Vector and words";
+  return embeds ? "Auto" : "Vector and keywords";
 }
 
 /** How long `work` takes, in milliseconds. */
@@ -60,7 +59,7 @@ async function timed<T>(work: () => Promise<T>) {
 /** `""` as unset, else the number. */
 const optional = (text: string) => (text.trim() ? Number(text) : undefined);
 
-/** Runs queries by hand, and shows them as code to paste. */
+/** Runs queries by hand, and shows them as v2 code to paste. */
 export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: string }) {
   const { schema } = index;
   const api = useUrls().api;
@@ -69,12 +68,12 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   const others = shown.filter((a) => a.type !== "text");
   const kinds = KINDS.filter(
     (k) =>
-      (k.value !== "vector" || schema.vectors.length) &&
-      (k.value !== "text" || texts.length) &&
-      (k.value !== "hybrid" || (schema.vectors.length && texts.length)),
+      (k !== "vector" || schema.vectors.length) &&
+      (k !== "text" || texts.length) &&
+      (k !== "hybrid" || (schema.vectors.length && texts.length)),
   );
   const linked = schema.attributes.some((a) => a.name === "chunk");
-  const preferred = linked && kinds.some((k) => k.value === "hybrid") ? "hybrid" : kinds[0]!.value;
+  const preferred = linked && kinds.includes("hybrid") ? "hybrid" : kinds[0]!;
   const [kind, setKind] = useState<Kind>(preferred);
   const thumb = useThumbnails(index.name, branch, linked);
   const [column, setColumn] = useState(schema.vectors[0]?.name ?? "");
@@ -113,10 +112,9 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     return filterText.trim() ? JSON.parse(filterText) : undefined;
   }
 
-  function vectorBody(brief = false): QueryBody {
+  function vectorBody(): QueryBody {
     const f = filter();
-    const value =
-      embed && image ? { image: brief ? SHOWN_IMAGE : image.url } : parseVector(vector, !!embed);
+    const value = embed && image ? { image: image.url } : parseVector(vector, !!embed);
     return {
       vector: { column, value },
       topK,
@@ -128,7 +126,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
 
   function textBody(fallback = ""): SearchBody {
     const query = words.trim() ? words : fallback;
-    if (!query.trim()) throw new Error("Type what to find first");
+    if (!query.trim()) throw new Error("Type the keywords to find first");
     const f = filter();
     const set = Object.entries(boosts).filter(([, v]) => v.trim() && Number(v) !== 1);
     return {
@@ -144,8 +142,8 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
   }
 
   /** The request. Throws while the form cannot make one. */
-  function request(brief = false): Request {
-    if (kind === "vector") return { route: "query", body: vectorBody(brief) };
+  function request(): Request {
+    if (kind === "vector") return { route: "query", body: vectorBody() };
     if (kind === "text") return { route: "search", body: textBody() };
     const weight = optional(textWeight);
     const k = optional(rankK);
@@ -156,16 +154,32 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
     return {
       route: "hybrid",
       body: {
-        searches: { vector: vectorBody(brief), text: textBody(oneBox ? vector : "") },
+        searches: { vector: vectorBody(), text: textBody(oneBox ? vector : "") },
         topK,
         ...(Object.keys(fuse).length ? { fuse } : {}),
       },
     };
   }
 
-  let code = "";
+  /** The query as the API takes it, or null when it has no such form. Throws while incomplete. */
+  function apiQuery(): Query | null {
+    const f = filter();
+    const given = { ...(f === undefined ? {} : { filter: f }), limit: topK };
+    if (kind === "text") return { text: textBody().query, mode: "keywords", ...given };
+    if (embed && image) return null;
+    const value = parseVector(vector, !!embed);
+    if (kind === "vector") {
+      return typeof value === "string"
+        ? { text: value, mode: "meaning", ...given }
+        : { vector: value, ...given };
+    }
+    return typeof value === "string" ? { text: value, ...given } : null;
+  }
+
+  let code: string | null = "";
   try {
-    code = snippet(lang, index.name, branch, request(true), api);
+    const query = apiQuery();
+    code = query && snippet(lang, index.name, branch, query, api);
   } catch {
     code = "";
   }
@@ -235,7 +249,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
                   setRows([]);
                   setHits(null);
                 }}
-                options={kinds.map((k) => ({ value: k.value, label: labelOf(k.value, !!embed) }))}
+                options={kinds.map((k) => ({ value: k, label: labelOf(k, !!embed) }))}
               />
             )}
             {kind !== "text" && schema.vectors.length > 1 && (
@@ -273,8 +287,8 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
             {embed && <ImagePick picked={image} onPick={setImage} />}
           </div>
         )}
-        {kind === "text" && wordsField("Words to find", "reset password")}
-        {kind === "hybrid" && !oneBox && wordsField("Words to match", "reset password")}
+        {kind === "text" && wordsField("Keywords to find", "reset password")}
+        {kind === "hybrid" && !oneBox && wordsField("Keywords to match", "reset password")}
 
         <div className="grid gap-2">
           <div className="flex items-center gap-3">
@@ -311,7 +325,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
           <div className="mt-4 grid gap-4">
             {kind === "hybrid" && oneBox && (
               <div className="max-w-xl">
-                {wordsField("Words to match", "The same as what to find")}
+                {wordsField("Keywords to match", "The same as what to find")}
               </div>
             )}
             <div className="flex flex-wrap items-end gap-3">
@@ -350,13 +364,14 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
               {kind === "hybrid" && (
                 <>
                   {number("Rank constant k", rankK, setRankK, "60")}
-                  {number("Words weight", textWeight, setTextWeight, "1", 0.1)}
+                  {number("Keywords weight", textWeight, setTextWeight, "1", 0.1)}
                 </>
               )}
             </div>
             {kind === "hybrid" && (
               <p className="text-xs text-faint">
-                Both searches run, and each hit scores the sum of weight / (k + rank) over them.
+                Meaning and keywords both run, and each hit scores the sum of weight / (k + rank)
+                over them.
               </p>
             )}
           </div>
@@ -370,7 +385,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
         )}
         <div className="flex items-center gap-3">
           <Button variant="primary" size="default" leadingIcon={Play} disabled={busy}>
-            Search
+            Query
           </Button>
           <span className="text-xs text-faint">on {branch}</span>
         </div>
@@ -391,10 +406,14 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
       <Panel title="As code" action={<LangChoice value={lang} onChange={setLang} />}>
         {code ? (
           <CodeBlock code={code} />
+        ) : code === null ? (
+          <p className="px-4 py-3 text-sm text-muted-foreground">
+            The API takes text or a vector, so this query runs in the console only.
+          </p>
         ) : (
           <p className="px-4 py-3 text-sm text-muted-foreground">
             {kind === "text"
-              ? "Type a query, and a valid filter if any, to see the code."
+              ? "Type the keywords, and a valid filter if any, to see the code."
               : embed
                 ? "Type text or paste a vector, and a valid filter if any, to see the code."
                 : "Paste a vector, and a valid filter if any, to see the code."}
@@ -537,7 +556,7 @@ function Results({
                     <th className="px-4 text-right font-normal">
                       {embeds ? "Meaning rank" : "Vector rank"}
                     </th>
-                    <th className="px-4 text-right font-normal">Words rank</th>
+                    <th className="px-4 text-right font-normal">Keywords rank</th>
                   </>
                 )}
                 {columns.map((name) => (

@@ -62,6 +62,7 @@ export type AppEnv = {
     who?: Caller;
     requestId: string;
     fromPeer?: boolean;
+    again?: boolean;
     rateLimitRemaining?: number;
     audit?: Note;
   };

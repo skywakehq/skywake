@@ -1,16 +1,17 @@
 "use client";
 
-import { Link2, Search as SearchIcon, Sparkles, Unlink } from "lucide-react";
+import { PowerOff, Search as SearchIcon, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Link } from "@/components/shell/router";
 import { Ago, Button, Choice, Empty, Hash, Panel, Rows, cx, plural } from "@/components/kit";
 import { mainOf, useFleet } from "@/features/fleet/fleet";
 import { call, useApi } from "@/features/indexes/api";
 import { Label, TextArea, TextField } from "@/features/indexes/fields";
-import { apiPath, indexPath } from "@/lib/paths";
+import { apiPath } from "@/lib/paths";
+import { diskApi, v2 } from "@/lib/v2";
 import { withBase } from "@/lib/zone";
 import { NamespacePage } from "./namespace-header";
+import { SearchBox } from "./search-box";
 
 type Skipped = { path: string; reason: string };
 
@@ -54,7 +55,6 @@ function useDefaults() {
 const sizeOf = (bytes: number) =>
   bytes >= 1 << 20 ? `${Math.round(bytes / (1 << 20))} MB` : `${Math.round(bytes / 1024)} KB`;
 
-/** How often the page reads the link again while a branch is behind. */
 const BEHIND_POLL_MS = 5_000;
 
 const lines = (text: string) =>
@@ -63,7 +63,6 @@ const lines = (text: string) =>
     .map((line) => line.trim())
     .filter(Boolean);
 
-/** Reads the namespace's link; null when it has none. `reload` reads it again. */
 function useIndexLink(ns: string) {
   const [state, setState] = useState<{ link: IndexLink | null; loading: boolean; error?: string }>({
     link: null,
@@ -100,10 +99,6 @@ function useIndexLink(ns: string) {
   return { ...state, reload };
 }
 
-/**
- * Search over the filesystem's files: link an index and Skywake keeps it in
- * step with `main` and with every branch forked with its index.
- */
 export function NamespaceSearch({ ns }: { ns: string }) {
   const fleet = useFleet({ ns });
   const main = mainOf(fleet.branches);
@@ -116,16 +111,15 @@ export function NamespaceSearch({ ns }: { ns: string }) {
       ) : error ? (
         <p className="text-sm text-red">{error}</p>
       ) : link ? (
-        <Linked ns={ns} link={link} onChange={reload} />
+        <SearchOn ns={ns} link={link} onChange={reload} />
       ) : (
-        <LinkForm ns={ns} onLinked={reload} />
+        <TurnOn ns={ns} onDone={reload} />
       )}
     </NamespacePage>
   );
 }
 
-function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
-  const [index, setIndex] = useState(`${ns}-files`);
+function TurnOn({ ns, onDone }: { ns: string; onDone: () => void }) {
   const [include, setInclude] = useState("");
   const [exclude, setExclude] = useState("node_modules/**\n**/*.lock");
   const [mode, setMode] = useState<Mode>("meaning");
@@ -138,13 +132,13 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
     setBusy(true);
     try {
       await call("PUT", apiPath(ns, "index"), {
-        index,
+        index: `${ns}.files`,
         include: lines(include),
         exclude: lines(exclude),
         embed: mode === "words" ? false : model.trim() ? { model: model.trim() } : undefined,
       });
-      toast.success("Linked", { description: `${index} now follows main.` });
-      onLinked();
+      toast.success("Search is on", { description: "Files on main are searchable in seconds." });
+      onDone();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
     } finally {
@@ -154,25 +148,11 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
 
   return (
     <Panel title="Search these files">
-      <Empty title="Nothing is indexed yet" columns={["File", "Branch"]}>
-        Link an index and every commit to <span className="font-mono">main</span> is searchable
-        within seconds; saves follow about 30 seconds later. Branches forked with their index get
-        their own.
+      <Empty title="Search is off" columns={["File", "Branch"]}>
+        Turn it on and every commit to <span className="font-mono">main</span> is searchable within
+        seconds; saves follow about 30 seconds later. Branches forked from main get their own.
       </Empty>
       <div className="grid max-w-xl gap-4 px-5 pb-6">
-        <label className="grid gap-1.5">
-          <Label>Index</Label>
-          <TextField
-            value={index}
-            onChange={(e) => setIndex(e.target.value)}
-            className="font-mono"
-            aria-label="Index name"
-          />
-          <span className="text-xs text-muted-foreground">
-            Made with <span className="font-mono">path</span> and{" "}
-            <span className="font-mono">text</span> attributes when it does not exist.
-          </span>
-        </label>
         <label className="grid gap-1.5">
           <Label>Include</Label>
           <TextArea
@@ -220,19 +200,19 @@ function LinkForm({ ns, onLinked }: { ns: string; onLinked: () => void }) {
         <Button
           variant="primary"
           size="default"
-          leadingIcon={Link2}
+          leadingIcon={SearchIcon}
           className="w-fit"
-          disabled={busy || !index.trim() || needsModel}
+          disabled={busy || needsModel}
           onClick={save}
         >
-          Link index
+          Turn on search
         </Button>
       </div>
     </Panel>
   );
 }
 
-function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange: () => void }) {
+function SearchOn({ ns, link, onChange }: { ns: string; link: IndexLink; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const fallback = useDefaults();
 
@@ -246,7 +226,7 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
         maxBytes: link.maxBytes,
         embed: {},
       });
-      toast.success("Rebuilding", { description: `${link.index} now searches by meaning too.` });
+      toast.success("Rebuilding", { description: "Search finds files by meaning too." });
       onChange();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
@@ -255,11 +235,12 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
     }
   }
 
-  async function unlink() {
+  async function turnOff() {
     setBusy(true);
     try {
-      await call("DELETE", apiPath(ns, "index"));
-      toast.success("Unlinked", { description: `${link.index} and its documents stay.` });
+      const [env, path] = diskApi(ns);
+      await v2(env, "PATCH", path, { search: false });
+      toast.success("Search is off", { description: "The files stay; only the search goes." });
       onChange();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
@@ -269,18 +250,12 @@ function Linked({ ns, link, onChange }: { ns: string; link: IndexLink; onChange:
 
   return (
     <div className="grid gap-10">
+      <SearchBox ns={ns} branches={link.branches.map((branch) => branch.branch)} />
       <Panel
-        title={
-          <span className="flex items-center gap-2">
-            <SearchIcon className="size-3.5 text-muted-foreground" />
-            <Link href={indexPath(link.index, "query")} className="font-mono hover:underline">
-              {link.index}
-            </Link>
-          </span>
-        }
+        title="Settings"
         action={
-          <Button leadingIcon={Unlink} disabled={busy} onClick={unlink}>
-            Unlink
+          <Button leadingIcon={PowerOff} disabled={busy} onClick={turnOff}>
+            Turn off search
           </Button>
         }
       >

@@ -1,4 +1,4 @@
-import { SkywakeError } from "@skywake/sdk";
+import { NotFound } from "@skywake/sdk";
 
 const MESSAGES: Record<string, string> = {
   ENOENT: "no such file or directory",
@@ -24,5 +24,5 @@ export function fail(code: keyof typeof MESSAGES, operation: string, path: strin
 }
 
 export function isMissing(error: unknown): boolean {
-  return error instanceof SkywakeError && error.status === 404;
+  return error instanceof NotFound;
 }

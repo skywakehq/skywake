@@ -2,81 +2,100 @@ package skywake
 
 import (
 	"context"
-	"encoding/json"
-	"net"
-	"net/http"
-	"net/url"
-	"strings"
-	"time"
+	"iter"
 )
 
-// Client talks to the API. Change its fields before the first request.
+const Main = "main"
+
 type Client struct {
-	// HTTP sends the requests. Its default waits up to 60 seconds to
-	// connect and then for the answer to start, but never cuts off an
-	// answer that keeps arriving, such as an export.
-	HTTP *http.Client
-	// Retries is how many more times a failed request is tried when that
-	// is safe: after a 429 always, and after a network error or a 5xx for
-	// GET, PUT and DELETE.
-	Retries int
-	// Backoff is about how long the first retry waits, doubled each time,
-	// unless the server asks for a wait of its own.
-	Backoff time.Duration
-	// Indexes makes, lists, reads and deletes search indexes.
-	Indexes Indexes
-
-	base string
-	key  string
+	URL         string
+	Environment string
+	http        *transport
 }
 
-// New returns a client of the API at url, with an API key (sw_...) or a
-// console token.
-func New(baseURL, key string) *Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DialContext = (&net.Dialer{Timeout: 60 * time.Second}).DialContext
-	transport.ResponseHeaderTimeout = 60 * time.Second
-	c := &Client{
-		HTTP:    &http.Client{Transport: transport},
-		Retries: 3,
-		Backoff: 200 * time.Millisecond,
-		// Every route lives under /v1.
-		base: strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1") + "/v1",
-		key:  key,
+func New(options ...Option) (*Client, error) {
+	c := defaults()
+	for _, option := range options {
+		option(&c)
 	}
-	c.Indexes = Indexes{c}
-	return c
-}
-
-// Index is a search index, on its main branch.
-func (c *Client) Index(name string) *SearchIndex {
-	return &SearchIndex{c: c, Name: name, Branch: "main"}
-}
-
-// call sends a request and decodes its answer into out, unless out is nil.
-func (c *Client) call(ctx context.Context, method, path string, query url.Values, body, out any) error {
-	resp, err := c.send(ctx, method, path, query, body)
-	if err != nil {
-		return err
+	if err := resolve(&c); err != nil {
+		return nil, err
 	}
-	defer resp.Body.Close()
-	if err := check(resp); err != nil {
-		return err
-	}
-	if out == nil {
-		return nil
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
+	return &Client{URL: c.url, Environment: c.environment, http: newTransport(c)}, nil
 }
 
-// fetch sends a request and returns its decoded answer.
-func fetch[T any](ctx context.Context, c *Client, method, path string, query url.Values, body any) (T, error) {
-	var out T
-	err := c.call(ctx, method, path, query, body, &out)
-	return out, err
+func branchOf(branch []string) string {
+	return firstSet(first(branch), Main)
 }
 
-// escape keeps a name whole in a URL: index and branch names may hold /.
-func escape(name string) string {
-	return url.PathEscape(name)
+func (c *Client) Disk(name string, branch ...string) *Disk {
+	return &Disk{Name: name, Branch: branchOf(branch), http: c.http}
+}
+
+func (c *Client) Index(name string, branch ...string) *Index {
+	return &Index{Name: name, Branch: branchOf(branch), http: c.http}
+}
+
+func (c *Client) CreateDisk(ctx context.Context, name string, options ...DiskOptions) (*Disk, error) {
+	o := first(options)
+	body := map[string]any{"name": name, "region": o.Region, "search": o.Search, "visibility": o.Visibility}
+	if err := c.http.post(ctx, "/disks", compact(body), nil, nil); err != nil {
+		return nil, err
+	}
+	return c.Disk(name), nil
+}
+
+func (c *Client) CreateIndex(ctx context.Context, name string, options ...IndexOptions) (*Index, error) {
+	o := first(options)
+	body := compact(map[string]any{"name": name, "schema": o.Schema, "region": o.Region, "embed": o.Embed})
+	if o.NoEmbed {
+		body["embed"] = false
+	}
+	if err := c.http.post(ctx, "/indexes", body, nil, nil); err != nil {
+		return nil, err
+	}
+	return c.Index(name), nil
+}
+
+func (c *Client) ListDisks(ctx context.Context) iter.Seq2[DiskSummary, error] {
+	return listing[DiskSummary](ctx, c.http, "/disks", nil)
+}
+
+func (c *Client) ListIndexes(ctx context.Context) iter.Seq2[IndexSummary, error] {
+	return listing[IndexSummary](ctx, c.http, "/indexes", nil)
+}
+
+func (c *Client) CreateKey(ctx context.Context, key NewKey) (CreatedKey, error) {
+	body := compact(map[string]any{"name": key.Name, "role": key.Role, "only": key.Only, "expires_in_days": key.ExpiresInDays})
+	body["environment"] = nil
+	if key.Environment != "" {
+		body["environment"] = key.Environment
+	}
+	var created CreatedKey
+	err := c.http.post(ctx, "/keys", body, nil, &created)
+	return created, err
+}
+
+func (c *Client) ListKeys(ctx context.Context) iter.Seq2[Key, error] {
+	return listing[Key](ctx, c.http, "/keys", nil)
+}
+
+func (c *Client) RevokeKey(ctx context.Context, id string) error {
+	return c.http.delete(ctx, "/keys/"+segment(id))
+}
+
+func (c *Client) ListEnvironments(ctx context.Context) iter.Seq2[Environment, error] {
+	return listing[Environment](ctx, c.http, "/environments", nil)
+}
+
+func (c *Client) CreateEnvironment(ctx context.Context, name string) (Environment, error) {
+	var created Environment
+	err := c.http.post(ctx, "/environments", map[string]any{"name": name}, nil, &created)
+	return created, err
+}
+
+func (c *Client) Whoami(ctx context.Context) (Whoami, error) {
+	var me Whoami
+	err := c.http.get(ctx, "/whoami", nil, &me)
+	return me, err
 }

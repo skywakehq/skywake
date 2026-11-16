@@ -1,110 +1,100 @@
 ---
 title: Embeddings and rerank
 icon: ArrowDownUp
-description: Send text or images for the server to embed, and reorder hits with a rerank model.
+description: How rows are embedded for search by meaning, how to bring your own vectors, and where rerank stands in v2.
 ---
 
-You don't have to compute embeddings yourself. Name a model on a vector column, and you can send text or images where a vector goes; the server turns them into vectors. You can also ask the server to reorder your hits with a rerank model.
+You don't have to compute embeddings. When you upsert rows with text, Skywake embeds them with the environment's embedding model, and `query("words")` searches them by meaning. You can also bring your own vectors, or turn embedding off.
 
-```ts tab="TypeScript"
-const docs = await sky.indexes.create("docs", {
-  vectors: [{ name: "embedding", dims: 1536, embed: { model: "openai/text-embedding-3-small" } }],
-  attributes: [{ name: "body", type: "string" }],
-});
-await docs.upsert([
-  { id: 1, vectors: { embedding: "a cat sleeps" }, attributes: { body: "a cat sleeps" } },
-]);
-const hits = await docs.query({
-  vector: { column: "embedding", value: "kitten" },
-  topK: 50,
-  rerank: { model: "cohere/rerank-v3.5", field: "body", topN: 5 },
-});
-```
+## Automatic embeddings
 
-```py tab="Python"
-docs = sky.indexes.create(
-    "docs",
-    vectors=[{"name": "embedding", "dims": 1536, "embed": {"model": "openai/text-embedding-3-small"}}],
-    attributes=[{"name": "body", "type": "string"}],
-)
-docs.upsert([{"id": 1, "vectors": {"embedding": "a cat sleeps"}, "attributes": {"body": "a cat sleeps"}}])
-hits = docs.query("embedding", "kitten", top_k=50, rerank={"model": "cohere/rerank-v3.5", "field": "body", "topN": 5})
-```
+The first upsert to a new index picks one text field to embed: the first of `text`, `content`, `body`, `description`, `title` and `name` that the rows have, or else their first string field. Each row's value of that field is embedded into a vector that you never see or get back. The other string fields are still searched by keywords.
 
-## Embeddings
+- The environment's model is used unless you choose one when you make the index.
+- Changing the embedded field on an upsert embeds it again. Each text embedded is billed as an embedding.
+- With no embedding model in the environment, an index searches by keywords only.
 
-A [vector column](./schemas.mdx#vector-columns) with `embed: {model}` takes text or an image anywhere it takes a vector: in documents, in [`query`](./vector.mdx), and in [hybrid](./hybrid.mdx) vector searches. The server embeds the value with `model`, and the model must return `dims` numbers. If you use a [catalog model](#models), this is checked when you create the column: `dims` must be one of the model's sizes.
+To choose the model, or to turn embedding off, make the index first with `embed` and a schema:
 
-Such a column accepts three kinds of value:
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-2/keywords-only.ts
+</include>
 
-- `[0.1, 0.2, ..]`: a vector, as usual.
-- `"a cat sleeps"`: text to embed, up to 32,768 characters.
-- `{"image": "https://..."}`: an image to embed, given as an https URL or a base64 `data:image/...` URL, up to 8 MiB. The model must accept images.
+`embed: { model: "openai/text-embedding-3-small" }` picks a model from the [list below](#models); `embed: false` makes a keywords-only index.
 
-With `embed: {model, from: "body"}`, a document that has no vector for the column gets one from its `body` attribute, which must be a `string` or `text`. A patch can't change `body`, because the vector would then be out of date. Upsert the whole document instead.
+## Your own vectors
 
-A column without `embed` takes only numbers. The server checks the whole request before it calls the provider. Each text or image it embeds counts in [`billing.embeddings`](./consistency-and-limits.mdx#performance-and-billing).
+A field that holds a list of numbers is a vector field, and its length is the dimension. An index with a vector field is not embedded for you; query it with `vector`.
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-2/own-vectors.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-2/own-vectors.py
+</include>
+
+Every row's vector must have the same length. Vector fields are set when the index is made: a new vector field on a later upsert fails with `InvalidRequest`. To change them, make a new index.
+
+v2 has no way to embed images; send image vectors you computed yourself.
 
 ## Rerank
 
-Use `rerank` when the search finds the right documents but you want a model to decide their order. It sends the hits to a rerank model on the server's rerank provider, orders them again best first, and gives each one a `rerank_score` (larger is better). It works on `query`, [`search`](./full-text.mdx) and `hybrid`.
+v2 has no rerank option on `query` yet. The `/v1` `query`, `search` and `hybrid` routes take `rerank`, which sends the hits to a rerank model and orders them again, best first. `/v1` goes away one release after v2. In the default environment an index's `/v1` name is just its name; elsewhere it is `<environment>/<name>`.
 
-| Field   | Type                           | Default   | Meaning                                         |
-| ------- | ------------------------------ | --------- | ----------------------------------------------- |
-| `model` | string                         |           | The rerank model, such as `cohere/rerank-v3.5`. |
-| `field` | a `string` or `text` attribute |           | Whose value is ranked against `query`.          |
-| `query` | string, up to 4096 chars       | see below | What to rank by.                                |
-| `topN`  | int, 1 to 1000                 | every hit | The most hits to return after reranking.        |
+```json title="POST /v1/indexes/articles/branches/main/search"
+{
+  "query": "reset password",
+  "fields": ["text"],
+  "topK": 50,
+  "rerank": { "model": "cohere/rerank-v3.5", "field": "text", "topN": 5 }
+}
+```
 
-If you leave out `query`, the server picks one:
+| Field   | Default      | Meaning                                         |
+| ------- | ------------ | ----------------------------------------------- |
+| `model` |              | The rerank model, such as `cohere/rerank-v3.5`. |
+| `field` |              | The text field whose value is ranked.           |
+| `query` | the search's | What to rank by.                                |
+| `topN`  | every hit    | The most hits to return after reranking.        |
 
-- In `search`, it uses the search's text.
-- In `query`, it uses the vector's text. A vector given as numbers has no text, so you must set `query`.
-- In `hybrid`, it uses the text of the first text search. If there is none, it uses the first vector given as text.
-
-The model reads the `field` of each hit the search returns, so `topK` sets how many hits it sees. The field stays in the hit's attributes if you list it in `include`, or if you set `exclude` and it is not in that list. A hybrid reranks the fused hits. A search inside `searches` can't set its own `rerank`.
-
-Each reranked request counts in `billing.reranks`.
+The server needs a rerank provider for this (below). Each reranked request is billed as a rerank.
 
 ## Models
 
-The server knows these models by name. Any other model name is sent to the default provider exactly as you wrote it.
+The server knows these models by name. Any other name is sent to the default provider as written.
 
-| Model                                                                                               | Numbers per vector | Sizes you can ask for             |
-| --------------------------------------------------------------------------------------------------- | ------------------ | --------------------------------- |
-| `openai/text-embedding-3-small`                                                                     | 1536               | 1536                              |
-| `openai/text-embedding-3-large`                                                                     | 3072               | 3072                              |
-| `cohere/embed-v4.0`                                                                                 | 1536               | 256, 512, 1024, 1536              |
-| `google/gemini-embedding-2`                                                                         | 1536               | 768, 1536, 3072                   |
-| `voyage/voyage-4`, `-4-large`, `-4-lite`, `-4-nano`, `voyage/voyage-code-3`, `voyage/voyage-code-4` | 1024               | 256, 512, 1024, 2048              |
-| `qwen/qwen3-embedding-0p6b`                                                                         | 1024               | 256, 384, 512, 768, 1024          |
-| `qwen/qwen3-embedding-4b`                                                                           | 1024               | 512, 1024, 1536, 2048, 2560       |
-| `qwen/qwen3-embedding-8b`                                                                           | 1024               | 512, 1024, 1536, 2048, 3072, 4096 |
-| `nvidia/nemotron-3-embed-1b`, `nvidia/nemotron-3.5-embed-1b`                                        | 2048               | 2048                              |
-| `nvidia/nemotron-3-embed-8b`, `nvidia/nemotron-3.5-embed-8b`                                        | 4096               | 4096                              |
-| `baai/bge-m3`                                                                                       | 1024               | 1024                              |
-| `zeroentropy/zembed-1`                                                                              | 1280               | 1280                              |
+| Model                                                                                               | Numbers per vector |
+| --------------------------------------------------------------------------------------------------- | ------------------ |
+| `openai/text-embedding-3-small`                                                                     | 1536               |
+| `openai/text-embedding-3-large`                                                                     | 3072               |
+| `cohere/embed-v4.0`                                                                                 | 1536               |
+| `google/gemini-embedding-2`                                                                         | 1536               |
+| `voyage/voyage-4`, `-4-large`, `-4-lite`, `-4-nano`, `voyage/voyage-code-3`, `voyage/voyage-code-4` | 1024               |
+| `qwen/qwen3-embedding-0p6b`, `qwen/qwen3-embedding-4b`, `qwen/qwen3-embedding-8b`                   | 1024               |
+| `nvidia/nemotron-3-embed-1b`, `nvidia/nemotron-3.5-embed-1b`                                        | 2048               |
+| `nvidia/nemotron-3-embed-8b`, `nvidia/nemotron-3.5-embed-8b`                                        | 4096               |
+| `baai/bge-m3`                                                                                       | 1024               |
+| `zeroentropy/zembed-1`                                                                              | 1280               |
 
-Rerank models: `cohere/rerank-v3.5`, `voyage/rerank-3`, `voyage/rerank-3-lite`, `zeroentropy/zerank-2`. The full list, with older models, is `EMBEDDING_MODELS` and `RERANK_MODELS` in `@skywake/contract`.
+Rerank models: `cohere/rerank-v3.5`, `voyage/rerank-3`, `voyage/rerank-3-lite`, `zeroentropy/zerank-2`. The full list is `EMBEDDING_MODELS` and `RERANK_MODELS` in `@skywake/contract`.
 
 ## Providers
 
-The server sends each model to a provider, which you set with [environment variables](../self-hosting/docker-compose.mdx#optional). If the provider a request needs is not set, the request fails with `400`.
+When you run Skywake yourself, the server sends each model to a provider set with [environment variables](../self-hosting/docker-compose.mdx). A request that needs a provider that isn't set fails with `InvalidRequest`; one whose provider can't be reached fails with `ServerError`.
 
-| Variable                                           | Provider                                                                                                                                                                                                                                                                                                              |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_API_PROVIDERS`                            | Keys for the catalog's vendors, as JSON: `{"openai": {"key": "sk-.."}, "voyage": {"key": ".."}}`. A vendor's model goes to that vendor under the vendor's own name, and a smaller size is asked for with the vendor's own field. `url` and `rerank_url` point a vendor elsewhere, such as your own server for `baai`. |
-| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`   | The default: OpenAI-style `POST /embeddings`. It gets every other model by its full name, so a gateway such as LiteLLM or OpenRouter works here.                                                                                                                                                                      |
-| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY` | The default rerank provider: Cohere-style `POST /rerank`. Responses in the Cohere, Jina and Voyage formats are read.                                                                                                                                                                                                  |
+| Variable                                           | Provider                                                                                                                                                      |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_PROVIDERS`                            | Keys for the catalog's vendors, as JSON: `{"openai": {"key": "sk-.."}}`. `url` and `rerank_url` point a vendor elsewhere, such as your own server for `baai`. |
+| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`   | The default: OpenAI-style `POST /embeddings`. Gateways such as LiteLLM or OpenRouter work here.                                                               |
+| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY` | The default rerank provider: Cohere-style `POST /rerank`. Cohere, Jina and Voyage responses are read.                                                         |
 
-If you don't give them their own URL, `baai` and `qwen` models go to DeepInfra. `zeroentropy` models always need their own URL.
-
-If a provider can't be reached or returns a bad response, the request fails with `503`.
+Without their own URL, `baai` and `qwen` models go to DeepInfra. `zeroentropy` models always need their own URL.
 
 ## Next
 
 <Cards>
-  <Card href="./pinning-and-replicas.mdx" />
+  <Card href="./hybrid.mdx" />
   <Card href="./create.mdx" />
-  <Card href="/reference/api/indexes/queryIndex" />
+  <Card href="./pinning-and-replicas.mdx" />
 </Cards>

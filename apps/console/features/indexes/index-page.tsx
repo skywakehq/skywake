@@ -8,16 +8,16 @@ import { indexApi, indexPath } from "@/lib/paths";
 import type { IndexTab } from "@/lib/routes";
 import { type IndexBranch, type IndexInfo, indexUrl, useApi } from "./api";
 import { Branches } from "./branches";
-import { Documents } from "./documents";
 import { Select } from "./fields";
 import { Overview } from "./overview";
 import { QueryPlayground } from "./query-playground";
+import { IndexRows } from "./rows";
 import { IndexSettings } from "./settings";
 
 const TABS: { tab: IndexTab; label: string }[] = [
   { tab: "overview", label: "Overview" },
   { tab: "query", label: "Query" },
-  { tab: "documents", label: "Documents" },
+  { tab: "rows", label: "Rows" },
   { tab: "branches", label: "Branches" },
   { tab: "settings", label: "Settings" },
 ];
@@ -29,7 +29,7 @@ export function IndexPage({ index, tab }: { index: string; tab: IndexTab }) {
   const [branch, setBranch] = useState("main");
   const names = branches.loaded.state === "done" ? branches.loaded.value.map((b) => b.name) : [];
   const region = info.loaded.state === "done" ? info.loaded.value.region : undefined;
-  const picksBranch = tab === "overview" || tab === "query" || tab === "documents";
+  const picksBranch = tab === "overview" || tab === "query" || tab === "rows";
 
   const facts: ReactNode[] = [envOf(index)];
   if (region) facts.push(<span title={region}>{city(region)}</span>);
@@ -69,8 +69,8 @@ export function IndexPage({ index, tab }: { index: string; tab: IndexTab }) {
         <Overview index={info.loaded.value} branch={branch} />
       ) : tab === "query" ? (
         <QueryPlayground index={info.loaded.value} branch={branch} />
-      ) : tab === "documents" ? (
-        <Documents index={info.loaded.value} branch={branch} />
+      ) : tab === "rows" ? (
+        <IndexRows index={info.loaded.value} branch={branch} />
       ) : tab === "branches" ? (
         <Branches index={index} branches={branches} onPick={setBranch} />
       ) : (

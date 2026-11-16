@@ -6,20 +6,28 @@ description: Run the API, the console and everything they need on one machine.
 
 Run Skywake on a single machine with one command:
 
-```bash
+```bash norun
 git clone https://github.com/skywakehq/skywake && cd skywake
 scripts/start.sh
 ```
 
 It installs Docker if it is missing (asking first), writes `.env` with every secret filled in, builds the images, starts everything and waits until it answers: the console on `http://localhost:3100`, the API on `:8080`. Docker needs about 6 GB of memory to build; on a Mac with Colima, the script offers to give it that. `scripts/start.sh stop` stops it and keeps the data. If a port is taken, set `CONSOLE_PORT`, `API_PORT` or `ZERO_PORT` in `.env` and run it again.
 
-The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment and a filesystem, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key.
+The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key, as `SKYWAKE_URL` and `SKYWAKE_API_KEY`. Disks and indexes are created by the first write.
+
+To use the CLI with this server, sign in on a profile of its own:
+
+```bash norun
+skywake login --profile local --url http://localhost:8080
+```
+
+The CLI shows a code and opens the console at `/cli/CODE`, where you allow it. Commands with `--profile local` (or `SKYWAKE_PROFILE=local`) then use this server.
 
 ## Without the source
 
 Every release publishes the images and a compose file that uses them, so a server needs only three files:
 
-```bash
+```bash norun
 base=https://github.com/skywakehq/skywake/releases/latest/download
 curl -LO $base/compose.yaml -LO $base/roles.sh -L -o .env $base/compose.env.example
 # fill in the secrets in .env, then:
@@ -60,18 +68,18 @@ The bundled object storage server is fine for trying Skywake. For real use, poin
 
 ## On a server
 
-Put the console, the API and zero-cache behind HTTPS, and set `CONSOLE_URL`, `API_URL` and `ZERO_URL` to the addresses people use. To change ports, set `CONSOLE_PORT`, `API_PORT` and `ZERO_PORT`. Port 4848 must stay public, because browsers sync through it. Never let Postgres be reached from outside the compose network. If a proxy sits in front of the console, set `TRUSTED_PROXIES` to its address, so that the [IP allowlist](../security/ip-allowlist.mdx) sees people's own addresses.
+Put the console, the API and zero-cache behind HTTPS, and set `CONSOLE_URL`, `API_URL` and `ZERO_URL` to the addresses people use. The API takes the console's address from `CONSOLE_URL` (or `SKYWAKE_API_CONSOLE_URL`) for `skywake login` links. The published compose file doesn't pass it on yet, so there the CLI prints the code and you open `/cli` in the console yourself. To change ports, set `CONSOLE_PORT`, `API_PORT` and `ZERO_PORT`. Port 4848 must stay public, because browsers sync through it. Never let Postgres be reached from outside the compose network. If a proxy sits in front of the console, set `TRUSTED_PROXIES` to its address, so that the [IP allowlist](../security/ip-allowlist.mdx) sees people's own addresses.
 
 ## Optional
 
 Set these only when you need the feature.
 
-| Variable                                               | What it does                                                                                                |
-| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                          |
-| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, to give [index vectors as text](../indexes/embeddings-and-rerank.mdx). |
-| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                  |
-| `SKYWAKE_API_PROVIDERS`                                | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.            |
+| Variable                                               | What it does                                                                                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                                                      |
+| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, so `query("words")` searches indexes and disks by [meaning](../indexes/embeddings-and-rerank.mdx). |
+| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                                              |
+| `SKYWAKE_API_PROVIDERS`                                | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.                                        |
 
 ## Health and metrics
 
@@ -79,7 +87,7 @@ Set these only when you need the feature.
 
 ## Update
 
-```bash
+```bash norun
 git pull
 scripts/start.sh
 ```

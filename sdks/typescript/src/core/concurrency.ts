@@ -1,7 +1,5 @@
-/** How many reads or writes the helpers that move many files run at once. */
 export const CONCURRENCY = 8;
 
-/** Runs `work` on every item, at most `limit` at a time, and keeps their order. */
 export async function mapConcurrently<T, R>(
   items: readonly T[],
   limit: number,

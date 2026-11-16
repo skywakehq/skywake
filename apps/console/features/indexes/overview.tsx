@@ -39,13 +39,19 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
         <Status stats={stats} index={index.name} linked={linked} />
         <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3">
           <Figure
-            label={linked ? "Passages" : "Documents"}
+            label={linked ? "Passages" : "Rows"}
             value={stats ? stats.rows.toLocaleString() : undefined}
           />
           <Figure label="Size" value={stats ? bytes(stats.bytes) : undefined} />
           <Figure
             label="Search by"
-            value={vectors.length ? (model ? "Meaning and words" : "Vectors and words") : "Words"}
+            value={
+              vectors.length
+                ? model
+                  ? "Meaning and keywords"
+                  : "Vectors and keywords"
+                : "Keywords"
+            }
             small
           />
         </div>
@@ -94,7 +100,7 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
           <Row key={column.name} name={column.name} detail={column.type} />
         ))}
         {vectors.length + shown.length === 0 && (
-          <p className="px-4 py-3 text-sm text-muted-foreground">No attributes yet.</p>
+          <p className="px-4 py-3 text-sm text-muted-foreground">No fields yet.</p>
         )}
       </Panel>
       <p className="text-xs text-faint">
@@ -124,15 +130,13 @@ function Status({
       {empty ? "Empty" : "Searchable"}
       {disk && (
         <span className="text-muted-foreground">
-          · kept in sync with{" "}
+          · search for disk{" "}
           <Link href={nsPath(disk, "search")} className="text-foreground hover:underline">
             {nameInEnv(disk)}
           </Link>
         </span>
       )}
-      {!disk && empty && (
-        <span className="text-muted-foreground">· write documents or link a disk to fill it</span>
-      )}
+      {!disk && empty && <span className="text-muted-foreground">· write rows to fill it</span>}
     </p>
   );
 }
@@ -168,8 +172,8 @@ type Measure = "queries" | "writes" | "rows" | "bytes";
 
 const MEASURES: { value: Measure; label: string; note: string }[] = [
   { value: "queries", label: "Queries", note: "on every branch" },
-  { value: "writes", label: "Writes", note: "documents written and deleted, every branch" },
-  { value: "rows", label: "Rows", note: "live documents of main" },
+  { value: "writes", label: "Writes", note: "rows written and deleted, every branch" },
+  { value: "rows", label: "Rows", note: "live rows of main" },
   { value: "bytes", label: "Size", note: "stored bytes of main" },
 ];
 

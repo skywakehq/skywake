@@ -1,148 +1,120 @@
 ---
 title: Filters
 icon: Funnel
-description: Narrow any query by attributes and ids, and let selective filters read only the rows they match.
+description: Narrow any query by fields and ids, sort rows by a field, and let selective filters read only the rows they match.
 ---
 
-Add a filter when you only want results whose attributes or ids meet some conditions, such as one tag and a price below 10.
+Add a filter when you only want rows whose fields meet some conditions, such as one category and a price below 130. A filter is a plain object.
 
-```json title="filter"
-{
-  "and": [
-    { "tag": { "in": ["billing", "accounts"] } },
-    { "price": { "lt": 10 } },
-    { "not": { "sku": { "glob": "tmp-*" } } }
-  ]
-}
-```
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-1/filters.ts
+</include>
 
-```ts tab="TypeScript"
-const hits = await index.query({
-  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
-  filter: { and: [{ tag: { in: ["billing", "accounts"] } }, { price: { lt: 10 } }] },
-});
-```
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-1/filters.py
+</include>
 
-```py tab="Python"
-hits = index.query(
-    "embedding",
-    [0.1, 0.2, 0.3],
-    filter={"and": [{"tag": {"in": ["billing", "accounts"]}}, {"price": {"lt": 10}}]},
-)
-```
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/indexes-1/filters.sh
+</include>
 
-```bash tab="CLI"
-skywake index query prod/products --vector '[0.1, 0.2, 0.3]' -f '(tag = billing or tag = accounts) and price < 10'
-```
-
-The same filter works in [`query`](./vector.mdx), [`search`](./full-text.mdx), [`hybrid`](./hybrid.mdx), [`rank`](./sparse-and-late-interaction.mdx), [`order`](#order-by-an-attribute), [`aggregate`](./aggregations.mdx), the recall check, `deleteBy`, `patchBy` and [write conditions](./write.mdx#conditional-writes).
+The same filter works in `query`, `count`, `aggregate`, `rows`, `update` and `delete`. A query with a filter and no text lists the matching rows.
 
 ## Shape
 
-A filter is an object whose keys are keywords or attribute names:
+A filter is an object whose keys are keywords or field names:
 
-| Form                       | Holds when                |
-| -------------------------- | ------------------------- |
-| `{and: [f, ..]}`           | Every filter holds.       |
-| `{or: [f, ..]}`            | Any filter holds.         |
-| `{not: f}`                 | The filter doesn't hold.  |
-| `{attribute: {op: value}}` | The comparison holds.     |
-| `{id: {op: value}}`        | The document id compares. |
+| Form                       | Holds when                  |
+| -------------------------- | --------------------------- |
+| `{ field: value }`         | The field equals the value. |
+| `{ field: { op: value } }` | The comparison holds.       |
+| `{ and: [f, ...] }`        | Every filter holds.         |
+| `{ or: [f, ...] }`         | Any filter holds.           |
+| `{ not: f }`               | The filter doesn't hold.    |
+| `{ id: { op: value } }`    | The row's id compares.      |
 
-When one object has several keys, all of them must hold. A document that doesn't have the attribute fails every comparison on it.
+When one object has several keys, all of them must hold. A row that doesn't have the field fails every comparison on it.
 
 ## Operators
 
-| Op                             | On                  | Value                       |
-| ------------------------------ | ------------------- | --------------------------- |
-| `eq`, `ne`                     | any filterable type | one value                   |
-| `lt`, `lte`, `gt`, `gte`       | any but `bool`      | one value                   |
-| `in`, `not_in`                 | any filterable type | a non-empty list            |
-| `contains_all`, `contains_any` | lists only          | a non-empty list            |
-| `glob`, `iglob`, `regex`       | `string`, `strings` | a pattern                   |
-| `fuzzy`                        | `string`, `strings` | `{text, edits, ignoreCase}` |
-| `exists`                       | any attribute       | `true` or `false`           |
+| Op                             | On                  | Value                         |
+| ------------------------------ | ------------------- | ----------------------------- |
+| `eq`, `ne`                     | any filterable type | one value                     |
+| `lt`, `lte`, `gt`, `gte`       | any but `bool`      | one value                     |
+| `in`, `not_in`                 | any filterable type | a non-empty list              |
+| `contains`                     | lists               | one value                     |
+| `contains_all`, `contains_any` | lists               | a non-empty list              |
+| `glob`, `iglob`, `regex`       | strings             | a pattern                     |
+| `fuzzy`                        | strings             | `{ text, edits, ignoreCase }` |
+| `exists`                       | any field           | `true` or `false`             |
 
-- On a list attribute (`strings`, `ints`, `numbers`), an operator holds if it holds for any item. To match several items, use `contains_all` or `contains_any`.
+- On a list field (`strings`, `ints`, `numbers`), an operator holds if it holds for any item. `contains` holds when the list has the value; to match several items, use `contains_all` or `contains_any`.
 - `iglob` is `glob` that ignores case.
 - `fuzzy` holds when the whole value is within `edits` (0 to 2, 1 by default) of `text`. One edit is a letter added, removed or changed, or two letters swapped. `ignoreCase` is `false` by default.
-- `exists: true` holds when a document has the attribute, `exists: false` when it does not.
+- `exists: true` holds when a row has the field, `exists: false` when it does not.
 - `bool` takes only `eq`, `ne` and `in`.
 - `datetime` takes an RFC 3339 time or milliseconds since 1970.
-- `id` takes `eq`, `ne`, `in` and `not_in`, and also `lt`, `lte`, `gt` and `gte`, which compare in id order. Numbers sort before strings. To page through every document, order by `id` and filter with `gt` set to the last id you saw.
-- `sparse` and `vectors` attributes can't be filtered.
-- A `text` attribute takes [text filters](./full-text.mdx#text-filters) in a search, and `exists` anywhere. A `filterable` one also takes the operators of a string, applied to its whole value.
+- `id` takes `eq`, `ne`, `in` and `not_in`, and also `lt`, `lte`, `gt` and `gte`, which compare in id order. Numbers sort before strings.
+- `sparse` and `vectors` fields can't be filtered.
+- A `text` field takes the operators of a string on its whole value when it is `filterable`, which inferred text fields are. With `mode: "keywords"` it also takes [text filters](./full-text.mdx#text-filters) such as `phrase`.
+
+## Sort by a field
+
+To list rows in the order of a field instead of by score, pass `sort` and no text. The keys of `sort` are fields, or `id`, each `"asc"` or `"desc"`; later keys break ties.
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-1/sort.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-1/sort.py
+</include>
+
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/indexes-1/sort.sh
+</include>
+
+Rows without the field come last. You can't sort by a list. A query with no text, no vector and no `sort` lists rows in id order.
+
+## In the CLI
+
+`skywake query --filter` takes filters written as words, which are quicker to type than JSON:
+
+```text
+category = shoes and price < 130
+(category = hats or price >= 120) and not in_stock = false
+category in (hats, shoes, 'rain gear')    category not in (bags)    category != hats
+```
+
+The operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `in` and `not in`. A value is a number, `true`, `false`, a word or a quoted string. `and` binds tighter than `or`. For the other operators, pass JSON in the object form, as in `'{"tags": {"contains": "sale"}}'`.
 
 ## Errors
 
-If a filter doesn't fit the schema, the request fails with `400`, and `path` holds the JSON path of the bad part, such as `filter.and[1].price.lt`. The SDKs raise it as a `SkywakeError` with `path` set.
+If a filter doesn't fit the schema, the call fails with `InvalidRequest`, and the error's `path` points at the bad part, such as `filter.price.lt`.
 
 ## Filter-first search
 
-A vector query with a filter normally walks the nearest clusters and drops the rows that fail the filter. That does a lot of extra work when the filter matches very few documents, for example one tenant out of many. In that case the query can instead read just the matching rows.
+A search by meaning with a filter normally walks the nearest clusters and drops the rows that fail the filter. That does a lot of extra work when the filter matches very few rows, for example one tenant out of many. In that case the query can instead read just the matching rows.
 
-You turn this on per attribute with [`filter_index`](./schemas.mdx#filter-index):
+Turn this on per field with [`filter_index`](./schemas.mdx#filter-index), in the schema or later with `configure`:
 
-```json title="PATCH /v1/indexes/prod%2Fproducts"
+```json title="PATCH /v2/indexes/products"
 { "attributes": [{ "name": "tenant", "type": "string", "filter_index": true }] }
 ```
 
 The next build creates the filter index. After that, a query reads only the matching rows when all of these are true:
 
-- every attribute its filter names has `filter_index`,
-- the filter, or one part of its `and`, is an `eq`, `in`, `lt`, `lte`, `gt` or `gte` on one of them,
-- that part matches about 0.3% of the built rows or fewer (the cutoff is never below 4,096 rows or above 100,000), and
-- the query sets no `probe`.
+- every field its filter names has `filter_index`,
+- the filter, or one part of its `and`, is an `eq`, `in`, `lt`, `lte`, `gt` or `gte` on one of them, and
+- that part matches about 0.3% of the built rows or fewer (the cutoff is never below 4,096 rows or above 100,000).
 
 Otherwise the query runs as usual. Either way, every hit passes the whole filter.
-
-`filter_index` works only on an attribute with a single value, so not on a list, `sparse` or `vectors`.
-
-## Order by an attribute
-
-When you want documents sorted by a value and have no vector to search with, use [`POST .../order`](/reference/api/indexes/orderDocuments). It returns the documents that pass a filter, sorted by an attribute or by `id`.
-
-```ts tab="TypeScript"
-const rows = await index.order({
-  by: "price",
-  descending: true,
-  topK: 20,
-  filter: { tag: { eq: "billing" } },
-});
-```
-
-```py tab="Python"
-rows = index.order("price", descending=True, top_k=20, filter={"tag": {"eq": "billing"}})
-```
-
-| Field                                         | Default | Meaning                                                    |
-| --------------------------------------------- | ------- | ---------------------------------------------------------- |
-| `by`                                          |         | `id`, or an attribute that is not a list.                  |
-| `descending`                                  | `false` | Sort from highest to lowest.                               |
-| `thenBy`                                      |         | Up to 7 more `{by, descending}`, for ties.                 |
-| `missingLowest`                               | `false` | Documents without the attribute sort as the lowest values. |
-| `topK`                                        | `10`    | How many documents to return, 1 to 1000.                   |
-| `offset`                                      | `0`     | How many documents to skip, up to 10000.                   |
-| `filter`, `include`, `exclude`, `consistency` |         | As in [vector search](./vector.mdx#fields).                |
-
-Documents without the attribute come last, unless you set `missingLowest`.
-
-## In the CLI
-
-[`skywake index query -f`](/reference/cli/index/query) takes filters written as words, which are quicker to type than JSON:
-
-```text
-tag = billing and price < 10
-(tag = a or tag = b) and not live = false
-tag in (a, b, 'c d')    tag not in (x)    tag != x
-```
-
-The operators are `=`, `!=`, `<`, `<=`, `>`, `>=`, `in` and `not in`. A value is a number, `true`, `false`, a word or a quoted string. `and` binds tighter than `or`. You can also pass JSON in the API's form, as in `'{"price": {"lt": 10}}'`.
 
 ## Next
 
 <Cards>
   <Card href="./aggregations.mdx" />
   <Card href="./write.mdx" />
+  <Card href="/reference/cli/query" />
   <Card href="/reference/sdk/filter" />
 </Cards>

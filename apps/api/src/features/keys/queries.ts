@@ -1,16 +1,15 @@
-import type { Role } from "@skywake/contract";
+import { patternOfScope, type KeyScope, type Role } from "@skywake/contract";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { roleFrom } from "../../auth/roles.ts";
 import type { Db } from "../../db/client.ts";
 import { keys } from "../../db/schema.ts";
 
-export interface NewKeyRow {
+export interface NewKeyRow extends KeyScope {
   id: string;
   hash: Buffer;
   name: string;
   role: Role;
-  namespaces: string;
   expires: Date | null;
   createdBy: string | null;
   createdByEmail: string | null;
@@ -18,7 +17,6 @@ export interface NewKeyRow {
 
 export const TOUCH_MS = 60_000;
 
-/** When a new key expires: in `days`, but never after the key that makes it. */
 export function expiresIn(days: number | undefined, limit: Date | null) {
   const wanted = days === undefined ? null : new Date(Date.now() + days * 86_400_000);
   if (!limit) return wanted;
@@ -26,7 +24,7 @@ export function expiresIn(days: number | undefined, limit: Date | null) {
 }
 
 export async function create(db: Db, org: string, key: NewKeyRow) {
-  await db.insert(keys).values({ ...key, org });
+  await db.insert(keys).values({ ...key, org, namespaces: patternOfScope(key) });
 }
 
 export async function list(db: Db, org: string) {
@@ -35,6 +33,8 @@ export async function list(db: Db, org: string) {
     id: row.id,
     name: row.name,
     role: roleFrom(row.role),
+    environment: row.environment,
+    only: row.only,
     namespaces: row.namespaces,
     expires: row.expires?.toISOString() ?? null,
     last_used: row.lastUsed?.toISOString() ?? null,
@@ -52,10 +52,6 @@ export async function remove(db: Db, org: string, id: string) {
   return removed.length > 0;
 }
 
-/**
- * Deletes every key `maker` made in the organization, then the keys those
- * keys made, and so on. Returns how many went.
- */
 export async function removeMadeBy(db: Db, org: string, maker: string) {
   let makers = [maker];
   let count = 0;
@@ -77,7 +73,8 @@ export async function find(db: Db, id: string) {
     org: row.org,
     hash: row.hash,
     role: roleFrom(row.role),
-    namespaces: row.namespaces,
+    environment: row.environment,
+    only: row.only,
     expires: row.expires,
     lastUsed: row.lastUsed?.getTime() ?? 0,
   };

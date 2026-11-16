@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { scopeOfPattern } from "@skywake/contract";
 import { eq } from "drizzle-orm";
 
 import { keyId, newKey } from "../src/auth/keys.ts";
-import { matches } from "../src/auth/roles.ts";
+import { mayUse } from "../src/auth/roles.ts";
 import { loadConfig } from "../src/config.ts";
 import { rateLimits } from "../src/db/schema.ts";
 import { addressGroup } from "../src/http/rate-limit.ts";
@@ -205,15 +206,25 @@ test("key expiry is a whole number of days", { skip }, async () => {
   assert.equal(made.status, 201);
 });
 
-test("key scopes match a name or a prefix", () => {
-  assert.ok(matches("*", "prod/app"));
-  assert.ok(matches("prod/*", "prod/app"));
-  assert.ok(!matches("prod/*", "staging/app"));
-  assert.ok(matches("prod/app", "prod/app"));
-  assert.ok(!matches("prod/app", "prod/app2"));
-  assert.ok(matches("prod/*", "prod/app/worker"));
-  assert.ok(!matches("prod*", "production/app"));
-  assert.ok(!matches("prod*", "prod/app"));
+test("key scopes match by environment, then by name or prefix", () => {
+  const caller = (pattern: string) => ({
+    org: "o",
+    role: "read" as const,
+    actor: "key:k",
+    expires: null,
+    ...scopeOfPattern(pattern),
+  });
+  assert.ok(mayUse(caller("*"), "prod/app"));
+  assert.ok(mayUse(caller("prod/*"), "prod/app"));
+  assert.ok(!mayUse(caller("prod/*"), "staging/app"));
+  assert.ok(mayUse(caller("prod/app"), "prod/app"));
+  assert.ok(!mayUse(caller("prod/app"), "prod/app2"));
+  assert.ok(mayUse(caller("prod/*"), "prod/app/worker"));
+  assert.ok(!mayUse(caller("prod/*"), "app"));
+  assert.ok(mayUse(caller("app"), "app"));
+  assert.ok(!mayUse(caller("app"), "prod/app"));
+  assert.ok(mayUse({ ...caller("prod/*"), only: ["docs-*"] }, "prod/docs-v2"));
+  assert.ok(!mayUse({ ...caller("prod/*"), only: ["docs-*"] }, "prod/app"));
 });
 
 test("key scopes are whole parts of names", { skip }, async () => {

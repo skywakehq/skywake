@@ -5,22 +5,22 @@ import { useState } from "react";
 import { Link } from "@/components/shell/router";
 import { Button, Empty, Glide, IndexMark, Page, Rows } from "@/components/kit";
 import { city } from "@/features/environments/regions";
-import { envOf, nameInEnv } from "@/lib/names";
-import { indexApi, indexPath } from "@/lib/paths";
-import { type IndexInfo, bytes, indexUrl, useApi } from "./api";
+import { namespaceName } from "@/lib/names";
+import { indexPath, v2Api } from "@/lib/paths";
+import { type IndexInfo, type IndexSummary, bytes, indexUrl, useApi, useEveryPage } from "./api";
 import { NewIndex } from "./new-index";
 
 /** An environment's search indexes, one row each. */
 export function Indexes({ env }: { env: string }) {
-  const { loaded, reload } = useApi<IndexInfo[]>(indexApi());
+  const { loaded, reload } = useEveryPage<IndexSummary>(v2Api(env, "indexes"));
   const [creating, setCreating] = useState(false);
-  const shown = loaded.state === "done" ? loaded.value.filter((i) => envOf(i.name) === env) : [];
+  const shown = loaded.state === "done" ? loaded.value : [];
 
   return (
     <Page
       eyebrow={env}
       title="Indexes"
-      description="Vectors and attributes, searched with filters. Each index has branches, like a disk."
+      description="Rows of fields and vectors, searched by meaning, keywords and filters. Each index has branches, like a disk."
       actions={
         <Button
           leadingIcon={Plus}
@@ -43,19 +43,19 @@ export function Indexes({ env }: { env: string }) {
             <span className="w-28 max-md:hidden">Region</span>
             <span className="w-24 text-right">Rows</span>
             <span className="w-24 text-right max-sm:hidden">Size</span>
-            <span className="w-72 max-lg:hidden">Vector columns</span>
+            <span className="w-72 max-lg:hidden">Vector fields</span>
           </div>
           <Glide className="divide-y divide-border/60">
             {shown.map((index) => (
-              <IndexRow key={index.name} index={index} />
+              <IndexRow key={index.name} env={env} index={index} />
             ))}
           </Glide>
         </div>
       ) : (
         <div className="-mx-5">
-          <Empty title={`No indexes in ${env}`} columns={["Index", "Documents", "Updated"]}>
+          <Empty title={`No indexes in ${env}`} columns={["Index", "Rows", "Updated"]}>
             <p>
-              An index holds documents with vectors and text. Make one, write to it, then query it.
+              An index holds rows of fields, vectors and text. Make one, write to it, then query it.
             </p>
             <Button
               leadingIcon={Plus}
@@ -73,17 +73,18 @@ export function Indexes({ env }: { env: string }) {
   );
 }
 
-function IndexRow({ index }: { index: IndexInfo }) {
-  // The list has no counts; each row asks for its own.
-  const { loaded } = useApi<IndexInfo>(indexUrl(index.name));
-  const stats = loaded.state === "done" ? loaded.value.stats : undefined;
+function IndexRow({ env, index }: { env: string; index: IndexSummary }) {
+  const full = namespaceName(env, index.name);
+  const { loaded } = useApi<IndexInfo>(indexUrl(full));
+  const info = loaded.state === "done" ? loaded.value : undefined;
+  const stats = info?.stats;
   const count = (value?: number) =>
     stats === undefined ? "…" : stats === null || value === undefined ? "—" : value;
   return (
-    <Link href={indexPath(index.name)} data-glide className="flex h-12 items-center gap-4 px-4">
+    <Link href={indexPath(full)} data-glide className="flex h-12 items-center gap-4 px-4">
       <span className="flex min-w-0 flex-1 items-center gap-3">
-        <IndexMark name={index.name} />
-        <span className="truncate text-sm font-medium">{nameInEnv(index.name)}</span>
+        <IndexMark name={full} />
+        <span className="truncate text-sm font-medium">{index.name}</span>
       </span>
       <span
         title={index.region}
@@ -96,12 +97,13 @@ function IndexRow({ index }: { index: IndexInfo }) {
         {stats ? bytes(stats.bytes) : count()}
       </span>
       <span className="w-72 truncate text-xs text-muted-foreground max-lg:hidden">
-        {[
-          ...index.schema.vectors.map((v) => `${v.name} ${v.dims} · ${v.metric}`),
-          ...index.schema.attributes
-            .filter((a) => a.type === "text")
-            .map((a) => `${a.name} · text`),
-        ].join(", ")}
+        {info &&
+          [
+            ...info.schema.vectors.map((v) => `${v.name} ${v.dims} · ${v.metric}`),
+            ...info.schema.attributes
+              .filter((a) => a.type === "text")
+              .map((a) => `${a.name} · text`),
+          ].join(", ")}
       </span>
     </Link>
   );

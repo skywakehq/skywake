@@ -6,35 +6,33 @@ description: Reserve servers that keep an index open and on disk, so its queries
 
 Pin an index when its queries must stay fast all the time and should never wait for data to load from object storage.
 
-```json title="PATCH /v1/indexes/prod%2Fproducts"
-{ "pinned": { "replicas": 2 } }
-```
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-2/pin.ts
+</include>
 
-```ts tab="TypeScript"
-await sky.indexes.update("prod/products", { pinned: { replicas: 2 } });
-const { pinning } = await sky.indexes.get("prod/products");
-```
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-2/pin.py
+</include>
 
-```py tab="Python"
-sky.indexes.update("prod/products", replicas=2)
-pinning = sky.indexes.get("prod/products")["pinning"]
-```
+<include lang="bash" meta='tab="HTTP"'>
+  ../../../examples/indexes-2/pin.sh
+</include>
 
-Any API server can serve any index, and opens it when a request needs it. A pinned index also gets 1 to 8 reserved servers, called its **replicas**. Each replica keeps the index open, never evicts it, and keeps every object of its current version on local disk.
+Any API server can serve any index, and opens it when a request needs it. A pinned index also gets 1 to 8 reserved servers, called its **replicas**. Each replica keeps the index open, never evicts it, and keeps everything its current version needs on local disk.
 
 ## Pin, repin, unpin
 
-| Do                 | HTTP body                                         | TypeScript                                                      | Python                                      |
-| ------------------ | ------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
-| Pin when making it | `"pinned": {"replicas": 2}` in `POST /v1/indexes` | `sky.indexes.create(name, schema, { pinned: { replicas: 2 } })` | `sky.indexes.create(name, ..., replicas=2)` |
-| Change the count   | `{"pinned": {"replicas": 3}}`                     | `sky.indexes.update(name, { pinned: { replicas: 3 } })`         | `sky.indexes.update(name, replicas=3)`      |
-| Unpin              | `{"pinned": null}`                                | `sky.indexes.update(name, { pinned: null })`                    | `sky.indexes.update(name, replicas=None)`   |
+| Do               | TypeScript                               | Python                              | HTTP: `PATCH /v2/indexes/{index}` |
+| ---------------- | ---------------------------------------- | ----------------------------------- | --------------------------------- |
+| Pin              | `configure({ pinned: { replicas: 2 } })` | `configure(pinned={"replicas": 2})` | `{"pinned": {"replicas": 2}}`     |
+| Change the count | `configure({ pinned: { replicas: 3 } })` | `configure(pinned={"replicas": 3})` | `{"pinned": {"replicas": 3}}`     |
+| Unpin            | `configure({ pinned: null })`            | not yet; use HTTP                   | `{"pinned": null}`                |
 
-The change takes effect at once, on every branch. A [copy](./create.mdx#copy-an-index) of a pinned index is not pinned.
+The change takes effect at once, on every branch. A [copy](./create.mdx) of a pinned index is not pinned. The CLI has no command for it.
 
 ## Where it is pinned
 
-[`GET /v1/indexes/{index}`](/reference/api/indexes/getIndex) returns `pinned`, which is what you asked for, and `pinning`, which is what is running now:
+v2's `info()` doesn't show pinning yet. `GET /v1/indexes/{index}` (the last call in the HTTP example) returns `pinned`, what you asked for, and `pinning`, what is running now. `/v1` goes away one release after v2.
 
 ```json
 {
@@ -48,33 +46,33 @@ The change takes effect at once, on every branch. A [copy](./create.mdx#copy-an-
 }
 ```
 
-| Field       | Meaning                                                     |
-| ----------- | ----------------------------------------------------------- |
-| `server`    | The API server holding the replica.                         |
-| `warm`      | Whether every object of the current version is on its disk. |
-| `in_flight` | Queries it is serving now.                                  |
+| Field       | Meaning                                                      |
+| ----------- | ------------------------------------------------------------ |
+| `server`    | The API server holding the replica.                          |
+| `warm`      | Whether everything the current version needs is on its disk. |
+| `in_flight` | Queries it is serving now.                                   |
 
-If fewer servers are running than the replicas you asked for, you get fewer replicas. `pinning` is `null` when the index is not pinned.
+If fewer servers are running than the replicas you asked for, you get fewer replicas. On a single server, `replicas` is empty.
 
 ## How queries are routed
 
-- Reads on a pinned index ([`query`](./vector.mdx), [`search`](./full-text.mdx), [`hybrid`](./hybrid.mdx), [`multi`](./consistency-and-limits.mdx#many-requests-on-one-snapshot), `rank`, `order` and `aggregate`) go to the least busy replica. The `x-skywake-server` response header names the server that served the request.
-- If no replica responds, the server that received the request serves it itself.
-- Whenever `main` moves, each replica warms the index again.
+- Reads on a pinned index (`query`, `count`, `aggregate`) go to the least busy replica. The `x-skywake-server` response header names the server that served it.
+- If no replica responds, the server that got the request serves it itself.
+- Whenever `main` changes, each replica warms the index again.
 - Writes are not routed. Any server accepts them.
 
 ## Billing
 
-A pinned index is billed per GB-hour for each replica, instead of per query. Its queries do not count toward the bill.
+A pinned index is billed per GB-hour for each replica instead of per query. Its queries don't count toward the bill.
 
 ## Self-hosting
 
-Servers find each other through the database. Each server writes a heartbeat every 2 seconds, and any server seen in the last 10 seconds counts as live. Every server places each pinned index by rendezvous hashing over the live servers. This way all servers agree on the placement without a coordinator, and when a server joins or leaves, only the indexes placed on it move.
+Servers find each other through the database. Each server writes a heartbeat every 2 seconds, and a server seen in the last 10 seconds counts as live. Every server places each pinned index by rendezvous hashing over the live servers, so they all agree without a coordinator, and when a server joins or leaves, only the indexes placed on it move.
 
-| Variable                 | Meaning                                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_API_PEER_URL`   | How the other servers reach this one. `http://127.0.0.1:<port>` by default.                                           |
-| `SKYWAKE_API_PEER_TOKEN` | Shared by every server, at least 16 characters. Without it, no server passes queries to another or holds read leases. |
+| Variable                 | Meaning                                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_PEER_URL`   | How the other servers reach this one. `http://127.0.0.1:<port>` by default.                                   |
+| `SKYWAKE_API_PEER_TOKEN` | Shared by every server, at least 16 characters. Without it, no server passes queries on or holds read leases. |
 
 ## Next
 
@@ -82,5 +80,4 @@ Servers find each other through the database. Each server writes a heartbeat eve
   <Card href="./consistency-and-limits.mdx" />
   <Card href="../self-hosting/kubernetes.mdx" />
   <Card href="../benchmarks.mdx" />
-  <Card href="/reference/api/indexes/updateIndex" />
 </Cards>

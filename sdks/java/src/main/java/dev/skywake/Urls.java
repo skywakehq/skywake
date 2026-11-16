@@ -2,30 +2,44 @@ package dev.skywake;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/** Builds the API's URLs. */
 final class Urls {
     private Urls() {}
 
-    /** The base of every route: {@code url} with /v1, whether or not it ended with it. */
-    static String base(String url) {
-        String trimmed = url.replaceAll("/+$", "");
-        return (trimmed.endsWith("/v1") ? trimmed.substring(0, trimmed.length() - 3) : trimmed) + "/v1";
+    static String segment(Object name) {
+        return URLEncoder.encode(String.valueOf(name), StandardCharsets.UTF_8).replace("+", "%20");
     }
 
-    /** Keeps a name whole in a URL: index and branch names may hold /. */
-    static String escape(String name) {
-        return URLEncoder.encode(name, StandardCharsets.UTF_8).replace("+", "%20");
+    static String filePath(String path) {
+        return Arrays.stream(path.replaceFirst("^/+", "").split("/", -1))
+                .map(Urls::segment)
+                .collect(Collectors.joining("/"));
     }
 
     static String query(Map<String, ?> query) {
-        if (query == null || query.isEmpty()) {
+        if (query == null) {
             return "";
         }
-        return "?" + query.entrySet().stream()
-                .map(e -> escape(e.getKey()) + "=" + escape(String.valueOf(e.getValue())))
+        String joined = query.entrySet().stream()
+                .filter(entry -> entry.getValue() != null)
+                .map(entry -> segment(entry.getKey()) + "=" + segment(entry.getValue()))
                 .collect(Collectors.joining("&"));
+        return joined.isEmpty() ? "" : "?" + joined;
+    }
+
+    static String base(String url) {
+        return url.replaceAll("/+$", "").replaceAll("/v[12]$", "");
+    }
+
+    static String clean(String path) {
+        return path.replaceAll("^/+|/+$", "");
+    }
+
+    static String parent(String path) {
+        int slash = path.lastIndexOf('/');
+        return slash < 0 ? "" : path.substring(0, slash);
     }
 }

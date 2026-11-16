@@ -1,141 +1,80 @@
 ---
-title: Time travel and branches
+title: Branches and versions
 icon: Clock
-description: Fork branches without copying, list versions, restore an older one, merge back, and collect old data.
+description: Fork an index without copying, merge the fork back, list versions, and go back to an older one.
 ---
 
-Branches let you try changes on an index without touching the data everyone else reads. Fork a branch, write to it, and merge its writes back when you want to keep them. Because every change is kept as a version, you can also read or restore the index as it was earlier.
+Branches let you try changes on an index without touching the rows everyone else reads. Fork a branch, write to it, and merge it back when you want to keep the changes. Every change is kept as a version, so you can also go back to how the index was.
 
-```ts tab="TypeScript"
-const main = sky.index("prod/products");
-const trial = await main.fork("agents/try-1"); // nothing is copied
-await trial.upsert([{ id: 7, vectors: { embedding: [0.3, 0.2, 0.1] } }]);
-const added = await main.merge("agents/try-1"); // bring its writes back
-```
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-2/time-travel.ts
+</include>
 
-```py tab="Python"
-main = sky.index("prod/products")
-trial = main.fork("agents/try-1")  # nothing is copied
-trial.upsert([{"id": 7, "vectors": {"embedding": [0.3, 0.2, 0.1]}}])
-added = main.merge("agents/try-1")  # bring its writes back
-```
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-2/time-travel.py
+</include>
 
-```bash tab="CLI"
-skywake index fork prod/products agents/try-1 --from main
-skywake index upsert prod/products docs.jsonl -b agents/try-1
-skywake index branches prod/products
-```
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/indexes-2/time-travel.sh
+</include>
 
-Every index has a `main` branch. A branch is a line of versions, and every change to it makes a new version.
+Every index starts with a `main` branch. A branch is a line of versions, and every write to it makes a new version.
 
 ## Fork
 
-```json title="POST /v1/indexes/prod%2Fproducts/branches"
-{ "name": "agents/try-1", "from": "main" }
-```
+`fork(name)` makes a branch from the handle's branch and returns a handle to it. Nothing is copied, at any size. After the fork, each branch sees only its own writes.
 
-| Field  | Default  | Meaning                                     |
-| ------ | -------- | ------------------------------------------- |
-| `name` |          | The new branch, such as `agents/try-1`.     |
-| `from` | `main`   | The branch to fork.                         |
-| `at`   | its head | An older version of `from` to fork instead. |
-
-Forking copies nothing. After the fork, each branch sees only its own writes. Every read and write route takes the branch in its path: `/v1/indexes/{index}/branches/{branch}/...`. In the [SDKs](/reference/sdk/fork), `index.at("agents/try-1")` picks a branch.
-
-## Versions
-
-[`GET .../branches/{branch}/versions`](/reference/api/indexes/listIndexVersions) lists the branch's versions, newest first.
-
-```ts tab="TypeScript"
-const versions = await main.versions({ limit: 20 });
-// [{ version: "3f9a…", time: "2026-11-09T10:00:00Z", rows: 1200 }, ...]
-```
-
-```py tab="Python"
-versions = main.versions(limit=20)
-```
-
-Each entry has a `version` id, the `time` the branch reached that version, and `rows`, the number of rows a query found at that point. `limit` is 20 by default and at most 100. To get the next page, pass the last `version` you received as `after`.
-
-## Fork from the past
-
-To read the index as it was at an older version, without touching `main`, fork that version:
-
-```ts tab="TypeScript"
-const past = await main.fork("audit/oct-31", versions[5].version);
-```
-
-```py tab="Python"
-past = main.fork("audit/oct-31", version=versions[5]["version"])
-```
-
-## Restore
-
-[`POST .../restore`](/reference/api/indexes/restoreIndexBranch) moves the branch back to an older version. It does this by making a new version that holds that older version's documents, so the history stays and nothing is deleted.
-
-```ts tab="TypeScript"
-const now = await main.restore(versions[5].version);
-```
-
-```py tab="Python"
-now = main.restore(versions[5]["version"])
-```
+To work on a branch that already exists, get a handle with `sky.index("products", { branch: "draft" })` (Python: `sky.index("products", branch="draft")`). In the CLI, write `products@draft`. Every read and write takes the branch this way; no branch means `main`.
 
 ## Merge
 
-[`POST .../branches/{branch}/merge`](/reference/api/indexes/mergeIndexBranch) adds the writes of another branch to this one. It takes the writes that `from` made since it was forked, or since it was last merged here.
+`mergeInto("main")` (Python: `merge_into`) brings the fork's changes into another branch. It takes the writes the fork made since it was forked, or since it was last merged there, and returns `{ rows }`, the number of rows and deletes it brought in.
 
-```json title="POST /v1/indexes/prod%2Fproducts/branches/main/merge"
-{ "from": "agents/try-1" }
-```
+- If both branches wrote the same row, the fork's write wins. Merging an index never stops on a conflict.
+- Fields the fork added come along too.
+- `destroy()` on the fork's handle deletes the branch. You can't destroy `main` this way: `destroy()` on `main` deletes the whole index.
 
-- If both branches wrote the same document, the write from `from` wins.
-- Attributes that `from` added come along too.
-- It returns `{rows}`, the number of documents and deletes it added.
-- The next [build](./vector.mdx#builds) puts the merged documents into the clusters. Until then, they are searched exactly.
+`branches()` lists every branch with the branch it was forked from.
 
-## Retention and collect
+## Versions and restore
 
-`retention_days` on the index sets how long you can still go back to a version after it was replaced. It is `null` by default, which keeps every version.
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/indexes-2/versions.ts
+</include>
 
-```ts tab="TypeScript"
-await sky.indexes.update("prod/products", { retention_days: 30 });
-const op = await main.collect();
-```
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/indexes-2/versions.py
+</include>
 
-```py tab="Python"
-sky.indexes.update("prod/products", retention_days=30)
-op = main.collect()
-```
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/indexes-2/versions.sh
+</include>
 
-[`POST /v1/indexes/{index}/collect`](/reference/api/indexes/collectIndex) starts deleting data that no branch uses any more. It keeps every branch as it is, and every version that was replaced within `retention_days`. Data younger than eight days always stays, so writes that are still in progress are safe. It returns `202` with an operation you can follow.
+- `versions()` lists the branch's versions, newest first: `{ id, created, rows }`. The CLI shows them with `skywake log`.
+- `fork(name, { at })` forks an older version instead of the newest one. Use it to read the index as it was, without touching `main`.
+- `restore(versionOrTime)` makes the branch look like it did then. It takes a version id or a time (a `Date` in TypeScript, a `datetime` in Python, or a string such as `2026-11-01T12:00:00Z`). It adds a new version, so nothing is lost and you can restore again.
 
-Once collect has run, a version replaced more than `retention_days` ago may be gone, and a request to restore it fails.
+<Callout type="info">
+  v2 has no `at` on index queries yet. To query the past, fork at the version and query the fork.
+</Callout>
 
-## Delete a branch
+## Retention
 
-```ts tab="TypeScript"
-await sky.index("prod/products").at("agents/try-1").deleteBranch();
-```
+`retentionDays` sets how long a replaced version can still be restored. By default every version is kept. Set it with `configure({ retentionDays: 30 })` (Python: `configure(retention_days=30)`).
 
-```py tab="Python"
-sky.index("prod/products").at("agents/try-1").delete_branch()
-```
+Deleting the data no version needs any more is a `/v1` call with no v2 version yet; `/v1` goes away one release after v2. It keeps every branch, every version replaced within `retention_days`, and anything younger than eight days. It returns an operation that runs in the background.
 
-```bash tab="CLI"
-skywake index delete-branch prod/products agents/try-1
-```
+<include lang="bash" meta='tab="HTTP"'>
+  ../../../examples/indexes-2/collect.sh
+</include>
 
-You can't delete `main`. It exists for as long as the index does.
-
-To copy a whole index instead of forking a branch, see [copy an index](./create.mdx#copy-an-index).
+To copy a whole index instead of forking a branch, see [copy an index](./create.mdx).
 
 ## Next
 
 <Cards>
   <Card href="./sync-with-branch.mdx" />
-  <Card href="./embeddings-and-rerank.mdx" />
   <Card href="../filesystem/branches.mdx" />
-  <Card href="/reference/cli/index/fork" />
-  <Card href="/reference/sdk/merge" />
+  <Card href="/reference/cli/fork" />
+  <Card href="/reference/cli/merge" />
 </Cards>

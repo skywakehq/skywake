@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/knowledge-base";
 
 export function KnowledgeBaseGuide({
   locale,
@@ -41,11 +42,10 @@ export function KnowledgeBaseGuide({
           ["start", "Why this is harder than it looks"],
           ["plan", "What we’re building"],
           ["save", "1. Put your docs in one place"],
-          ["index", "2. Make a search index next to them"],
-          ["fill", "3. Fill the index"],
-          ["tool", "4. Give your agent a search tool"],
-          ["update", "5. Keep it current"],
-          ["drafts", "6. Test big changes on a draft"],
+          ["index", "2. Turn on search next to them"],
+          ["tool", "3. Give your agent a search tool"],
+          ["update", "4. Keep it current"],
+          ["drafts", "5. Test big changes on a draft"],
           ["scale", "Growing to millions of docs"],
           ["questions", "Questions"],
         ]}
@@ -77,8 +77,8 @@ export function KnowledgeBaseGuide({
         <div>
           <Checklist
             items={[
-              "Your docs saved as a branch, with every change kept as a commit.",
-              "A search index next to them that finds answers by meaning and by exact words.",
+              "Your docs saved on a disk, with every change kept as a commit.",
+              "Search next to them that finds answers by meaning and by exact words.",
               "One search tool your agent can call, which tells you which file it used.",
               "A way to update a doc and have the agent see it right away.",
               "Drafts, so you can test big rewrites before customers see them.",
@@ -86,8 +86,8 @@ export function KnowledgeBaseGuide({
           />
         </div>
         <p>
-          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_URL</code> and{" "}
-          <code>SKYWAKE_KEY</code>, then install the SDK with <code>npm i @skywake/sdk</code>.
+          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_API_KEY</code>, then install the
+          SDK with <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Put your docs in one place" />
@@ -106,125 +106,45 @@ export function KnowledgeBaseGuide({
           ]}
         />
         <p>
-          We’ll save it as a branch called <code>main</code>. Think of a branch like a Git branch
-          for files: each save is a commit, and you can always go back and see what changed.
+          We’ll upload it to a disk called <code>help</code>. A disk holds files the way a Git
+          repository does: each save is a commit, and you can always go back and see what changed.
+          The upload lands on the disk’s first branch, <code>main</code>, as one commit.
         </p>
-        <Code
-          file="save-docs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const help = await sky.createNamespace("support/help");
-const main = await help.createBranch("main");
-await main.commitFolder("./help-center", { message: "Help center today" });
-`}
-        />
+        <Code file="save-docs.ts" code={code["save-docs.ts"]} />
         <p>
           That’s it. <code>main</code> is now the one true copy of your docs, stored in your own
           bucket.
         </p>
 
-        <Chapter id="index" step={2} title="Make a search index next to them" />
+        <Chapter id="index" step={2} title="Turn on search next to them" />
         <p>
-          Next, the index. For each doc it keeps two things: the <b>text</b>, so it can match exact
-          words, and a <b>vector</b>, a list of numbers that captures what the text means.
+          Next, search. A disk can keep a search index of its own files. For each doc it keeps two
+          things: the <b>text</b>, so it can match exact words, and a <b>vector</b>, a list of
+          numbers that captures what the text means.
         </p>
         <p>
           Why both? Customers ask “can I get my money back?” while your doc says “refund”. Search by
           meaning finds that. They also type “SSO” or an error code, and search by words finds that
           better. A good knowledge base needs both.
         </p>
-        <Code
-          file="create-index.ts"
-          code={`
-const search = await sky.indexes.create(
-  "support/help-search",
-  {
-    vectors: [
-      // The server makes the vectors with this model. No job to run.
-      {
-        name: "meaning",
-        dims: 1536,
-        embed: { model: "openai/text-embedding-3-small" },
-      },
-    ],
-    attributes: [
-      { name: "path", type: "string" },
-      { name: "text", type: "text" },
-    ],
-  },
-  { ifMissing: true },
-);
-`}
-        />
+        <Code file="create-index.ts" code={code["create-index.ts"]} />
         <p>
-          Notice the <code>embed</code> line. You name a model once, and from then on you send plain
-          text. The server makes the vectors for you.
+          Search is on by default when your environment has an embedding model, so this line only
+          makes sure. From now on the server indexes every file you commit, and makes the vectors
+          for you. There is no sync job to write.
         </p>
 
-        <Chapter id="fill" step={3} title="Fill the index" />
+        <Chapter id="tool" step={3} title="Give your agent a search tool" />
         <p>
-          Now we copy each doc into the index. <code>syncIndex</code> reads the branch and writes
-          one document per file. We tell it how to turn a file into a document: its path is the id,
-          and its text goes in both columns.
+          Your agent needs one tool: search the docs. <code>query</code> runs both kinds of search
+          in a single call. Docs found by both rank highest, so a question in the customer’s own
+          words still lands on the right page.
         </p>
-        <Code
-          file="sync.ts"
-          code={`
-import { syncIndex } from "@skywake/sdk";
-
-type DocFile = { path: string; bytes: Uint8Array };
-
-const document = ({ path, bytes }: DocFile) => {
-  const text = new TextDecoder().decode(bytes);
-  return {
-    id: path,
-    vectors: { meaning: text },
-    attributes: { path, text },
-  };
-};
-
-let synced = await syncIndex(main, search, { document });
-`}
-        />
+        <Code file="tool.ts" code={code["tool.ts"]} />
         <p>
-          The first run sends every file. It returns <code>synced.head</code>, the commit it synced
-          to. Keep that value. Next time you pass it back, and only the files that changed since
-          then are sent. Files you deleted are removed from the index too.
-        </p>
-
-        <Chapter id="tool" step={4} title="Give your agent a search tool" />
-        <p>
-          Your agent needs one tool: search the docs. We’ll run both kinds of search in a single
-          call, called a <b>hybrid</b> search. Docs found by both rank highest, so a question in the
-          customer’s own words still lands on the right page.
-        </p>
-        <Code
-          file="tool.ts"
-          code={`
-export async function searchDocs(question: string) {
-  const hits = await search.hybrid({
-    searches: {
-      meaning: {
-        vector: { column: "meaning", value: question },
-        topK: 30,
-      },
-      words: { query: question, topK: 30 },
-    },
-    topK: 5,
-  });
-  return hits.map((hit) => hit.id);
-}
-`}
-        />
-        <p>
-          Each hit’s id is the file’s path. Hand <code>searchDocs</code> to your agent as a tool,
-          let it read the files it gets back, and ask it to name the file it used.
+          Each hit is a file’s path and the part of it that matched. Hand <code>searchDocs</code> to
+          your agent as a tool, let it read the files it gets back with <code>help.read(path)</code>
+          , and ask it to name the file it used.
         </p>
         <Note title="Tip: always cite the file">
           <p>
@@ -233,65 +153,41 @@ export async function searchDocs(question: string) {
           </p>
         </Note>
 
-        <Chapter id="update" step={5} title="Keep it current" />
+        <Chapter id="update" step={4} title="Keep it current" />
         <p>
-          Here’s the part that broke in the old setup. The refund policy changes. Edit the doc,
-          commit, and sync from the last head:
+          Here’s the part that broke in the old setup. The refund policy changes. Write the new doc:
         </p>
-        <Code
-          file="update.ts"
-          code={`
-await main.write(
-  { "billing/refunds.md": "Annual plans can be refunded within 30 days." },
-  "Refunds: 30 days, not 60",
-);
-synced = await syncIndex(main, search, {
-  document,
-  since: synced.head,
-});
-`}
-        />
+        <Code file="update.ts" code={code["update.ts"]} />
         <p>
-          Only <code>billing/refunds.md</code> is sent again. Ask the agent the same question, and
-          the answer has changed:
+          That is the whole update. The write is a commit, and only <code>billing/refunds.md</code>{" "}
+          is indexed again. Ask the agent the same question a moment later, and the answer has
+          changed:
         </p>
         <Answers />
         <p>
-          Run the sync right after each commit, from the same code that makes the commit. There is
-          no separate job to watch, and no night when it quietly stops.
+          There is no separate job to run after each commit, no job to watch, and no night when it
+          quietly stops.
         </p>
 
-        <Chapter id="drafts" step={6} title="Test big changes on a draft" />
+        <Chapter id="drafts" step={5} title="Test big changes on a draft" />
         <p>
           Small edits can go straight to <code>main</code>. But say new pricing launches next month
           and half your billing docs will change. You want to see how the agent answers before any
           customer does.
         </p>
         <p>
-          Fork the docs and the index into a draft. A fork copies nothing, so it is instant even
-          with thousands of docs. Customers keep getting answers from <code>main</code> the whole
-          time.
+          Fork the disk into a draft, and change the docs there. A fork copies nothing, so it is
+          instant even with thousands of docs, and it brings its search with it. Customers keep
+          getting answers from <code>main</code> the whole time.
         </p>
-        <Code
-          file="draft.ts"
-          code={`
-const draft = await main.fork("drafts/new-pricing", synced.head);
-const draftSearch = await search.fork("drafts/new-pricing");
-
-// Edit files on the draft, then bring its index up to date.
-await syncIndex(draft, draftSearch, { document, since: synced.head });
-
-// Happy with the answers? Publish both together.
-const merged = await draft.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  await search.merge("drafts/new-pricing");
-}
-`}
-        />
+        <Code file="draft.ts" code={code["draft.ts"]} />
         <p>
-          Point a test agent at the draft and ask it the questions customers ask most. When the
-          answers read well, merge, and the new docs and their index go live at the same moment.
+          Give a test agent the same tool, with <code>draft.query</code> in place of{" "}
+          <code>help.query</code>, and ask it the questions customers ask most. When the answers
+          read well, merge:
         </p>
+        <Code file="publish.ts" code={code["publish.ts"]} />
+        <p>The new docs and their search go live at the same moment.</p>
 
         <Chapter id="scale" title="Growing to millions of docs" />
         <p>
@@ -300,8 +196,8 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>Syncs stay small.</b> Each sync sends only what changed, so a big knowledge base
-            costs no more to update than a small one.
+            <b>Updates stay small.</b> Each commit indexes only what changed, so a big knowledge
+            base costs no more to update than a small one.
           </li>
           <li>
             <b>Search stays fast.</b> A warm query over 10 million vectors takes about 10 ms.
@@ -321,29 +217,29 @@ if (merged.conflicts.length === 0) {
             [
               "Do I have to make the embeddings myself?",
               <p key="a">
-                No. You name a model on the index, send text, and the server embeds it. You can
-                still send your own vectors if you prefer.
+                No. The server embeds each file with your environment’s embedding model. If you want
+                to send your own vectors, use an index and upsert rows with a vector field.
               </p>,
             ],
             [
               "How fast does a change show up in search?",
               <p key="a">
-                As soon as the sync writes it. Search by words sees every document written,
-                including the newest ones.
+                Within moments of the commit. The server indexes each commit on its own, so there is
+                nothing for you to run.
               </p>,
             ],
             [
               "Can I see what the agent read last week?",
               <p key="a">
-                Yes. Every commit of the docs is kept, so you can open the exact version an answer
-                came from.
+                Yes. Every commit of the docs is kept, so you can read the exact version an answer
+                came from with <code>{`help.read(path, { at })`}</code>.
               </p>,
             ],
             [
               "What about very long docs?",
               <p key="a">
-                Split them into sections before you index them, one document per section, so each
-                hit points the agent to the right part of the page.
+                Each hit comes with the part of the file that matched, so the agent knows where to
+                look. Splitting a very long page into smaller files still helps.
               </p>,
             ],
           ]}

@@ -94,7 +94,7 @@ export function Branches({
         open={forking !== null}
         onOpenChange={(open) => !open && setForking(null)}
         title={`Fork ${forking ?? ""}`}
-        description="A new branch at the same documents. Nothing is copied; each sees only its own writes."
+        description="A new branch at the same rows. Nothing is copied; each sees only its own writes."
         label="Branch name"
         initial={`${forking ?? "main"}-try`}
         submit="Fork"

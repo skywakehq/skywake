@@ -44,7 +44,16 @@ function fail(message) {
   process.exit(1);
 }
 
-const result = spawnSync(binary(), process.argv.slice(2), { stdio: "inherit" });
-if (result.error) fail(result.error.message);
-if (result.signal) process.kill(process.pid, result.signal);
-process.exit(result.status ?? 1);
+function run() {
+  const result = spawnSync(binary(), process.argv.slice(2), { stdio: "inherit" });
+  if (result.error) fail(result.error.message);
+  if (result.signal) process.kill(process.pid, result.signal);
+  process.exit(result.status ?? 1);
+}
+
+if (process.argv[2] === "mcp") {
+  const server = require("node:path").join(__dirname, "../dist/mcp.js");
+  import(require("node:url").pathToFileURL(server).href).catch((error) => fail(error.message));
+} else {
+  run();
+}

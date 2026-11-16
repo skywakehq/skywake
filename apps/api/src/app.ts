@@ -1,4 +1,4 @@
-import { BASE_PATH, describe, files, indexes, info, routes } from "@skywake/contract";
+import { BASE_PATH, describe, files, indexes, info, routes, v2 } from "@skywake/contract";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -42,6 +42,7 @@ import { IndexUsage } from "./features/indexes/usage.ts";
 import { indexWritesFeature } from "./features/indexes/writes.ts";
 import { keysFeature } from "./features/keys/routes.ts";
 import { linksFeature } from "./features/links/routes.ts";
+import { loginsFeature } from "./features/logins/routes.ts";
 import { Syncer } from "./features/links/sync.ts";
 import { Deleter } from "./features/deletions/worker.ts";
 import { namespacesFeature } from "./features/namespaces/routes.ts";
@@ -61,12 +62,14 @@ import { identify } from "./http/identify.ts";
 import { PEER_HEADER } from "./http/peers.ts";
 import { clientOf, RateLimiter } from "./http/rate-limit.ts";
 import { Buckets } from "./features/environments/buckets.ts";
+import { v2App, v2NotFound } from "./v2/app.ts";
 
 const FEATURES: Feature[] = [
   orgsFeature,
   billingFeature,
   ssoFeature,
   keysFeature,
+  loginsFeature,
   auditFeature,
   environmentsFeature,
   namespacesFeature,
@@ -263,14 +266,30 @@ export function createApp(services: Services) {
     }),
   );
   app.use(
+    `${v2.BASE_PATH}/disks/:disk/uploads`,
+    bodyLimit({
+      maxSize: files.PART_MAX,
+      onError: (c) => errorBody(c, 413, "a part holds at most 16 MiB"),
+    }),
+  );
+  app.use(
+    `${v2.BASE_PATH}/indexes/:index/rows`,
+    bodyLimit({
+      maxSize: indexes.UPSERT_BYTES_MAX,
+      onError: (c) => errorBody(c, 413, "an upsert holds at most 32 MiB"),
+    }),
+  );
+  app.use(
     bodyLimit({
       maxSize: config.bodyLimit,
       onError: (c) => errorBody(c, 413, "the request is too large"),
     }),
   );
   app.route(BASE_PATH, api);
+  app.route(v2.BASE_PATH, v2App(services, api));
   app.route(PREFIX, compatApp(services));
   app.notFound((c) => {
+    if (c.req.path.startsWith(`${v2.BASE_PATH}/`)) return v2NotFound(c);
     const allowed = methodsOf(c.req.path);
     if (allowed.length === 0) return errorBody(c, 404, "no such route");
     c.header("Allow", allowed.join(", "));

@@ -1,56 +1,64 @@
 import type { Schemas } from "../core/api.js";
 
-export type Document = Schemas["Document"];
+export type Fields = Record<string, any>;
+
+export interface IndexRows {}
+
+export type RowsOf<N extends string> = N extends keyof IndexRows ? IndexRows[N] & Fields : Fields;
 export type DocId = Schemas["DocId"];
-export type IndexQuery = Schemas["Query"];
-export type IndexSearch = Schemas["Search"];
-export type IndexHybrid = Schemas["Hybrid"];
-export type Rerank = Schemas["Rerank"];
-export type DocumentPage = Schemas["DocumentPage"];
-export type IndexWrite = Schemas["Write"];
-export type WriteCounts = Schemas["WriteCounts"];
-export type IndexFilter = Schemas["Filter"];
-export type IndexOrder = Schemas["Order"];
-export type IndexRank = Schemas["Rank"];
-export type Ranked = Schemas["Ranked"];
-export type IndexAggregate = Schemas["Aggregate"];
-export type IndexMulti = Schemas["Multi"];
-export type Row = Schemas["Row"];
+export type Filter = Schemas["Filter"];
+export type Mode = Schemas["Mode"];
+export type IndexSchema = Schemas["IndexSchema"];
+export type IndexInfo = Schemas["IndexInfo"];
+export type IndexSummary = Schemas["IndexSummary"];
+export type Branch = Schemas["Branch"];
+export type Version = Schemas["Version"];
 export type Group = Schemas["Group"];
-export type Patch = NonNullable<IndexWrite["patches"]>[number];
-export type Performance = Schemas["Performance"];
-export type Consistency = Schemas["Consistency"];
-export type Billing = Schemas["Billing"];
-export type Operation = Schemas["Operation"];
-export type IndexVersion = Schemas["IndexVersion"];
-export type IndexPinned = Schemas["IndexPinned"];
-export type IndexPinning = Schemas["IndexPinning"];
+export type AttributeColumn = Schemas["AttributeColumn"];
 
-/**
- * What a read returns, with how long it took and where its reads came from in
- * `performance`, and what it counted toward the bill in `billing`. Lists and
- * JSON leave both out.
- */
-export type Measured<T> = T[] & {
-  readonly performance: Performance;
-  readonly billing: Billing;
-};
+export type Row<R extends Fields = Fields> = R & { id: DocId };
+export type NewRow<R extends Fields = Fields> = R & { id?: DocId };
+export type Hit<R extends Fields = Fields> = Row<R> & { score: number };
 
-/**
- * Where a new index goes, how many shards it has, the key that encrypts it, and
- * the servers pinned to it.
- */
-export interface NewIndexOptions {
-  region?: string;
-  shards?: number;
-  encryption?: Schemas["IndexEncryption"];
-  pinned?: IndexPinned;
-  /** When an index with the name exists, return it instead of failing. Its schema is not checked. */
-  ifMissing?: boolean;
+export type Target = DocId | DocId[] | { filter: Filter } | Filter;
+
+export interface QueryOptions {
+  text?: string;
+  vector?: number[];
+  filter?: Filter;
+  limit?: number;
+  mode?: Mode;
+  sort?: Record<string, "asc" | "desc">;
+  fields?: string[];
 }
 
-/** One page of documents: at most `limit` (1000 at most), from the `next` of the page before. */
-export interface DocumentCursor {
-  limit?: number;
-  cursor?: string;
+type Columns = string | string[];
+
+export interface AggregateOptions {
+  groupBy?: Columns;
+  count?: boolean;
+  sum?: Columns;
+  avg?: Columns;
+  min?: Columns;
+  max?: Columns;
+  filter?: Filter;
+}
+
+export interface IndexSettings {
+  readOnly?: boolean;
+  retentionDays?: number | null;
+  pinned?: { replicas: number } | null;
+  attributes?: AttributeColumn[];
+  dropAttributes?: string[];
+}
+
+export interface NewIndexOptions {
+  schema?: IndexSchema;
+  region?: string;
+  embed?: { model: string } | false;
+}
+
+export interface Upserted {
+  ids: DocId[];
+  count: number;
 }

@@ -33,10 +33,10 @@ def run(ctx):
     suite.setting("base tree bytes", size)
     suite.setting("agents", agents)
     branch = f"{ctx.run}-fleet"
-    ctx.skywake("new", branch, root=ctx.scratch / "no-daemon")
-    ctx.skywake("commit", branch, base, "-m", "base", root=ctx.scratch / "no-daemon")
+    ctx.skywake("create", "disk", f"@{branch}", root=ctx.scratch / "no-daemon")
+    ctx.skywake("upload", base, f"@{branch}", "-m", "base", root=ctx.scratch / "no-daemon")
     forks = [f"{branch}-{i}" for i in range(agents)]
-    at_once(lambda fork: ctx.skywake("new", fork, "--from", branch, root=ctx.scratch / "no-daemon"), forks)
+    at_once(lambda fork: ctx.skywake("fork", f"@{branch}", fork, root=ctx.scratch / "no-daemon"), forks)
     mounts = [ctx.scratch / f"agent-{i}" for i in range(agents)]
 
     with Daemon(ctx, ctx.scratch / "host", SAVE_EVERY_MS) as daemon, ThreadPoolExecutor(agents) as pool:
@@ -101,7 +101,7 @@ def run(ctx):
     intact = True
     for i, fork in enumerate(forks):
         out = ctx.scratch / f"check-{i}"
-        ctx.skywake("checkout", fork, out, root=ctx.scratch / "no-daemon")
+        ctx.skywake("download", f"@{fork}", out, root=ctx.scratch / "no-daemon")
         intact &= all((out / "out" / f"f{j}.txt").read_bytes() == data for j, data in enumerate(written[i]))
     suite.row(f"garbage collections while {agents} agents wrote", {"count": collecting.runs})
     suite.check("gc while writing: every branch checks out byte-for-byte", intact and collecting.runs > 0)
@@ -112,7 +112,7 @@ def run(ctx):
 
 def two_machines(ctx, suite, branch, agents, size):
     forks = [f"{branch}-apart-{i}" for i in range(agents)]
-    at_once(lambda fork: ctx.skywake("new", fork, "--from", branch, root=ctx.scratch / "no-daemon"), forks)
+    at_once(lambda fork: ctx.skywake("fork", f"@{branch}", fork, root=ctx.scratch / "no-daemon"), forks)
     mounts = [ctx.scratch / f"apart-{i}" for i in range(agents)]
     with (
         CacheNode(ctx, ctx.scratch / "cache-node") as node,

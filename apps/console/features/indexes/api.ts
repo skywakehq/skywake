@@ -1,8 +1,8 @@
 // The calls the index pages make, through the console's proxy. Indexes are
 // not synced by Zero: their counts live in the store, not in Postgres.
 
-import { useCallback, useState } from "react";
-import { asJSON, useFetch } from "@/lib/fetch-text";
+import { useCallback, useEffect, useState } from "react";
+import { type Loaded, asJSON, useFetch } from "@/lib/fetch-text";
 import { indexApi } from "@/lib/paths";
 
 export type Metric = "cosine" | "euclidean" | "dot";
@@ -34,6 +34,7 @@ export type IndexInfo = {
   pinning?: { replicas: PinnedReplica[] } | null;
 };
 
+export type IndexSummary = { name: string; region: string; created: string };
 export type IndexBranch = { name: string; forked_from: string | null; created: string };
 export type DocId = string | number;
 export type AttributeValue = string | number | boolean | string[];
@@ -56,6 +57,39 @@ export type Document = {
   attributes: Record<string, AttributeValue>;
 };
 export type DocumentPage = { documents: Document[]; next: string | null };
+export type QueryBody = {
+  vector: { column: string; value: number[] | string | { image: string } };
+  topK: number;
+  recall?: number;
+  probe?: number;
+  filter?: unknown;
+  include?: string[];
+};
+
+export type SearchBody = {
+  query: string;
+  topK: number;
+  fields?: string[];
+  boosts?: Record<string, number>;
+  k1?: number;
+  b?: number;
+  filter?: unknown;
+  include?: string[];
+  highlight?: string[];
+};
+
+export type HybridBody = {
+  searches: Record<string, QueryBody | SearchBody>;
+  topK: number;
+  fuse?: { k?: number; weights?: Record<string, number> };
+};
+
+/** Each request the playground makes, by its route. */
+export type Request =
+  | { route: "query"; body: QueryBody }
+  | { route: "search"; body: SearchBody }
+  | { route: "hybrid"; body: HybridBody };
+
 export type UsageDay = {
   day: string;
   queries: number;
@@ -94,6 +128,48 @@ export function useApi<T>(url: string | null) {
   // A new fragment makes a new request without changing what the API sees.
   const loaded = useFetch<T>(url && `${url}#${round}`, asJSON);
   const reload = useCallback(() => setRound((n) => n + 1), []);
+  return { loaded, reload };
+}
+
+type Page<T> = { data: T[]; next: string | null };
+
+async function v2Get<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error?.message ?? response.statusText);
+  return data as T;
+}
+
+async function everyPage<T>(url: string): Promise<T[]> {
+  const all: T[] = [];
+  for (let cursor: string | null | undefined; cursor !== null; ) {
+    const page = await v2Get<Page<T>>(
+      cursor === undefined ? url : `${url}?cursor=${encodeURIComponent(cursor)}`,
+    );
+    all.push(...page.data);
+    cursor = page.next;
+  }
+  return all;
+}
+
+/** Every item of a v2 list, following its pages, and a way to ask again. */
+export function useEveryPage<T>(url: string) {
+  const [round, setRound] = useState(0);
+  const key = `${url}#${round}`;
+  const [result, setResult] = useState<{ key: string; loaded: Loaded<T[]> } | null>(null);
+  useEffect(() => {
+    let live = true;
+    everyPage<T>(url).then(
+      (value) => live && setResult({ key, loaded: { state: "done", value } }),
+      (error: Error) =>
+        live && setResult({ key, loaded: { state: "failed", error: error.message } }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [url, key]);
+  const reload = useCallback(() => setRound((n) => n + 1), []);
+  const loaded: Loaded<T[]> = result?.key === key ? result.loaded : { state: "loading" };
   return { loaded, reload };
 }
 

@@ -6,15 +6,18 @@ description: Serve a branch as a live folder on Linux, without downloading it fi
 
 Mount a branch when you want to work on it as an ordinary folder on a Linux machine. Nothing is downloaded before you start.
 
-```bash
-sudo skywaked &                         # once per machine
-skywake mount agent-37 /work
+```bash norun
+sudo skywaked --store s3://my-bucket &          # once per machine
+skywake mount app@main /work --fork agent-37
 # ... work in /work; changes reach the bucket every 2 seconds ...
-skywake commit agent-37 /work -m "fix auth"
+skywake sync /work
 skywake unmount /work
+skywake merge app@agent-37 --local
 ```
 
-Mounts run in [`skywaked`](../getting-started/install.mdx#the-daemon), one daemon per Linux machine. The `skywake` command sends it requests over a Unix socket. The listing of every folder arrives with the mount. File contents are read chunk by chunk through a cache on local disk.
+Mounts run in `skywaked`, one daemon per Linux machine, on the store it was started with. The `skywake` command sends it requests over a Unix socket. The listing of every folder arrives with the mount. File contents are read chunk by chunk through a cache on local disk.
+
+A `skywaked` store is one disk, so in `app@agent-37` only the branch counts. The other branch commands (`fork`, `merge`, `diff`, `log`) reach the same store with `--local`, and go through the daemon when it is running. On macOS, or without a store of your own, use [`download` and `upload`](../agents/cli.mdx) instead.
 
 ## Flags
 
@@ -28,17 +31,18 @@ Mounts run in [`skywaked`](../getting-started/install.mdx#the-daemon), one daemo
 
 ## Mount commands
 
-| Command                                                | What it does                                                                   |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| [`skywake mounts`](/reference/cli/mounts)              | List the folders `skywaked` has mounted.                                       |
-| [`skywake status`](/reference/cli/status)              | Show each mount's save lag, unsaved bytes and last error, and the chunk cache. |
-| [`skywake sync /work`](/reference/cli/sync)            | Save now. Returns when the changes are in the bucket.                          |
-| [`skywake commit BRANCH /work`](/reference/cli/commit) | Save the mount as a named commit.                                              |
-| [`skywake unmount /work`](/reference/cli/unmount)      | Save the last changes and unmount. Fails if a process still uses the folder.   |
+| Command                                           | What it does                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`skywake mounts`](/reference/cli/mounts)         | List the folders `skywaked` has mounted.                                       |
+| [`skywake status`](/reference/cli/status)         | Show each mount's save lag, unsaved bytes and last error, and the chunk cache. |
+| [`skywake sync /work`](/reference/cli/sync)       | Save now. Returns when the changes are in the bucket.                          |
+| [`skywake unmount /work`](/reference/cli/unmount) | Save the last changes and unmount. Fails if a process still uses the folder.   |
+
+A mount saves on its own; see [autosave](./autosave.mdx). v2 has no command to save a mount as one named commit.
 
 ## Moving a branch
 
-Mounting a branch claims it. If the same branch is mounted on another machine, that mount finds out at its next save (or within 5 seconds if it is idle) and turns read-only. Writes to it fail with `EROFS`, and `skywake mounts` shows it as moved. Its unsaved changes are kept so you can [recover](./autosave.mdx) them. If you unmount first, the move loses nothing.
+Mounting a branch claims it. If the same branch is mounted on another machine, that mount finds out at its next save (or within 5 seconds if it is idle) and turns read-only. Writes to it fail with `EROFS`, and `skywake mounts` shows it as moved. Its unsaved changes are kept so you can [recover](./autosave.mdx#recover) them. If you unmount first, the move loses nothing.
 
 ## skywaked settings
 
@@ -46,7 +50,7 @@ Each setting can be given as a flag or as an environment variable.
 
 | Flag               | Env                      | Default                                                   | Meaning                                                                                                                                                |
 | ------------------ | ------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `--store`          | `SKYWAKE_STORE`          | `.skywake`                                                | The store, as for the CLI.                                                                                                                             |
+| `--store`          | `SKYWAKE_STORE`          | `.skywake`                                                | The store: `s3://bucket`, `gs://bucket`, `az://container` or a folder.                                                                                 |
 | `--root`           | `SKYWAKE_ROOT`           | `/var/lib/skywake` as root, else `~/.local/state/skywake` | Socket, chunk cache and local files.                                                                                                                   |
 | `--save-every-ms`  | `SKYWAKE_SAVE_EVERY_MS`  | `2000`                                                    | How often each mount saves.                                                                                                                            |
 | `--head-check-ms`  | `SKYWAKE_HEAD_CHECK_MS`  | `5000`                                                    | How often an idle mount checks whether another machine took its branch.                                                                                |
@@ -64,30 +68,30 @@ Run `skywaked` as root for the best write speed. The root folder must belong to 
 
 ## Sharing a machine
 
-Several people can share one `skywaked`. With `--group`, members of that group may mount over folders they own and manage their own mounts. An access file says which branches each of them may use:
+Several people or agents can share one `skywaked`. With `--group`, members of that group may mount over folders they own and manage their own mounts. An access file says which branches each of them may use:
 
 ```text
 # who         how    which branches
-user:ann      write  agents/*
+user:ann      write  agent-*
 group:ci      read   *
 ```
 
 - `write` includes `read`.
-- `agents/*` matches `agents/x` but not `agentsx`.
-- A read-only mount needs `read`. A writable mount or a commit needs `write`. `new --from` and `merge` need `read` on the source and `write` on the target.
+- `agent-*` matches `agent-1` but not `agent`.
+- A read-only mount needs `read`. A writable mount needs `write`. `fork` and `merge` need `read` on the source and `write` on the target.
 
-The file must belong to root or to the daemon's user, and no one else may be able to write to it. Without an access file, every member may use every branch.
+The file must belong to root or to the daemon's user, and no one else may be able to write to it. Without an access file, every member may use every branch. Don't give the members any store keys, so that every change goes through the daemon.
 
 ## Build output
 
-Inside a mount, the folders that [`.skywakeignore`](../getting-started/first-branch.mdx#leave-files-out) names (`/target` and `/node_modules` by default) are symlinks to folders on local disk. That way builds run at disk speed. These folders belong to the mount's owner and are not kept after you unmount.
+Inside a mount, the folders that `.skywakeignore` names (`/target` and `/node_modules` by default) are symlinks to folders on local disk. That way builds run at disk speed. These folders belong to the mount's owner and are not kept after you unmount.
 
 ## VMs
 
 To give a branch to a virtual machine instead of a folder, mount it on a socket with `--vm`:
 
-```bash
-skywake mount agent-37 /run/vm.sock --vm
+```bash norun
+skywake mount app@agent-37 /run/vm.sock --vm
 ```
 
 Point the hypervisor at the socket (QEMU: `-chardev socket,id=fs,path=/run/vm.sock -device vhost-user-fs-pci,chardev=fs,tag=skywake`, with shared guest memory). Then, inside the VM, run `mount -t virtiofs skywake /mnt`.

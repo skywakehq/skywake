@@ -37,7 +37,7 @@ def run(ctx):
 
 def crash(ctx, suite):
     branch, mnt, host = f"{ctx.run}-crash", ctx.scratch / "crash", ctx.scratch / "crash-host"
-    ctx.skywake("new", branch)
+    ctx.skywake("create", "disk", f"@{branch}")
     daemon = Daemon(ctx, host, SAVE_EVERY_MS)
     daemon.mount(branch, mnt)
     writer = Writer(mnt)
@@ -79,7 +79,7 @@ def synced(ctx, suite):
     branch, mnt, host = f"{ctx.run}-synced", ctx.scratch / "synced", ctx.scratch / "synced-host"
     writers, rounds = 64, ctx.size(20, 5)
     suite.setting("synced", {"writers": writers, "rounds": rounds})
-    ctx.skywake("new", branch)
+    ctx.skywake("create", "disk", f"@{branch}")
     daemon = Daemon(ctx, host, save_every_ms=3_600_000)  # only fsync saves
     daemon.mount(branch, mnt)
 
@@ -119,7 +119,7 @@ def synced_line(i, round):
 def move(ctx, suite):
     branch = f"{ctx.run}-move"
     m1, m2 = ctx.scratch / "m1", ctx.scratch / "m2"
-    ctx.skywake("new", branch)
+    ctx.skywake("create", "disk", f"@{branch}")
     with (
         Daemon(ctx, ctx.scratch / "host1", SAVE_EVERY_MS) as host1,
         Daemon(ctx, ctx.scratch / "host2", SAVE_EVERY_MS) as host2,
@@ -167,15 +167,15 @@ def readers(ctx, suite):
     gets its own copy."""
     branch = f"{ctx.run}-readers"
     writer, reader, forked = ctx.scratch / "writer", ctx.scratch / "reader", ctx.scratch / "forked"
-    ctx.skywake("new", branch)
+    ctx.skywake("create", "disk", f"@{branch}")
     with Daemon(ctx, ctx.scratch / "readers-host", SAVE_EVERY_MS) as host:
         host.mount(branch, writer)
         (writer / "a.txt").write_text("first")
         host.call("sync", writer)
         for path in (reader, forked):
             path.mkdir(parents=True, exist_ok=True)
-        host.call("mount", branch, reader, "--read-only")
-        host.call("mount", branch, forked, "--fork", f"{branch}-fork")
+        host.call("mount", f"@{branch}", reader, "--read-only")
+        host.call("mount", f"@{branch}", forked, "--fork", f"{branch}-fork")
         suite.check("read-only: a reader sees the saved files", (reader / "a.txt").read_text() == "first")
         try:
             (reader / "b.txt").write_text("no")
@@ -206,7 +206,7 @@ def readers(ctx, suite):
 def idle(ctx, suite):
     """A mount that nobody uses should cost nothing."""
     branch, mnt = f"{ctx.run}-idle", ctx.scratch / "idle"
-    ctx.skywake("new", branch)
+    ctx.skywake("create", "disk", f"@{branch}")
     with Daemon(ctx, ctx.scratch / "idle-host", SAVE_EVERY_MS) as daemon:
         daemon.mount(branch, mnt)
         (mnt / "file.txt").write_bytes(text(1000))

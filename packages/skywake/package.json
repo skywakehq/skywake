@@ -43,8 +43,7 @@
     }
   },
   "bin": {
-    "skywake": "bin/skywake.cjs",
-    "skywake-bash-mcp": "dist/mcp.js"
+    "skywake": "bin/skywake.cjs"
   },
   "files": [
     "bin",

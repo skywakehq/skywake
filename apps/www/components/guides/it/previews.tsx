@@ -1,6 +1,6 @@
 // Guida: come far girare l'anteprima di ogni pull request su una copia completa
 // dei dati dell'app, poi pubblicare la modifica o buttare via la copia.
-import { ArrowRight, GitBranch, Lock, X } from "lucide-react";
+import { ArrowRight, GitBranch, X } from "lucide-react";
 
 import type { HomeMessages } from "@/content/messages";
 import type { Locale } from "@/lib/i18n";
@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/previews";
 
 export function PreviewsGuide({
   locale,
@@ -79,7 +80,7 @@ export function PreviewsGuide({
         <div>
           <Checklist
             items={[
-              "I dati della tua app salvati una volta, su un branch main che niente può modificare per sbaglio.",
+              "I dati della tua app salvati una volta, su un branch main su cui nessuna anteprima scrive.",
               "Una copia completa di quei dati per ogni pull request, creata in 10 ms.",
               "Un’anteprima che gira sulla sua copia e può romperla senza rischi.",
               "Una chiave di sola lettura, così chi fa review guarda senza toccare.",
@@ -88,9 +89,9 @@ export function PreviewsGuide({
           />
         </div>
         <p>
-          Ti servono una API key di Skywake e Node. Usa una chiave admin: servirà ai passi 1 e 5.
-          Imposta <code>SKYWAKE_URL</code> e <code>SKYWAKE_KEY</code>, poi installa l’SDK con{" "}
-          <code>npm i @skywake/sdk</code>.
+          Ti servono una API key di Skywake e Node. Usa una chiave admin: il passo 5 crea una nuova
+          chiave, e per farlo ne serve una. Imposta <code>SKYWAKE_API_KEY</code>, poi installa l’SDK
+          con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Tieni i dati dell’app su main" />
@@ -108,31 +109,15 @@ export function PreviewsGuide({
           ]}
         />
         <p>
-          Li salviamo in un namespace, cioè un repository di file, come branch chiamato{" "}
-          <code>main</code>. Un branch è una versione con un nome dei tuoi file, come un branch di
-          Git. Ogni salvataggio è un commit, quindi puoi sempre vedere cosa è cambiato e tornare
-          indietro.
+          Li carichiamo su un disco, cioè un insieme di file con branch e cronologia. Il primo
+          caricamento crea il disco e il suo branch <code>main</code>. Un branch è una versione con
+          un nome dei tuoi file, come un branch di Git. Ogni salvataggio è un commit, quindi puoi
+          sempre vedere cosa è cambiato e tornare indietro.
         </p>
-        <Code
-          file="save-data.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const shop = await sky.createNamespace("shop/data");
-const main = await shop.createBranch("main");
-await main.commitFolder("./shop-data", { message: "Shop data today" });
-await main.protect();
-`}
-        />
+        <Code file="save-data.ts" code={code["save-data.ts"]} />
         <p>
-          L’ultima riga protegge <code>main</code>. Un branch protetto cambia solo con un merge. Se
-          del codice prova a scriverci direttamente, la scrittura viene rifiutata, quindi nessuna
-          anteprima può toccare per sbaglio i dati veri.
+          Da qui in poi, nessuna anteprima scrive su <code>main</code>. Ognuna ha il suo branch, e{" "}
+          <code>main</code> cambia solo quando si fa merge di una pull request.
         </p>
 
         <Chapter id="fork" step={2} title="Dai alla pull request la sua copia" />
@@ -141,13 +126,7 @@ await main.protect();
           suo nome. Un fork è un nuovo branch che parte esattamente dove si trova un altro. Non
           copia niente: condivide i file di main finché la pull request non ne modifica uno.
         </p>
-        <Code
-          file="fork.ts"
-          code={`
-const pr = await main.fork("pr-512");
-const start = (await pr.info()).head;
-`}
-        />
+        <Code file="fork.ts" code={code["fork.ts"]} />
         <p>
           Ora <code>pr-512</code> ha tutti i file di <code>main</code>, con lo stesso contenuto.
           Teniamo anche <code>start</code>, il commit da cui è partita la copia. Ci servirà al passo
@@ -160,30 +139,9 @@ const start = (await pr.info()).head;
           catalogo, sostituisce ogni <code>price</code> con <code>cents</code> e salva il risultato.
           La eseguiamo sulla copia, esattamente com’è scritta nella pull request:
         </p>
-        <Code
-          file="preview.ts"
-          code={`
-type Product = { id: string; price: string; currency: string };
-const file = "catalog/products.json";
-
-async function migrate(toCents: (price: string) => number) {
-  const products: Product[] = JSON.parse(await pr.readText(file));
-  const moved = products.map(({ price, ...product }) => ({
-    ...product,
-    cents: toCents(price),
-  }));
-  await pr.write(
-    { [file]: JSON.stringify(moved, null, 2) },
-    "PR 512: store prices in cents",
-  );
-}
-
-await migrate((price) => Math.round(Number(price) * 100));
-await pr.checkout("./previews/pr-512");
-`}
-        />
+        <Code file="preview.ts" code={code["preview.ts"]} />
         <p>
-          <code>checkout</code> scrive i file del branch in una cartella locale. Avvia l’anteprima
+          <code>download</code> scrive i file del branch in una cartella locale. Avvia l’anteprima
           usando quella cartella come dati e apri il negozio.
         </p>
         <p>
@@ -202,20 +160,11 @@ await pr.checkout("./previews/pr-512");
         <Chapter id="undo" step={4} title="Annulla e riprova" />
         <p>
           L’autore corregge la migrazione perché legga la virgola come separatore decimale. Prima di
-          rieseguirla, riportiamo la copia com’era all’inizio. <code>reset</code> riporta i file del
-          branch a com’erano in un certo commit, con un nuovo commit in cima, così anche il
+          rieseguirla, riportiamo la copia com’era all’inizio. <code>restore</code> riporta i file
+          del branch a com’erano in un certo commit, con un nuovo commit in cima, così anche il
           tentativo sbagliato resta nella storia.
         </p>
-        <Code
-          file="try-again.ts"
-          code={`
-await pr.reset(start, { message: "PR 512: undo the first try" });
-const toCents = (price: string) =>
-  Math.round(Number(price.replace(",", ".")) * 100);
-await migrate(toCents);
-await pr.checkout("./previews/pr-512");
-`}
-        />
+        <Code file="try-again.ts" code={code["try-again.ts"]} />
         <p>Ricarica l’anteprima. Ora ogni prodotto ha un prezzo:</p>
         <TwoTries />
         <p>
@@ -226,71 +175,42 @@ await pr.checkout("./previews/pr-512");
         <Chapter id="review" step={5} title="Chi fa review guarda, ma non tocca" />
         <p>
           Chi fa review deve vedere i dati su cui ha girato l’anteprima, ma non modificarli. Creiamo
-          una chiave che può solo leggere, raggiunge solo questo namespace e smette di funzionare
-          dopo una settimana:
+          una chiave che può solo leggere, raggiunge solo questo disco e smette di funzionare dopo
+          una settimana:
         </p>
-        <Code
-          file="review.ts"
-          code={`
-const review = await sky.keys.create("Review PR 512", "read", {
-  namespaces: "shop/data",
-  expiresInDays: 7,
-});
-`}
-        />
+        <Code file="review.ts" code={code["review.ts"]} />
         <p>
           Condividi <code>review.key</code> con chi fa review. Con questa può chiedere cosa ha
           cambiato la pull request nei dati:
         </p>
-        <Code
-          file="reviewer.ts"
-          code={`
-const reviewer = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: review.key,
-});
-const copy = reviewer.namespace("shop/data").branch("pr-512");
-
-const changed = await copy.diff("main", { against: "base" });
-console.log(changed);
-`}
-        />
+        <Code file="reviewer.ts" code={code["reviewer.ts"]} />
         <p>
-          Stampa una sola modifica: <code>catalog/products.json</code>, modificato. L’opzione{" "}
-          <code>against: &quot;base&quot;</code> confronta la copia con il suo punto di partenza,
-          quindi si vedono solo le modifiche della pull request, non quello che è arrivato su{" "}
-          <code>main</code> nel frattempo. Chi fa review può leggere qualsiasi file della copia. Se
-          prova a scriverne uno, la richiesta viene rifiutata.
+          Stampa una sola modifica: <code>catalog/products.json</code>, modificato.{" "}
+          <code>diff</code> confronta la copia con <code>main</code> com’è adesso. Dopo il fork su{" "}
+          <code>main</code> non è arrivato niente, quindi si vede solo la modifica della pull
+          request. Chi fa review può leggere qualsiasi file della copia. Se prova a scriverne uno,
+          la richiesta viene rifiutata.
         </p>
-        <Note title="Consiglio: una chiave di lettura vede tutto il namespace">
+        <Note title="Consiglio: una chiave di lettura vede tutto il disco">
           <p>
-            Una chiave si limita per namespace, non per branch. Questa può leggere anche{" "}
+            Una chiave si limita per disco, non per branch. Questa può leggere anche{" "}
             <code>main</code>, il che è comodo per confrontare. Non può modificare nessuno dei due.
-            Se alcuni dati devono restare privati, tienili in un namespace a parte.
+            Se alcuni dati devono restare privati, tienili su un disco a parte.
           </p>
         </Note>
 
         <Chapter id="ship" step={6} title="Pubblica o butta via" />
         <p>
           La pull request è approvata. Il merge del branch porta le sue modifiche su{" "}
-          <code>main</code>. Il merge è l’unico modo in cui cambia un branch protetto, quindi è
-          l’unica strada con cui i nuovi prezzi arrivano ai dati veri.
+          <code>main</code>. Nient’altro scrive su <code>main</code>, quindi è l’unica strada con
+          cui i nuovi prezzi arrivano ai dati veri.
         </p>
-        <Code
-          file="ship.ts"
-          code={`
-const merged = await pr.mergeInto("main", { message: "Ship PR 512" });
-if (merged.conflicts.length === 0) {
-  await pr.delete();
-  await sky.keys.revoke(review.id);
-}
-`}
-        />
+        <Code file="ship.ts" code={code["ship.ts"]} />
         <p>
           Ora <code>main</code> salva i prezzi in centesimi, la copia non c’è più e la chiave di chi
           ha fatto review non funziona più. Se nel frattempo <code>main</code> avesse cambiato lo
-          stesso file, il merge non salverebbe niente e metterebbe quel file in{" "}
-          <code>conflicts</code>.
+          stesso file, il merge non salverebbe niente e lancerebbe un <code>MergeConflict</code> con
+          quel file in <code>conflicts</code>. Il branch e la chiave resterebbero.
         </p>
         <p>
           Non tutte le modifiche su una copia vanno pubblicate. Gli ordini di prova fatti cliccando
@@ -303,25 +223,7 @@ if (merged.conflicts.length === 0) {
           I passi sopra stanno in una piccola funzione. Chiamala dalla tua CI quando una pull
           request viene aperta, unita o chiusa:
         </p>
-        <Code
-          file="on-pull-request.ts"
-          code={`
-export async function onPullRequest(n: number, event: string) {
-  const branch = shop.branch(\`pr-\${n}\`);
-  if (event === "opened") {
-    await main.fork(branch.name);
-    await branch.checkout(\`./previews/pr-\${n}\`);
-  }
-  if (event === "merged") {
-    const { conflicts } = await branch.mergeInto("main");
-    if (conflicts.length > 0) throw new Error(\`Conflicts: \${conflicts}\`);
-  }
-  if (event === "merged" || event === "closed") {
-    await branch.delete();
-  }
-}
-`}
-        />
+        <Code file="on-pull-request.ts" code={code["on-pull-request.ts"]} />
         <p>Alcune cose da sapere quando le pull request aperte insieme aumentano:</p>
         <ul>
           <li>
@@ -333,8 +235,8 @@ export async function onPullRequest(n: number, event: string) {
             ognuna solo le proprie modifiche, mai quelle dell’altra.
           </li>
           <li>
-            <b>I dati veri restano al sicuro.</b> <code>main</code> è protetto, quindi cambia solo
-            quando si fa merge di una pull request.
+            <b>I dati veri restano al sicuro.</b> Le anteprime scrivono solo sui propri branch,
+            quindi <code>main</code> cambia solo quando si fa merge di una pull request.
           </li>
           <li>
             <b>Fare pulizia è una chiamata.</b> Eliminare il branch rimuove la copia. Non resta
@@ -359,9 +261,9 @@ export async function onPullRequest(n: number, event: string) {
               "E se main è cambiato mentre la pull request era aperta?",
               <p key="a">
                 Se hanno modificato file diversi, il merge li unisce e basta. Se entrambi hanno
-                modificato lo stesso file, il merge non salva niente, mette il file in{" "}
-                <code>conflicts</code> e lascia il branch com’è. Fai un nuovo fork dal nuovo{" "}
-                <code>main</code> e riesegui la modifica.
+                modificato lo stesso file, il merge non salva niente e lancia un{" "}
+                <code>MergeConflict</code> che elenca il file. Il branch resta com’è. Fai un nuovo
+                fork dal nuovo <code>main</code> e riesegui la modifica.
               </p>,
             ],
             [
@@ -397,13 +299,11 @@ function PreviewsCover() {
   return (
     <div className="grid">
       <div className={`${row} text-muted-foreground`}>
-        <span className="font-mono text-[12px]">shop/data</span>
+        <span className="font-mono text-[12px]">shop-data</span>
       </div>
       <div className={row}>
         <GitBranch className="size-3.5 text-muted-foreground" /> main
-        <span className="ml-auto flex items-center gap-1.5 text-[12px] text-muted-foreground">
-          <Lock className="size-3" /> Protected
-        </span>
+        <span className="ml-auto text-[12px] text-muted-foreground">Live data</span>
       </div>
       {prs.map(([name, state]) => (
         <div

@@ -68,8 +68,8 @@ class Bench:
     def commit(self, folder, what):
         """A branch holding `folder`, made without a daemon."""
         branch = self.name(what)
-        self.ctx.skywake("new", branch, root=self.store, env=self.cli_env)
-        self.ctx.skywake("commit", branch, folder, "-m", what, root=self.store, env=self.cli_env)
+        self.ctx.skywake("create", "disk", f"@{branch}", root=self.store, env=self.cli_env)
+        self.ctx.skywake("upload", folder, f"@{branch}", "-m", what, root=self.store, env=self.cli_env)
         return branch
 
     def fork(self, branch):
@@ -77,7 +77,7 @@ class Bench:
 
     def forks(self, branch, count):
         forks = [self.name("fork") for _ in range(count)]
-        at_once(lambda fork: self.ctx.skywake("new", fork, "--from", branch, root=self.store, env=self.cli_env), forks)
+        at_once(lambda fork: self.ctx.skywake("fork", f"@{branch}", fork, root=self.store, env=self.cli_env), forks)
         return forks
 
     def latency_row(self, label, samples, extra=None):
@@ -112,7 +112,9 @@ class Bench:
         base = self.commit(tree, "tree")
         shutil.rmtree(tree)
 
-        samples = [timed(lambda i=i: daemon.call("new", f"{base}-new-{i}")) * 1000 for i in range(self.runs)]
+        samples = [
+            timed(lambda i=i: daemon.call("create", "disk", f"@{base}-new-{i}")) * 1000 for i in range(self.runs)
+        ]
         self.latency_row(f"create a branch (`skywake new`){label}", samples)
 
         forks = self.forks(base, self.runs)
@@ -128,8 +130,8 @@ class Bench:
         commits, branches = [], []
         for i in range(self.runs):
             write(mnt / "notes" / f"change-{i}.txt", f"change {i}\n".encode())
-            commits.append(timed(lambda i=i: daemon.call("commit", forks[0], mnt, "-m", f"change {i}")) * 1000)
-            branches.append(timed(lambda i=i: daemon.call("new", f"{forks[0]}-b{i}", "--from", forks[0])) * 1000)
+            commits.append(timed(lambda i=i: daemon.call("upload", mnt, f"@{forks[0]}", "-m", f"change {i}")) * 1000)
+            branches.append(timed(lambda i=i: daemon.call("fork", f"@{forks[0]}", f"{forks[0]}-b{i}")) * 1000)
         daemon.call("unmount", mnt)
         self.latency_row(f"checkpoint: change a file, `skywake commit`{label}", commits)
         self.latency_row(f"branch from that checkpoint (`new --from`){label}", branches)
@@ -187,7 +189,7 @@ class Bench:
 
     def empty(self):
         branch = self.name("empty")
-        self.ctx.skywake("new", branch, root=self.store)
+        self.ctx.skywake("create", "disk", f"@{branch}", root=self.store)
         return branch
 
     # Workloads: npm ci, git clone and status, SQLite.

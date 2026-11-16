@@ -6,17 +6,17 @@ description: The published numbers, where each one came from, and how to run it 
 
 Every number on this page comes from `docs/benchmarks.md` in the repository. That file names each run, the machine it ran on, its full report and the command that repeats it, so you can check any result yourself.
 
-## Filesystem on AWS
+## Disks on AWS
 
 These runs used an m7i-flex.large (2 vCPUs, 8 GB) against object storage in the same region. The data was random, so nothing could be deduplicated.
 
 | Operation                                                                  |                            Result |
 | -------------------------------------------------------------------------- | --------------------------------: |
-| commit, 1,074 MB in 10,139 files                                           |                   6.4 s, 168 MB/s |
+| upload as one commit, 1,074 MB in 10,139 files                             |                   6.4 s, 168 MB/s |
 | the same with `aws s3 cp --recursive`                                      |                   28.7 s, 37 MB/s |
-| commit, nothing changed                                                    |                            172 ms |
-| checkout, the same 1,074 MB                                                |                   3.5 s, 311 MB/s |
-| [fork](./filesystem/branches.mdx#forks) (`new --from`), median of 100      |     95 ms (mixed), 91 ms (source) |
+| upload, nothing changed                                                    |                            172 ms |
+| download, the same 1,074 MB                                                |                   3.5 s, 311 MB/s |
+| [fork](./filesystem/branches.mdx#forks) (`skywake fork`), median of 100    |     95 ms (mixed), 91 ms (source) |
 | [save](./filesystem/autosave.mdx) after rewriting one small file, mounted  |                             93 ms |
 | `kill -9` while writing every 20 ms: oldest lost write                     | 2,032 ms (the save window is 2 s) |
 | [move a branch](./filesystem/mount.mdx#moving-a-branch) to another machine |                            166 ms |
@@ -28,17 +28,17 @@ These runs used an m7i-flex.large (2 vCPUs, 8 GB) against object storage in the 
 
 Twenty agents read every file of one 278 MB tree at the same time, through one daemon's chunk cache. Together they made 1,009 GETs for 999 chunks, so each chunk was fetched from the bucket about once.
 
-## Filesystem on a laptop
+## Disks on a laptop
 
 These runs used a 10-core laptop against local object storage, with 1,074 MB in 10,018 files.
 
 | Operation                                     |   Time | Throughput |
 | --------------------------------------------- | -----: | ---------: |
 | `aws s3 cp --recursive`                       | 23.8 s |    45 MB/s |
-| [`skywake commit`](/reference/cli/commit)     | 13.9 s |    77 MB/s |
-| `skywake commit`, nothing changed             | 119 ms |            |
-| [`skywake checkout`](/reference/cli/checkout) |  4.4 s |   243 MB/s |
-| fork (`new --from`)                           |  15 ms |            |
+| [`skywake upload`](/reference/cli/upload)     | 13.9 s |    77 MB/s |
+| `skywake upload`, nothing changed             | 119 ms |            |
+| [`skywake download`](/reference/cli/download) |  4.4 s |   243 MB/s |
+| `skywake fork`                                |  15 ms |            |
 
 ## Vector index
 
@@ -82,7 +82,7 @@ These runs used a MacBook Pro running three API servers, with 100,000 rows × 64
 
 ## Run them yourself
 
-```bash
+```bash norun
 scripts/bench.sh micro --quick    # also: index, filesystem, pinning, cloud
 ```
 

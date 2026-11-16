@@ -44,10 +44,10 @@ chmod +x $W/initrd/init
 
 # A branch, served by skywaked on a socket.
 echo hello > $W/seed/hello.txt
-$B/skywake new main && $B/skywake commit main $W/seed -m seed >/dev/null
+$B/skywake --local upload $W/seed @main -m seed >/dev/null
 $B/skywaked > $W/skywaked.log 2>&1 &
 sleep 1
-$B/skywake mount main $W/fs.sock --vm
+$B/skywake mount @main $W/fs.sock --vm
 
 timeout 600 qemu-system-aarch64 -machine virt -cpu max -smp 2 -m 512 -nographic -no-reboot -nic none \
   -kernel /boot/vmlinuz-$V -initrd $W/initrd.gz -append "console=ttyAMA0 rdinit=/init quiet" \
@@ -61,10 +61,10 @@ check() {
 }
 check "the guest mounts the branch and reads it" 'grep -q "guest read: hello" $W/guest.log'
 check "the guest's writes all succeed" 'grep -q GUEST-DONE $W/guest.log'
-$B/skywake checkout main $W/synced
+$B/skywake --local download @main $W/synced
 check "an fsync'd write is in the store before any save" '[ "$(cat $W/synced/synced.txt)" = synced ]'
 $B/skywake unmount $W/fs.sock
-$B/skywake checkout main $W/out
+$B/skywake --local download @main $W/out
 check "a 3 MiB file arrives intact" '(cd $W/out && md5sum --status -c big.md5)'
 check "renames, deletes and symlinks arrive" \
   '[ "$(cat $W/out/src/note.txt)" = from-vm ] && [ ! -e $W/out/hello.txt ] && [ "$(readlink $W/out/link)" = src/note.txt ]'

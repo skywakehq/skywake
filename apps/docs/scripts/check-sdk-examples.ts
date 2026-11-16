@@ -29,6 +29,7 @@ interface Rules {
 // properties, parameters and record components in Java and C#.
 const declared = /[\w>\]?]\s+([A-Za-z_]\w*)\s*[,)=;{(<]/g;
 const capitalized = /\b([A-Z]\w*)/g;
+const enumMember = /^\s+([A-Z]\w*),?\s*$/gm;
 
 const rules: Record<Language, Rules> = {
   typescript: {
@@ -87,6 +88,7 @@ const rules: Record<Language, Rules> = {
       /\bpub\s+(?:struct|enum|type|trait)\s+(\w+)/g,
       /\bpub\s+(\w+):/g, // fields
       /\bpub\s+use\s+[\w:]*\{([^}]*)\}/g,
+      enumMember,
     ],
     uses: [
       /\.([a-z_]\w*)/g,
@@ -103,6 +105,7 @@ const rules: Record<Language, Rules> = {
       "Default::default",
       "default",
       "Some",
+      "None",
       "Vec",
       "Map",
       "iter",
@@ -115,15 +118,15 @@ const rules: Record<Language, Rules> = {
   java: {
     dir: "java/src/main",
     ext: ".java",
-    defines: [declared, /\b(?:class|record|interface|enum)\s+(\w+)/g],
+    defines: [declared, /\b(?:class|record|interface|enum)\s+(\w+)/g, enumMember],
     uses: [/\.([a-z]\w*)\(/g, capitalized],
-    allow: ["System.getenv", "System.out.println", "List", "Map"],
+    allow: ["System.getenv", "System.out.println", "List", "Map", "Object"],
     comment: "//",
   },
   csharp: {
     dir: "csharp/src",
     ext: ".cs",
-    defines: [declared, /\b(?:class|record|struct|interface|enum|namespace)\s+(\w+)/g],
+    defines: [declared, /\b(?:class|record|struct|interface|enum|namespace)\s+(\w+)/g, enumMember],
     uses: [capitalized],
     allow: ["Console.WriteLine", "Environment.GetEnvironmentVariable", "Dictionary"],
     comment: "//",

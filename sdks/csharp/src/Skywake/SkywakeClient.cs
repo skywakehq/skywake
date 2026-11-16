@@ -1,37 +1,75 @@
 namespace Skywake;
 
-/// <summary>A client of the Skywake API. It is safe to share between threads.</summary>
 public sealed class SkywakeClient : IDisposable
 {
-    private readonly ApiTransport _transport;
+    private readonly HttpClient _client;
+    private readonly Http _http;
 
-    /// <summary>
-    /// A client of the API at <paramref name="url"/>, with an API key (sw_...) or a console token.
-    /// <paramref name="timeout"/> (60 seconds by default) is how long one try may wait to connect,
-    /// and then for the answer to start; an answer that keeps arriving, such as an export, is never
-    /// cut off. A failed request is tried up to <paramref name="retries"/> more times when that is
-    /// safe: after a 429 always, and after a network error or a 5xx for GET, PUT and DELETE. It waits
-    /// about <paramref name="backoff"/> (0.2 seconds by default), doubled each time, or as long as
-    /// the server asks (at most 60 seconds).
-    /// </summary>
-    public SkywakeClient(
-        string url,
-        string key,
-        TimeSpan? timeout = null,
-        int retries = 3,
-        TimeSpan? backoff = null,
-        HttpMessageHandler? handler = null)
+    public SkywakeClient(SkywakeOptions? options = null)
     {
-        var retry = new RetryPolicy(retries, backoff ?? TimeSpan.FromMilliseconds(200));
-        _transport = new ApiTransport(url, key, timeout ?? TimeSpan.FromSeconds(60), retry, handler);
-        Indexes = new Indexes(_transport);
+        options ??= new SkywakeOptions();
+        var settings = Settings.Resolve(options);
+        Url = Urls.Root(settings.Url);
+        Environment = settings.Environment;
+        var handler = options.Handler ?? new SocketsHttpHandler { ConnectTimeout = options.Timeout };
+        _client = new HttpClient(handler) { Timeout = options.Timeout };
+        var headers = new Dictionary<string, string> { ["authorization"] = $"Bearer {settings.Key}" };
+        if (Environment is not null)
+        {
+            headers["skywake-environment"] = Environment;
+        }
+        _http = new Http(_client, Url + "/v2", headers, new RetryPolicy(options.Retries, options.Backoff));
     }
 
-    /// <summary>Makes, lists, reads and deletes search indexes.</summary>
-    public Indexes Indexes { get; }
+    public string Url { get; }
 
-    /// <summary>A search index, on its main branch.</summary>
-    public SearchIndex Index(string name) => SearchIndex.Main(_transport, name);
+    public string? Environment { get; }
 
-    public void Dispose() => _transport.Dispose();
+    public DiskHandle Disk(string name, string branch = DiskHandle.Main) => new(_http, name, branch);
+
+    public IndexHandle Index(string name, string branch = IndexHandle.Main) => new(_http, name, branch);
+
+    public async Task<DiskHandle> CreateDiskAsync(string name, NewDiskOptions? options = null, CancellationToken ct = default)
+    {
+        options ??= new NewDiskOptions();
+        var body = Json.Object(("name", name), ("region", options.Region), ("search", options.Search), ("visibility", options.Visibility));
+        await _http.PostAsync<DiskSummary>("/disks", body, ct).ConfigureAwait(false);
+        return Disk(name);
+    }
+
+    public async Task<IndexHandle> CreateIndexAsync(string name, NewIndexOptions? options = null, CancellationToken ct = default)
+    {
+        options ??= new NewIndexOptions();
+        var body = Json.Object(("name", name), ("schema", options.Schema), ("region", options.Region), ("embed", options.Embed));
+        await _http.PostAsync<IndexSummary>("/indexes", body, ct).ConfigureAwait(false);
+        return Index(name);
+    }
+
+    public IAsyncEnumerable<DiskSummary> ListDisksAsync(CancellationToken ct = default) => List<DiskSummary>("/disks", ct);
+
+    public IAsyncEnumerable<IndexSummary> ListIndexesAsync(CancellationToken ct = default) => List<IndexSummary>("/indexes", ct);
+
+    public Task<CreatedKey> CreateKeyAsync(NewKey key, CancellationToken ct = default)
+    {
+        var body = Json.Object(("name", key.Name), ("role", key.Role), ("only", key.Only), ("expires_in_days", key.ExpiresInDays));
+        body["environment"] = key.Environment;
+        return _http.PostAsync<CreatedKey>("/keys", body, ct);
+    }
+
+    public IAsyncEnumerable<ApiKey> ListKeysAsync(CancellationToken ct = default) => List<ApiKey>("/keys", ct);
+
+    public Task RevokeKeyAsync(string id, CancellationToken ct = default) => _http.DeleteAsync($"/keys/{Urls.Segment(id)}", ct);
+
+    public IAsyncEnumerable<EnvironmentInfo> ListEnvironmentsAsync(CancellationToken ct = default) =>
+        List<EnvironmentInfo>("/environments", ct);
+
+    public Task<EnvironmentInfo> CreateEnvironmentAsync(string name, CancellationToken ct = default) =>
+        _http.PostAsync<EnvironmentInfo>("/environments", Json.Object(("name", name)), ct);
+
+    public Task<Whoami> WhoamiAsync(CancellationToken ct = default) => _http.GetAsync<Whoami>("/whoami", null, ct);
+
+    public void Dispose() => _client.Dispose();
+
+    private IAsyncEnumerable<T> List<T>(string path, CancellationToken ct) =>
+        Paging.Pages((cursor, token) => _http.GetAsync<Page<T>>(path, new Dictionary<string, object?> { ["cursor"] = cursor }, token), ct);
 }

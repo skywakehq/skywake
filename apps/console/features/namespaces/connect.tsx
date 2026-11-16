@@ -2,22 +2,19 @@
 
 import { Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
-import { useUrls } from "@/components/shell/console";
 import { Link } from "@/components/shell/router";
 import { Button } from "@/components/kit";
+import { nameInEnv } from "@/lib/names";
 
-/** Before any agent has worked here: one line, a key, and an example to paste. */
 export function Connect({ ns }: { ns: string }) {
-  const urls = useUrls();
-  const example = `import os
-from skywake import Skywake
+  const example = `import { Skywake } from "skywake";
 
-sky = Skywake("${urls.api}", os.environ["SKYWAKE_KEY"])
-fs = sky.namespace("${ns}")
-with fs.session("agent-1") as session:
-    branch = fs.branch("main").fork("agents/1")
-    branch.write({"hello.txt": "hi"}, "first commit", session.id)
-    print(branch.merge_into("main", session=session.id))`;
+const sky = new Skywake();
+const app = sky.disk("${nameInEnv(ns)}");
+const work = await app.fork("agent-1");
+await work.write("hello.txt", "hi", { message: "first commit" });
+console.log(await work.mergeInto("main"));
+`;
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-xl bg-muted/50 px-5 py-4">
@@ -35,7 +32,9 @@ with fs.session("agent-1") as session:
         leadingIcon={Copy}
         onClick={() => {
           navigator.clipboard.writeText(example);
-          toast.success("Example copied", { description: "Run it with pip install skywake." });
+          toast.success("Example copied", {
+            description: "Run it with SKYWAKE_API_KEY set, after npm install skywake.",
+          });
         }}
       >
         Copy example

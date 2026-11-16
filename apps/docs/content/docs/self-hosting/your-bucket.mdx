@@ -4,19 +4,25 @@ icon: Database
 description: Point an environment at your S3 bucket, so its files and indexes live there and nowhere else.
 ---
 
-An environment can keep its data in a bucket you own. The API still runs the branches, commits, searches and billing, but every byte of the environment's filesystems and search indexes is written to your bucket. One bucket holds both:
+An environment can keep its data in a bucket you own. The API still runs the branches, commits, searches and billing, but every byte of the environment's disks and indexes is written to your bucket. One bucket holds both:
 
 ```
 s3://acme-data/skywake/
-  fs/ns_…/   a filesystem: refs/, objects/, chunks/, commits/, …
-  ix/ix_…/   a search index: refs/, objects/, chunks/, blobs/, …
+  fs/ns_…/   a disk: refs/, objects/, chunks/, commits/, …
+  ix/ix_…/   an index: refs/, objects/, chunks/, blobs/, …
 ```
 
-Each folder says what it holds in a small `skywake.json`. Garbage collection checks that file and refuses any folder of the other kind, so files and indexes never collect each other's data.
+Each folder says what it holds in a small `skywake.json`. Garbage collection checks that file and refuses any folder of the other kind, so disks and indexes never collect each other's data.
 
 ## Choose the bucket before you make anything
 
-An environment's bucket can be set, changed or removed only while the environment holds no namespaces or indexes, and no folders still waiting to be deleted. Set it right after you create the environment.
+An environment's bucket can be set, changed or removed only while the environment holds no disks or indexes, and no folders still waiting to be deleted. Set it right after you create the environment.
+
+<include lang="bash" meta='tab="HTTP"'>
+  ../../../examples/self-hosting/your-bucket.sh
+</include>
+
+The example creates the environment `prod` and asks what a role must trust (step 1 below). Setting the bucket has no v2 route, SDK call or CLI command yet, so these steps use `/v1`, which goes away one release after v2. On your own server, `principal` is `null` until you set `SKYWAKE_API_BYOB_PRINCIPAL` to the role the API runs as.
 
 ## With an AWS role (recommended)
 
@@ -24,8 +30,8 @@ Skywake assumes a role in your account, so no long-lived key leaves it.
 
 1. Ask what the role must trust:
 
-   ```bash
-   curl -H "Authorization: Bearer $SKYWAKE_KEY" $SKYWAKE_URL/v1/environments/prod/store/trust
+   ```bash norun
+   curl -H "authorization: Bearer $SKYWAKE_API_KEY" $SKYWAKE_URL/v1/environments/prod/store/trust
    # {"principal": "arn:aws:iam::…:role/skywake-api", "externalId": "skywake-org_…"}
    ```
 
@@ -33,8 +39,8 @@ Skywake assumes a role in your account, so no long-lived key leaves it.
 
 3. Point the environment at the bucket:
 
-   ```bash
-   curl -X PUT -H "Authorization: Bearer $SKYWAKE_KEY" -H "content-type: application/json" \
+   ```bash norun
+   curl -X PUT -H "authorization: Bearer $SKYWAKE_API_KEY" -H "content-type: application/json" \
      $SKYWAKE_URL/v1/environments/prod/store \
      -d '{"store": "s3://acme-data/skywake",
           "access": {"type": "aws_role", "roleArn": "arn:aws:iam::123456789012:role/skywake", "region": "us-east-1"}}'
@@ -63,14 +69,14 @@ The secret is sealed with the server's `SKYWAKE_API_SECRET_KEY` and never shown 
 
 ## What changes
 
-- New namespaces and indexes in the environment go to your bucket. Asking for a `region` in such an environment answers `400`.
-- With an AWS role, `skywake://` mounts get short-lived credentials from your role, limited to one namespace's folder. With keys, there is no role to scope, so mounts and the CLI read and write through the API instead.
-- Deleting a namespace or an index removes its folder from your bucket. The API keeps trying until it is gone, so remove the role or keys only after that.
+- New disks and indexes in the environment go to your bucket. Asking for a `region` in such an environment answers `400`.
+- With an AWS role, `skywake://` mounts get short-lived [scoped credentials](../security/scoped-credentials.mdx) from your role, limited to one disk's folder. With keys, there is no role to scope, so mounts and the CLI read and write through the API instead.
+- Destroying a disk or an index removes its folder from your bucket. The API keeps trying until it is gone, so remove the role or keys only after that.
 - Cache nodes are not used for your bucket yet; each server's own disk cache still is.
 
 ## Next
 
 <Cards>
-  <Card href="../indexes/sync-with-branch.mdx" />
+  <Card href="../security/scoped-credentials.mdx" />
   <Card href="./what-to-run.mdx" />
 </Cards>

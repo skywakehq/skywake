@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/knowledge-base";
 
 export function KnowledgeBaseGuide({
   locale,
@@ -41,11 +42,10 @@ export function KnowledgeBaseGuide({
           ["start", "Pourquoi c’est plus dur qu’il n’y paraît"],
           ["plan", "Ce que nous allons construire"],
           ["save", "1. Rassembler vos documents"],
-          ["index", "2. Créer un index de recherche à côté"],
-          ["fill", "3. Remplir l’index"],
-          ["tool", "4. Donner un outil de recherche à l’agent"],
-          ["update", "5. Rester à jour"],
-          ["drafts", "6. Tester les gros changements sur un brouillon"],
+          ["index", "2. Activer la recherche à côté"],
+          ["tool", "3. Donner un outil de recherche à l’agent"],
+          ["update", "4. Rester à jour"],
+          ["drafts", "5. Tester les gros changements sur un brouillon"],
           ["scale", "Passer à des millions de documents"],
           ["questions", "Questions"],
         ]}
@@ -81,8 +81,8 @@ export function KnowledgeBaseGuide({
         <div>
           <Checklist
             items={[
-              "Vos documents enregistrés sur une branche, chaque changement gardé comme un commit.",
-              "Un index de recherche à côté, qui trouve les réponses par le sens et par les mots exacts.",
+              "Vos documents enregistrés sur un disque, chaque changement gardé comme un commit.",
+              "Une recherche à côté, qui trouve les réponses par le sens et par les mots exacts.",
               "Un seul outil de recherche que votre agent peut appeler, et qui vous dit quel fichier il a utilisé.",
               "Un moyen de modifier un document et que l’agent le voie aussitôt.",
               "Des brouillons, pour tester les grosses réécritures avant que vos clients ne les voient.",
@@ -90,8 +90,8 @@ export function KnowledgeBaseGuide({
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Rassembler vos documents" />
@@ -110,35 +110,22 @@ export function KnowledgeBaseGuide({
           ]}
         />
         <p>
-          Nous allons l’enregistrer sur une branche appelée <code>main</code>. Voyez une branche
-          comme une branche Git pour fichiers : chaque enregistrement est un commit, et vous pouvez
-          toujours revenir en arrière pour voir ce qui a changé.
+          Nous allons l’envoyer sur un disque appelé <code>help</code>. Un disque garde des fichiers
+          comme un dépôt Git : chaque enregistrement est un commit, et vous pouvez toujours revenir
+          en arrière pour voir ce qui a changé. L’envoi arrive en un seul commit sur la première
+          branche du disque, <code>main</code>.
         </p>
-        <Code
-          file="save-docs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const help = await sky.createNamespace("support/help");
-const main = await help.createBranch("main");
-await main.commitFolder("./help-center", { message: "Help center today" });
-`}
-        />
+        <Code file="save-docs.ts" code={code["save-docs.ts"]} />
         <p>
           C’est tout. <code>main</code> est désormais la seule copie de référence de vos documents,
           stockée dans votre propre bucket.
         </p>
 
-        <Chapter id="index" step={2} title="Créer un index de recherche à côté" />
+        <Chapter id="index" step={2} title="Activer la recherche à côté" />
         <p>
-          Passons à l’index. Pour chaque document, il garde deux choses : le <b>texte</b>, pour
-          trouver les mots exacts, et un <b>vecteur</b>, une liste de nombres qui capture le sens du
-          texte.
+          Passons à la recherche. Un disque peut tenir un index de recherche de ses propres
+          fichiers. Pour chaque document, il garde deux choses : le <b>texte</b>, pour trouver les
+          mots exacts, et un <b>vecteur</b>, une liste de nombres qui capture le sens du texte.
         </p>
         <p>
           Pourquoi les deux ? Vos clients demandent « puis-je récupérer mon argent ? » alors que
@@ -146,95 +133,26 @@ await main.commitFolder("./help-center", { message: "Help center today" });
           aussi « SSO » ou un code d’erreur, et la recherche par mots le trouve mieux. Une bonne
           base de connaissances a besoin des deux.
         </p>
-        <Code
-          file="create-index.ts"
-          code={`
-const search = await sky.indexes.create(
-  "support/help-search",
-  {
-    vectors: [
-      // The server makes the vectors with this model. No job to run.
-      {
-        name: "meaning",
-        dims: 1536,
-        embed: { model: "openai/text-embedding-3-small" },
-      },
-    ],
-    attributes: [
-      { name: "path", type: "string" },
-      { name: "text", type: "text" },
-    ],
-  },
-  { ifMissing: true },
-);
-`}
-        />
+        <Code file="create-index.ts" code={code["create-index.ts"]} />
         <p>
-          Remarquez la ligne <code>embed</code>. Vous nommez un modèle une fois, et ensuite vous
-          envoyez du texte brut. Le serveur crée les vecteurs pour vous.
+          La recherche est active par défaut quand votre environnement a un modèle d’embedding :
+          cette ligne ne fait que s’en assurer. Désormais, le serveur indexe chaque fichier que vous
+          committez et crée les vecteurs pour vous. Pas de job de synchro à écrire.
         </p>
 
-        <Chapter id="fill" step={3} title="Remplir l’index" />
+        <Chapter id="tool" step={3} title="Donner un outil de recherche à l’agent" />
         <p>
-          Copions maintenant chaque document dans l’index. <code>syncIndex</code> lit la branche et
-          écrit un document par fichier. Nous lui disons comment transformer un fichier en
-          document : son chemin sert d’id, et son texte va dans les deux colonnes.
+          Votre agent n’a besoin que d’un outil : chercher dans les documents. <code>query</code>{" "}
+          lance les deux types de recherche en un seul appel. Les documents trouvés par les deux
+          sont classés en tête, si bien qu’une question posée avec les mots du client tombe quand
+          même sur la bonne page.
         </p>
-        <Code
-          file="sync.ts"
-          code={`
-import { syncIndex } from "@skywake/sdk";
-
-type DocFile = { path: string; bytes: Uint8Array };
-
-const document = ({ path, bytes }: DocFile) => {
-  const text = new TextDecoder().decode(bytes);
-  return {
-    id: path,
-    vectors: { meaning: text },
-    attributes: { path, text },
-  };
-};
-
-let synced = await syncIndex(main, search, { document });
-`}
-        />
+        <Code file="tool.ts" code={code["tool.ts"]} />
         <p>
-          Le premier passage envoie tous les fichiers. Il renvoie <code>synced.head</code>, le
-          commit jusqu’auquel il a synchronisé. Gardez cette valeur. La fois suivante, vous la
-          repassez, et seuls les fichiers modifiés depuis sont envoyés. Les fichiers supprimés
-          disparaissent aussi de l’index.
-        </p>
-
-        <Chapter id="tool" step={4} title="Donner un outil de recherche à l’agent" />
-        <p>
-          Votre agent n’a besoin que d’un outil : chercher dans les documents. Nous lancerons les
-          deux types de recherche en un seul appel, ce qu’on appelle une recherche <b>hybride</b>.
-          Les documents trouvés par les deux sont classés en tête, si bien qu’une question posée
-          avec les mots du client tombe quand même sur la bonne page.
-        </p>
-        <Code
-          file="tool.ts"
-          code={`
-export async function searchDocs(question: string) {
-  const hits = await search.hybrid({
-    searches: {
-      meaning: {
-        vector: { column: "meaning", value: question },
-        topK: 30,
-      },
-      words: { query: question, topK: 30 },
-    },
-    topK: 5,
-  });
-  return hits.map((hit) => hit.id);
-}
-`}
-        />
-        <p>
-          L’id de chaque résultat est le chemin du fichier. Donnez <code>searchDocs</code> à votre
-          agent comme outil, laissez-le lire les fichiers qu’il reçoit, et demandez-lui de nommer le
-          fichier qu’il a utilisé.
+          Chaque résultat est le chemin d’un fichier et le passage qui correspond. Donnez{" "}
+          <code>searchDocs</code> à votre agent comme outil, laissez-le lire les fichiers qu’il
+          reçoit avec <code>help.read(path)</code>, et demandez-lui de nommer le fichier qu’il a
+          utilisé.
         </p>
         <Note title="Astuce : citez toujours le fichier">
           <p>
@@ -243,35 +161,24 @@ export async function searchDocs(question: string) {
           </p>
         </Note>
 
-        <Chapter id="update" step={5} title="Rester à jour" />
+        <Chapter id="update" step={4} title="Rester à jour" />
         <p>
           Voici la partie qui cassait dans l’ancienne installation. La politique de remboursement
-          change. Modifiez le document, faites un commit, et synchronisez depuis le dernier head :
+          change. Écrivez le nouveau document :
         </p>
-        <Code
-          file="update.ts"
-          code={`
-await main.write(
-  { "billing/refunds.md": "Annual plans can be refunded within 30 days." },
-  "Refunds: 30 days, not 60",
-);
-synced = await syncIndex(main, search, {
-  document,
-  since: synced.head,
-});
-`}
-        />
+        <Code file="update.ts" code={code["update.ts"]} />
         <p>
-          Seul <code>billing/refunds.md</code> est renvoyé. Posez la même question à l’agent, et la
-          réponse a changé :
+          C’est toute la mise à jour. L’écriture est un commit, et seul{" "}
+          <code>billing/refunds.md</code> est indexé à nouveau. Posez la même question à l’agent un
+          instant plus tard, et la réponse a changé :
         </p>
         <Answers />
         <p>
-          Lancez la synchro juste après chaque commit, depuis le code qui fait le commit. Il n’y a
-          pas de job séparé à surveiller, ni de nuit où il s’arrête sans bruit.
+          Pas de job séparé à lancer après chaque commit, ni à surveiller, ni de nuit où il s’arrête
+          sans bruit.
         </p>
 
-        <Chapter id="drafts" step={6} title="Tester les gros changements sur un brouillon" />
+        <Chapter id="drafts" step={5} title="Tester les gros changements sur un brouillon" />
         <p>
           Les petites modifications peuvent aller directement sur <code>main</code>. Mais imaginons
           qu’une nouvelle grille tarifaire sorte le mois prochain et que la moitié de vos documents
@@ -279,31 +186,19 @@ synced = await syncIndex(main, search, {
           fasse.
         </p>
         <p>
-          Forkez les documents et l’index dans un brouillon. Un fork ne copie rien, il est donc
-          instantané même avec des milliers de documents. Pendant tout ce temps, vos clients
-          continuent d’obtenir leurs réponses depuis <code>main</code>.
+          Forkez le disque dans un brouillon, et modifiez les documents là. Un fork ne copie rien,
+          il est donc instantané même avec des milliers de documents, et il emporte sa recherche
+          avec lui. Pendant tout ce temps, vos clients continuent d’obtenir leurs réponses depuis{" "}
+          <code>main</code>.
         </p>
-        <Code
-          file="draft.ts"
-          code={`
-const draft = await main.fork("drafts/new-pricing", synced.head);
-const draftSearch = await search.fork("drafts/new-pricing");
-
-// Edit files on the draft, then bring its index up to date.
-await syncIndex(draft, draftSearch, { document, since: synced.head });
-
-// Happy with the answers? Publish both together.
-const merged = await draft.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  await search.merge("drafts/new-pricing");
-}
-`}
-        />
+        <Code file="draft.ts" code={code["draft.ts"]} />
         <p>
-          Pointez un agent de test sur le brouillon et posez-lui les questions que vos clients
-          posent le plus. Quand les réponses vous conviennent, fusionnez : les nouveaux documents et
-          leur index passent en ligne au même instant.
+          Donnez le même outil à un agent de test, avec <code>draft.query</code> à la place de{" "}
+          <code>help.query</code>, et posez-lui les questions que vos clients posent le plus. Quand
+          les réponses vous conviennent, fusionnez :
         </p>
+        <Code file="publish.ts" code={code["publish.ts"]} />
+        <p>Les nouveaux documents et leur recherche passent en ligne au même instant.</p>
 
         <Chapter id="scale" title="Passer à des millions de documents" />
         <p>
@@ -312,8 +207,8 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>Les synchros restent petites.</b> Chaque synchro n’envoie que ce qui a changé : une
-            grosse base de connaissances ne coûte pas plus cher à mettre à jour qu’une petite.
+            <b>Les mises à jour restent petites.</b> Chaque commit n’indexe que ce qui a changé :
+            une grosse base de connaissances ne coûte pas plus cher à mettre à jour qu’une petite.
           </li>
           <li>
             <b>La recherche reste rapide.</b> Une requête à chaud sur 10 millions de vecteurs prend
@@ -335,29 +230,30 @@ if (merged.conflicts.length === 0) {
             [
               "Dois-je créer les embeddings moi-même ?",
               <p key="a">
-                Non. Vous nommez un modèle sur l’index, vous envoyez du texte, et le serveur crée
-                les embeddings. Vous pouvez toujours envoyer vos propres vecteurs si vous préférez.
+                Non. Le serveur crée les embeddings de chaque fichier avec le modèle d’embedding de
+                votre environnement. Pour envoyer vos propres vecteurs, utilisez un index et faites
+                un upsert de lignes avec un champ vecteur.
               </p>,
             ],
             [
               "En combien de temps un changement apparaît-il dans la recherche ?",
               <p key="a">
-                Dès que la synchro l’écrit. La recherche par mots voit chaque document écrit, y
-                compris les plus récents.
+                Quelques instants après le commit. Le serveur indexe chaque commit de lui-même, vous
+                n’avez rien à lancer.
               </p>,
             ],
             [
               "Puis-je voir ce que l’agent a lu la semaine dernière ?",
               <p key="a">
-                Oui. Chaque commit des documents est conservé, vous pouvez donc ouvrir la version
-                exacte dont vient une réponse.
+                Oui. Chaque commit des documents est conservé, vous pouvez donc lire la version
+                exacte dont vient une réponse avec <code>{`help.read(path, { at })`}</code>.
               </p>,
             ],
             [
               "Et les documents très longs ?",
               <p key="a">
-                Découpez-les en sections avant de les indexer, un document par section, pour que
-                chaque résultat mène l’agent à la bonne partie de la page.
+                Chaque résultat apporte le passage du fichier qui correspond, l’agent sait donc où
+                regarder. Découper une très longue page en fichiers plus petits aide quand même.
               </p>,
             ],
           ]}
