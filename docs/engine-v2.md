@@ -376,8 +376,7 @@ projection.
 3. End-to-end harness driving the HTTP API, ready for AWS (`benchmarks/cloud/aws`).
 4. First AWS run, **with the user's go-ahead**: all hot rows end to end.
 
-**Exit:** hot rows within 20% of target end to end; this phase can start in parallel with phase 2, since it
-touches `crates/cache` and the binding, not the engine.
+**Exit:** hot rows within 20% of target end to end.
 
 ### Phase 5: text engine (≈4 weeks)
 
@@ -411,10 +410,21 @@ Query-shape log, clustering key choice, automatic composite projections, per-pag
 
 **Exit:** a range-heavy workload on a no-vector index gets faster after one rebuild with no schema change.
 
-### Order and parallelism
+### Order and regression gates
 
-`0 → 1 → 2 → 3 → 5 → 6 → 7 → 8`, with phase 4 alongside 2–3. Phases 5 and 7 can run in parallel after 3,
-since they touch different modules. About 21 weeks of serial work, 15 with both overlaps.
+Phases run one at a time, in order `0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8`, so each phase's effect is measured
+alone and a regression points at one phase. About 21 weeks.
+
+Every phase ends with the **full suite**, not only the workloads it targets, compared with the previous
+phase's run by `benchmarks/compare.py`:
+
+- all ten workloads of section 6.1, hot and cold, at 1M and 10M;
+- today's published sets: SIFT-1M and Cohere-10M vector (latency and recall), MS MARCO (latency, MRR@10,
+  nDCG@10);
+- write throughput, build time, index bytes, and peak memory.
+
+A phase lands only when no number regresses by more than 10% (p90 latency, bytes, build time) or at all
+(recall, ranking quality), or when a regression is written up in section 8 and accepted.
 
 ### Risks
 
@@ -439,4 +449,4 @@ Filled in phase by phase: today, then each phase, slow store and (where approved
 2. Index heads on the filesystem's slot owners (3.0).
 3. Fairness rules in 6.2, and AWS runs from phase 4 on, each with a go-ahead.
 4. The optional S3 Express tier for metadata (3.7), decided at phase 6.
-5. The phase order in section 7.
+5. Phases one at a time, each gated on the full suite with no regressions (section 7).
