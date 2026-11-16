@@ -6,6 +6,7 @@ import type * as links from "./queries.ts";
 
 const LIST_PAGE = 1_000;
 const IMAGE_BYTES_MAX = 5 << 20;
+const IMAGE_SKIPPED = "an image; search by meaning with a model that reads images to find it";
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 
 export const IMAGE_TYPES: Record<string, string> = {
@@ -125,7 +126,8 @@ export class Reader {
 
   async #read(path: string, size: number): Promise<FileDoc | null> {
     if (!this.wanted(path)) return null;
-    const type = this.#images ? imageType(path) : undefined;
+    const type = imageType(path);
+    if (type && !this.#images) return { kind: "skipped", path, reason: IMAGE_SKIPPED };
     const limit = type ? Math.max(this.#link.maxBytes, IMAGE_BYTES_MAX) : this.#link.maxBytes;
     if (size > limit) {
       return { kind: "skipped", path, reason: `larger than ${Math.round(limit / 1024)} KiB` };

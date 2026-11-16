@@ -91,7 +91,7 @@ export class Writer {
   async add(doc: FileDoc) {
     this.cleared.add(doc.path);
     if (doc.kind === "skipped") {
-      this.#skip(doc);
+      this.#skip({ path: doc.path, reason: doc.reason });
       this.#paths.add(doc.path);
       return;
     }

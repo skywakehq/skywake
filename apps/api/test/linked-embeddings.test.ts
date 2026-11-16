@@ -330,6 +330,19 @@ test("images are embedded beside text, and found by what they show", { skip }, a
   assert.deepEqual(await words(s, key, "beach"), ["photos/beach.png"]);
 });
 
+test("a link that can't read images says so for each one", { skip }, async () => {
+  const { s, key } = await started();
+  await link(s, key, { embed: false });
+  await commit(s, key, [{ path: "photos/beach.png", base64: Buffer.from("PNG").toString("base64") }]);
+  await s.services.syncer.drain();
+  assert.deepEqual((await status(s, key)).skipped, [
+    {
+      path: "photos/beach.png",
+      reason: "an image; search by meaning with a model that reads images to find it",
+    },
+  ]);
+});
+
 test("a model that embeds only text refuses an image", { skip }, async () => {
   const s = await server({ vendors: { openai: { url: base, key: "k" } } });
   const { key } = await s.org();
