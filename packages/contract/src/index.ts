@@ -14,6 +14,7 @@ import * as namespaces from "./namespaces.ts";
 import * as orgs from "./orgs.ts";
 import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
+import * as v2 from "./v2/index.ts";
 
 export * from "./http.ts";
 export * from "./names.ts";
@@ -33,6 +34,7 @@ export {
   orgs,
   sessions,
   sso,
+  v2,
 };
 
 export const routes = {

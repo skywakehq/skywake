@@ -23,6 +23,14 @@ export async function find(db: Db, org: string, namespace: string) {
   return row ?? null;
 }
 
+export async function madeIndexes(db: Db, org: string) {
+  const rows = await db
+    .select({ index: indexLinks.index })
+    .from(indexLinks)
+    .where(and(eq(indexLinks.org, org), eq(indexLinks.made, true)));
+  return new Set(rows.map((row) => row.index));
+}
+
 export async function ofIndex(db: Db, org: string, index: string) {
   const [row] = await db
     .select()

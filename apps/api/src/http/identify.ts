@@ -22,7 +22,8 @@ export const identify =
         c.set("who", who);
         // Each key or user has its own limit too, so many agents behind one
         // address are not stopped by the address's limit alone.
-        if (!c.get("fromPeer")) await services.limiter?.hit(c, `actor:${who.org}/${who.actor}`);
+        if (!c.get("fromPeer") && !c.get("again"))
+          await services.limiter?.hit(c, `actor:${who.org}/${who.actor}`);
         await services.allowlists.check(who.org, addressOf(c, who));
       }
       return who;
