@@ -122,12 +122,11 @@ jobs:
             psql -U skywake -c 'CREATE DATABASE skywake_test'
       - run: pnpm install --frozen-lockfile
       # Runs every package's tests: the engine, the API (with the database
-      # above; a skipped test fails in CI) and the TypeScript SDK.
+      # above; a skipped test fails in CI), the TypeScript SDK and the npm
+      # wrapper of the CLI.
       - run: pnpm test
       - name: Python SDK
         run: uv run --isolated --with pytest --with-editable "./sdks/python[mcp]" pytest -q sdks/python/tests
-      - name: npm wrapper of the CLI
-        run: node --test packages/skywake-cli/test/wrapper.test.mjs
       - name: Start the API on S3
         env:
           SKYWAKE_STORE: s3://skywake/ci

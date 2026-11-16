@@ -1,23 +1,31 @@
 {
-  "name": "@skywake/bash",
-  "version": "0.1.0",
-  "description": "A bash shell for AI agents over a Skywake branch, with rg, grep and find served by the API.",
+  "name": "skywake",
+  "version": "0.1.2",
+  "description": "Skywake in one package: the TypeScript SDK, a bash shell for AI agents over a branch, and the skywake command.",
   "keywords": [
     "skywake",
+    "cli",
+    "sdk",
+    "ai-agents",
+    "filesystem",
+    "s3",
+    "copy-on-write",
+    "branching",
     "bash",
     "just-bash",
-    "ai-agents",
     "ai-sdk",
     "mcp",
-    "ripgrep",
-    "filesystem"
+    "vector-search",
+    "full-text-search",
+    "hybrid-search"
   ],
-  "homepage": "https://skywake.dev/docs/agents/bash",
+  "homepage": "https://skywake.dev",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/skywakehq/skywake.git",
-    "directory": "packages/bash"
+    "directory": "packages/skywake"
   },
+  "bugs": "https://github.com/skywakehq/skywake/issues",
   "license": "Apache-2.0",
   "type": "module",
   "exports": {
@@ -25,19 +33,29 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./bash": {
+      "types": "./dist/bash.d.ts",
+      "default": "./dist/bash.js"
+    },
     "./ai": {
       "types": "./dist/ai.d.ts",
       "default": "./dist/ai.js"
     }
   },
   "bin": {
+    "skywake": "bin/skywake.cjs",
     "skywake-bash-mcp": "dist/mcp.js"
   },
   "files": [
+    "bin",
     "dist"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

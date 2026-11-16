@@ -9,25 +9,15 @@
         { "type": "toml", "path": "Cargo.toml", "jsonpath": "$.workspace.package.version" },
         { "type": "toml", "path": "sdks/python/pyproject.toml", "jsonpath": "$.project.version" },
         { "type": "json", "path": "sdks/typescript/package.json", "jsonpath": "$.version" },
-        { "type": "json", "path": "packages/skywake-cli/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/skywake/package.json", "jsonpath": "$.version" },
         {
           "type": "json",
-          "path": "packages/skywake-cli/package.json",
-          "jsonpath": "$.optionalDependencies['@skywake/cli-linux-x64']"
-        },
-        {
-          "type": "json",
-          "path": "packages/skywake-cli/package.json",
-          "jsonpath": "$.optionalDependencies['@skywake/cli-linux-arm64']"
-        },
-        {
-          "type": "json",
-          "path": "packages/skywake-cli/npm/linux-x64/package.json",
+          "path": "packages/skywake/npm/linux-x64/package.json",
           "jsonpath": "$.version"
         },
         {
           "type": "json",
-          "path": "packages/skywake-cli/npm/linux-arm64/package.json",
+          "path": "packages/skywake/npm/linux-arm64/package.json",
           "jsonpath": "$.version"
         },
         { "type": "yaml", "path": "deploy/helm/skywake/Chart.yaml", "jsonpath": "$.version" },

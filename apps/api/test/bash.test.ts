@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createShell, type Shell } from "@skywake/bash";
+import { createShell, type Shell } from "skywake/bash";
 import { Skywake } from "@skywake/sdk";
 
 import { server, skip, type Server } from "./helpers.ts";

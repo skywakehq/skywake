@@ -26,7 +26,7 @@ export const operations: SdkOperation[] = [
     title: "Connect",
     description: "Make a client with the API's URL and an API key.",
     examples: {
-      typescript: `import { Skywake } from "@skywake/sdk";
+      typescript: `import { Skywake } from "skywake";
 
 const sky = new Skywake({
   url: process.env.SKYWAKE_URL!,

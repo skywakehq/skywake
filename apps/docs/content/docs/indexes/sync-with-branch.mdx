@@ -7,7 +7,7 @@ description: Link an index to a namespace, so its files are searchable and every
 If your agents search the files on a branch, the index must match those files. Link an index to the namespace and Skywake keeps it in step: `main` from the moment you link, and every branch you fork `withIndex`.
 
 ```ts
-import { Skywake } from "@skywake/sdk";
+import { Skywake } from "skywake";
 
 const sky = new Skywake({ url: process.env.SKYWAKE_URL!, key: process.env.SKYWAKE_KEY! });
 const app = sky.namespace("team/app");
@@ -64,7 +64,7 @@ To change the globs, link again with the new ones; the branches are indexed agai
 To control the documents yourself, skip the link and call `syncIndex` (TypeScript), which upserts the files that changed since an earlier sync and deletes the documents of removed ones:
 
 ```ts
-import { syncIndex } from "@skywake/sdk";
+import { syncIndex } from "skywake";
 
 let synced = await syncIndex(main, code); // every file, the first time
 synced = await syncIndex(main, code, { since: synced.head });

@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createRequire } from "node:module";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { Skywake } from "@skywake/sdk";
@@ -20,7 +22,8 @@ const branch = client
   .branch(process.env.SKYWAKE_BRANCH ?? "main");
 const shell = createShell(branch);
 
-const server = new McpServer({ name: "skywake-bash", version: "0.1.0" });
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+const server = new McpServer({ name: "skywake-bash", version });
 server.registerTool(
   "bash",
   { description: BASH_DESCRIPTION, inputSchema: { command: z.string() } },

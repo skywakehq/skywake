@@ -25,7 +25,7 @@ fork = sky.namespace("prod/app").branch("main").fork("agents/42")
 ```
 
 ```ts tab="TypeScript"
-import { Skywake } from "@skywake/sdk";
+import { Skywake } from "skywake";
 
 const sky = new Skywake({ url: "http://localhost:8080", key: "sw_..." });
 const fork = await sky.namespace("prod/app").branch("main").fork("agents/42");

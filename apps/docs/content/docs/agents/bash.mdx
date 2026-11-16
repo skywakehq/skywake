@@ -1,15 +1,15 @@
 ---
 title: Bash
 icon: Terminal
-description: "@skywake/bash gives an agent a bash shell over a branch, with rg, grep and find answered by the API."
+description: "skywake/bash gives an agent a bash shell over a branch, with rg, grep and find answered by the API."
 ---
 
-Agents already know bash. `@skywake/bash` gives them a shell whose disk is a Skywake branch, built on [just-bash](https://github.com/vercel-labs/just-bash). It runs in your process, with no container and no network: `ls`, `cat`, `sed`, `awk`, `jq`, `head`, `wc`, `mkdir`, `cp`, `mv` and `rm` work on the branch's files directly.
+Agents already know bash. `skywake/bash`, part of the `skywake` package, gives them a shell whose disk is a Skywake branch, built on [just-bash](https://github.com/vercel-labs/just-bash). It runs in your process, with no container and no network: `ls`, `cat`, `sed`, `awk`, `jq`, `head`, `wc`, `mkdir`, `cp`, `mv` and `rm` work on the branch's files directly.
 
 `rg`, `grep -r` and `find` are answered by the API instead of reading the tree file by file, so they stay fast on a branch with millions of files. On a namespace with a [linked index](../indexes/sync-with-branch.mdx), `rg` reads only the files that hold every trigram the pattern needs.
 
 ```bash
-npm install @skywake/bash @skywake/sdk
+npm install skywake
 ```
 
 ## Use it as a tool
@@ -17,9 +17,9 @@ npm install @skywake/bash @skywake/sdk
 With the Vercel AI SDK:
 
 ```ts
-import { createShell } from "@skywake/bash";
-import { bashTool } from "@skywake/bash/ai";
-import { Skywake } from "@skywake/sdk";
+import { createShell } from "skywake/bash";
+import { bashTool } from "skywake/ai";
+import { Skywake } from "skywake";
 import { generateText, stepCountIs } from "ai";
 
 const sky = new Skywake({ url: "https://api.skywake.dev", key: process.env.SKYWAKE_KEY! });
@@ -43,7 +43,7 @@ By default each command that changed files becomes one commit, with the command 
   "mcpServers": {
     "skywake-bash": {
       "command": "npx",
-      "args": ["-y", "-p", "@skywake/bash", "skywake-bash-mcp"],
+      "args": ["-y", "-p", "skywake", "skywake-bash-mcp"],
       "env": {
         "SKYWAKE_URL": "https://api.skywake.dev",
         "SKYWAKE_KEY": "sw_...",
