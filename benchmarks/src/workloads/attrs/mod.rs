@@ -1,4 +1,4 @@
-mod data;
+pub(crate) mod data;
 mod passes;
 mod report;
 

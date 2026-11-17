@@ -23,7 +23,7 @@ use self::export::{IndexExport, IndexParquetExport};
 use self::history::{
     GRACE, IndexCollectOptions, IndexCollected, IndexVersion, days, version, version_to,
 };
-use self::open::{IndexOpenOptions, disk, stores_of};
+use self::open::{IndexOpenOptions, columns, disk, stores_of};
 use crate::error::{fail_index, invalid};
 use crate::index_json::documents::{
     IndexCounts, IndexDoc, IndexWrite, counts_to, doc_from, doc_to, write_from,
@@ -65,6 +65,7 @@ impl Index {
             disk: if encrypted { None } else { disk()? },
             spill: !encrypted,
             shared,
+            columns: columns()?,
             ..Options::default()
         };
         Ok(Self {
