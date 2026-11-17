@@ -7,8 +7,8 @@
     "dev": "next dev --port 3200",
     "build": "node ../../packages/contract/emit.ts && node scripts/check-links.ts && next build",
     "start": "next start --port 3200",
-    "lint": "eslint && node scripts/check-sdk-examples.ts",
-    "typecheck": "next typegen && tsc --noEmit"
+    "lint": "eslint && node scripts/check-sdk-examples.ts && node scripts/check-examples.ts",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.examples.json"
   },
   "dependencies": {
     "@skywake/env": "workspace:*",
@@ -26,6 +26,7 @@
   "devDependencies": {
     "@skywake/config": "workspace:*",
     "@skywake/contract": "workspace:*",
+    "skywake": "workspace:*",
     "@tailwindcss/turbopack": "^4",
     "@types/mdx": "^2.0.14",
     "@types/node": "^20",

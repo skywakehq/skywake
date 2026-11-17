@@ -8,8 +8,6 @@ const IMAGE_MAX = 6 << 20;
 
 export type Picked = { name: string; url: string };
 
-export const SHOWN_IMAGE = "data:image/png;base64,…";
-
 function read(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();

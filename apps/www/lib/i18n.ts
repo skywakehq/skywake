@@ -32,6 +32,16 @@ export function isLocale(value: string): value is Locale {
   return (locales as readonly string[]).includes(value);
 }
 
+const ZONES = ["/docs", "/dashboard"];
+
+export function isZonePath(path: string) {
+  return ZONES.some((zone) => path === zone || path.startsWith(`${zone}/`));
+}
+
+export function isSitePath(href: string) {
+  return href.startsWith("/") && !isZonePath(href);
+}
+
 export function localizePath(locale: Locale, path = "/") {
   if (path.startsWith("/#")) return `/${locale}${path.slice(1)}`;
   const hashIndex = path.indexOf("#");

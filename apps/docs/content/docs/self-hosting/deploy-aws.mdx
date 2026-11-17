@@ -34,7 +34,7 @@ module "skywake" {
 
 Configure the `aws`, `kubernetes` and `helm` providers for the cluster first. `deploy/terraform/aws/examples/eks` shows how. Then:
 
-```bash
+```bash norun
 terraform init
 terraform apply
 ```
@@ -63,13 +63,13 @@ The admin token is in the `admin_token` output (`terraform output -raw admin_tok
 
 Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/home#/stacks/create) **in the region you want**, choose **Upload a template file**, and pick `skywake-starter.yaml`. Or use the CLI:
 
-```bash
+```bash norun
 aws cloudformation deploy --region eu-central-1 --stack-name skywake \
   --template-file skywake-starter.yaml --capabilities CAPABILITY_IAM \
   --parameter-overrides AllowedCidr=203.0.113.0/24
 ```
 
-The stack finishes once every service is healthy, which takes about five minutes. Its outputs give the console's and the API's addresses. Open the console, sign up, and make an organization.
+The stack finishes once every service is healthy, which takes about five minutes. Its outputs give the console's and the API's addresses. Open the console, sign up, and make an organization. Then sign the CLI in to it with `skywake login --profile aws --url http://ADDRESS:8080`.
 
 | Parameter      | Default      | Meaning                                             |
 | -------------- | ------------ | --------------------------------------------------- |

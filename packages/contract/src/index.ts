@@ -10,12 +10,15 @@ import * as history from "./history.ts";
 import * as indexes from "./indexes/index.ts";
 import * as keys from "./keys.ts";
 import * as links from "./links.ts";
+import * as logins from "./logins.ts";
 import * as namespaces from "./namespaces.ts";
 import * as orgs from "./orgs.ts";
 import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
+import * as v2 from "./v2/index.ts";
 
 export * from "./http.ts";
+export * from "./names.ts";
 export * from "./schemas.ts";
 export {
   audit,
@@ -28,10 +31,12 @@ export {
   indexes,
   keys,
   links,
+  logins,
   namespaces,
   orgs,
   sessions,
   sso,
+  v2,
 };
 
 export const routes = {
@@ -53,7 +58,15 @@ export const routes = {
     billing.setPlan,
   ],
   sso: [sso.getSsoPolicy, sso.setSsoPolicy, sso.ssoDomainOrgs],
-  keys: [keys.listKeys, keys.createKey, keys.deleteKey, keys.revokeMemberKeys],
+  keys: [
+    keys.whoami,
+    keys.listKeys,
+    keys.createKey,
+    keys.deleteKey,
+    keys.revokeMemberKeys,
+    logins.getLogin,
+    logins.approveLogin,
+  ],
   audit: [audit.auditLog, audit.recordAuditEvents],
   environments: [
     environments.listRegions,

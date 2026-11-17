@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/knowledge-base";
 
 export function KnowledgeBaseGuide({
   locale,
@@ -41,11 +42,10 @@ export function KnowledgeBaseGuide({
           ["start", "Perché è più difficile di quanto sembri"],
           ["plan", "Cosa costruiamo"],
           ["save", "1. Metti i documenti in un unico posto"],
-          ["index", "2. Crea un indice di ricerca accanto a loro"],
-          ["fill", "3. Riempi l’indice"],
-          ["tool", "4. Dai al tuo agente uno strumento di ricerca"],
-          ["update", "5. Tienilo aggiornato"],
-          ["drafts", "6. Prova le modifiche grandi su una bozza"],
+          ["index", "2. Attiva la ricerca accanto a loro"],
+          ["tool", "3. Dai al tuo agente uno strumento di ricerca"],
+          ["update", "4. Tienilo aggiornato"],
+          ["drafts", "5. Prova le modifiche grandi su una bozza"],
           ["scale", "Crescere fino a milioni di documenti"],
           ["questions", "Domande"],
         ]}
@@ -81,8 +81,8 @@ export function KnowledgeBaseGuide({
         <div>
           <Checklist
             items={[
-              "I tuoi documenti salvati come branch, con ogni modifica conservata come commit.",
-              "Un indice di ricerca accanto a loro che trova le risposte per significato e per parole esatte.",
+              "I tuoi documenti salvati su un disco, con ogni modifica conservata come commit.",
+              "Una ricerca accanto a loro che trova le risposte per significato e per parole esatte.",
               "Un unico strumento di ricerca che il tuo agente può chiamare, e che ti dice quale file ha usato.",
               "Un modo per aggiornare un documento e farlo vedere subito all’agente.",
               "Le bozze, per provare le riscritture grandi prima che le vedano i clienti.",
@@ -90,8 +90,8 @@ export function KnowledgeBaseGuide({
           />
         </div>
         <p>
-          Ti servono una API key di Skywake e Node. Imposta <code>SKYWAKE_URL</code> e{" "}
-          <code>SKYWAKE_KEY</code>, poi installa l’SDK con <code>npm i @skywake/sdk</code>.
+          Ti servono una API key di Skywake e Node. Imposta <code>SKYWAKE_API_KEY</code>, poi
+          installa l’SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Metti i documenti in un unico posto" />
@@ -110,34 +110,22 @@ export function KnowledgeBaseGuide({
           ]}
         />
         <p>
-          La salviamo come branch chiamato <code>main</code>. Pensa a un branch come a un branch di
-          Git per i file: ogni salvataggio è un commit, e puoi sempre tornare indietro e vedere cosa
-          è cambiato.
+          La carichiamo su un disco chiamato <code>help</code>. Un disco tiene i file come un
+          repository Git: ogni salvataggio è un commit, e puoi sempre tornare indietro e vedere cosa
+          è cambiato. Il caricamento arriva come un solo commit sul primo branch del disco,{" "}
+          <code>main</code>.
         </p>
-        <Code
-          file="save-docs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const help = await sky.createNamespace("support/help");
-const main = await help.createBranch("main");
-await main.commitFolder("./help-center", { message: "Help center today" });
-`}
-        />
+        <Code file="save-docs.ts" code={code["save-docs.ts"]} />
         <p>
           Fatto. Ora <code>main</code> è l’unica copia ufficiale dei tuoi documenti, salvata nel tuo
           bucket.
         </p>
 
-        <Chapter id="index" step={2} title="Crea un indice di ricerca accanto a loro" />
+        <Chapter id="index" step={2} title="Attiva la ricerca accanto a loro" />
         <p>
-          Poi l’indice. Per ogni documento conserva due cose: il <b>testo</b>, per trovare le parole
-          esatte, e un <b>vettore</b>, una lista di numeri che cattura il significato del testo.
+          Poi la ricerca. Un disco può tenere un indice di ricerca dei propri file. Per ogni
+          documento conserva due cose: il <b>testo</b>, per trovare le parole esatte, e un{" "}
+          <b>vettore</b>, una lista di numeri che cattura il significato del testo.
         </p>
         <p>
           Perché entrambi? I clienti chiedono “posso riavere i miei soldi?” mentre il tuo documento
@@ -145,94 +133,25 @@ await main.commitFolder("./help-center", { message: "Help center today" });
           codice di errore, e lì la ricerca per parole funziona meglio. Una buona knowledge base ha
           bisogno di tutte e due.
         </p>
-        <Code
-          file="create-index.ts"
-          code={`
-const search = await sky.indexes.create(
-  "support/help-search",
-  {
-    vectors: [
-      // The server makes the vectors with this model. No job to run.
-      {
-        name: "meaning",
-        dims: 1536,
-        embed: { model: "openai/text-embedding-3-small" },
-      },
-    ],
-    attributes: [
-      { name: "path", type: "string" },
-      { name: "text", type: "text" },
-    ],
-  },
-  { ifMissing: true },
-);
-`}
-        />
+        <Code file="create-index.ts" code={code["create-index.ts"]} />
         <p>
-          Nota la riga <code>embed</code>. Indichi un modello una volta, e da lì in poi invii testo
-          semplice. I vettori li crea il server per te.
+          La ricerca è attiva di default quando il tuo ambiente ha un modello di embedding, quindi
+          questa riga si limita a garantirlo. Da qui in poi il server indicizza ogni file di cui fai
+          commit e crea i vettori per te. Non c’è nessun job di sync da scrivere.
         </p>
 
-        <Chapter id="fill" step={3} title="Riempi l’indice" />
+        <Chapter id="tool" step={3} title="Dai al tuo agente uno strumento di ricerca" />
         <p>
-          Ora copiamo ogni documento nell’indice. <code>syncIndex</code> legge il branch e scrive un
-          documento per ogni file. Gli diciamo come trasformare un file in un documento: il suo path
-          è l’id, e il suo testo va in entrambe le colonne.
-        </p>
-        <Code
-          file="sync.ts"
-          code={`
-import { syncIndex } from "@skywake/sdk";
-
-type DocFile = { path: string; bytes: Uint8Array };
-
-const document = ({ path, bytes }: DocFile) => {
-  const text = new TextDecoder().decode(bytes);
-  return {
-    id: path,
-    vectors: { meaning: text },
-    attributes: { path, text },
-  };
-};
-
-let synced = await syncIndex(main, search, { document });
-`}
-        />
-        <p>
-          La prima esecuzione invia tutti i file. Restituisce <code>synced.head</code>, il commit su
-          cui si è sincronizzata. Conserva quel valore. La volta dopo lo ripassi, e vengono inviati
-          solo i file cambiati da allora. Anche i file che hai cancellato vengono tolti dall’indice.
-        </p>
-
-        <Chapter id="tool" step={4} title="Dai al tuo agente uno strumento di ricerca" />
-        <p>
-          Al tuo agente serve un solo strumento: cercare nei documenti. Eseguiamo entrambi i tipi di
-          ricerca in una sola chiamata, una ricerca <b>ibrida</b>. I documenti trovati da tutte e
-          due salgono in cima, così anche una domanda scritta con le parole del cliente arriva alla
+          Al tuo agente serve un solo strumento: cercare nei documenti. <code>query</code> esegue
+          entrambi i tipi di ricerca in una sola chiamata. I documenti trovati da tutte e due
+          salgono in cima, così anche una domanda scritta con le parole del cliente arriva alla
           pagina giusta.
         </p>
-        <Code
-          file="tool.ts"
-          code={`
-export async function searchDocs(question: string) {
-  const hits = await search.hybrid({
-    searches: {
-      meaning: {
-        vector: { column: "meaning", value: question },
-        topK: 30,
-      },
-      words: { query: question, topK: 30 },
-    },
-    topK: 5,
-  });
-  return hits.map((hit) => hit.id);
-}
-`}
-        />
+        <Code file="tool.ts" code={code["tool.ts"]} />
         <p>
-          L’id di ogni risultato è il path del file. Passa <code>searchDocs</code> al tuo agente
-          come strumento, lascia che legga i file che riceve e chiedigli di indicare il file che ha
-          usato.
+          Ogni risultato è il path di un file e la parte che corrisponde. Passa{" "}
+          <code>searchDocs</code> al tuo agente come strumento, lascia che legga i file che riceve
+          con <code>help.read(path)</code> e chiedigli di indicare il file che ha usato.
         </p>
         <Note title="Consiglio: cita sempre il file">
           <p>
@@ -241,66 +160,42 @@ export async function searchDocs(question: string) {
           </p>
         </Note>
 
-        <Chapter id="update" step={5} title="Tienilo aggiornato" />
+        <Chapter id="update" step={4} title="Tienilo aggiornato" />
         <p>
-          Ecco la parte che si rompeva nel vecchio setup. La politica di rimborso cambia. Modifica
-          il documento, fai commit e sincronizza dall’ultimo head:
+          Ecco la parte che si rompeva nel vecchio setup. La politica di rimborso cambia. Scrivi il
+          nuovo documento:
         </p>
-        <Code
-          file="update.ts"
-          code={`
-await main.write(
-  { "billing/refunds.md": "Annual plans can be refunded within 30 days." },
-  "Refunds: 30 days, not 60",
-);
-synced = await syncIndex(main, search, {
-  document,
-  since: synced.head,
-});
-`}
-        />
+        <Code file="update.ts" code={code["update.ts"]} />
         <p>
-          Viene reinviato solo <code>billing/refunds.md</code>. Fai all’agente la stessa domanda, e
-          la risposta è cambiata:
+          Questo è tutto l’aggiornamento. La scrittura è un commit, e viene reindicizzato solo{" "}
+          <code>billing/refunds.md</code>. Fai all’agente la stessa domanda un attimo dopo, e la
+          risposta è cambiata:
         </p>
         <Answers />
         <p>
-          Esegui il sync subito dopo ogni commit, dallo stesso codice che fa il commit. Non c’è un
-          job separato da controllare, e nessuna notte in cui si ferma senza avvisare.
+          Dopo ogni commit non c’è un job separato da eseguire né da controllare, e nessuna notte in
+          cui si ferma senza avvisare.
         </p>
 
-        <Chapter id="drafts" step={6} title="Prova le modifiche grandi su una bozza" />
+        <Chapter id="drafts" step={5} title="Prova le modifiche grandi su una bozza" />
         <p>
           Le piccole modifiche possono andare direttamente su <code>main</code>. Ma immagina che il
           mese prossimo esca un nuovo listino e che metà dei documenti di fatturazione cambi. Vuoi
           vedere come risponde l’agente prima che lo veda un cliente.
         </p>
         <p>
-          Fai un fork dei documenti e dell’indice in una bozza. Un fork non copia nulla, quindi è
-          istantaneo anche con migliaia di documenti. Intanto i clienti continuano a ricevere
-          risposte da <code>main</code>.
+          Fai un fork del disco in una bozza e cambia lì i documenti. Un fork non copia nulla,
+          quindi è istantaneo anche con migliaia di documenti, e si porta dietro la sua ricerca.
+          Intanto i clienti continuano a ricevere risposte da <code>main</code>.
         </p>
-        <Code
-          file="draft.ts"
-          code={`
-const draft = await main.fork("drafts/new-pricing", synced.head);
-const draftSearch = await search.fork("drafts/new-pricing");
-
-// Edit files on the draft, then bring its index up to date.
-await syncIndex(draft, draftSearch, { document, since: synced.head });
-
-// Happy with the answers? Publish both together.
-const merged = await draft.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  await search.merge("drafts/new-pricing");
-}
-`}
-        />
+        <Code file="draft.ts" code={code["draft.ts"]} />
         <p>
-          Collega un agente di prova alla bozza e fagli le domande che i clienti fanno più spesso.
-          Quando le risposte ti convincono, fai merge: i nuovi documenti e il loro indice vanno
-          online nello stesso momento.
+          Dai lo stesso strumento a un agente di prova, con <code>draft.query</code> al posto di{" "}
+          <code>help.query</code>, e fagli le domande che i clienti fanno più spesso. Quando le
+          risposte ti convincono, fai merge:
         </p>
+        <Code file="publish.ts" code={code["publish.ts"]} />
+        <p>I nuovi documenti e la loro ricerca vanno online nello stesso momento.</p>
 
         <Chapter id="scale" title="Crescere fino a milioni di documenti" />
         <p>
@@ -309,8 +204,8 @@ if (merged.conflicts.length === 0) {
         </p>
         <ul>
           <li>
-            <b>I sync restano piccoli.</b> Ogni sync invia solo ciò che è cambiato, quindi
-            aggiornare una knowledge base grande non costa più che aggiornarne una piccola.
+            <b>Gli aggiornamenti restano piccoli.</b> Ogni commit indicizza solo ciò che è cambiato,
+            quindi aggiornare una knowledge base grande non costa più che aggiornarne una piccola.
           </li>
           <li>
             <b>La ricerca resta veloce.</b> Una query a caldo su 10 milioni di vettori richiede
@@ -332,29 +227,30 @@ if (merged.conflicts.length === 0) {
             [
               "Devo creare io gli embedding?",
               <p key="a">
-                No. Indichi un modello sull’indice, invii il testo e il server crea gli embedding.
-                Se preferisci, puoi comunque inviare i tuoi vettori.
+                No. Il server crea gli embedding di ogni file con il modello di embedding del tuo
+                ambiente. Se vuoi inviare i tuoi vettori, usa un indice e fai upsert di righe con un
+                campo vettore.
               </p>,
             ],
             [
               "Quanto ci mette una modifica a comparire nella ricerca?",
               <p key="a">
-                Compare appena il sync la scrive. La ricerca per parole vede ogni documento scritto,
-                anche i più recenti.
+                Pochi istanti dopo il commit. Il server indicizza ogni commit da solo, quindi non
+                devi eseguire nulla.
               </p>,
             ],
             [
               "Posso vedere cosa ha letto l’agente la settimana scorsa?",
               <p key="a">
-                Sì. Ogni commit dei documenti viene conservato, quindi puoi aprire la versione
-                esatta da cui è nata una risposta.
+                Sì. Ogni commit dei documenti viene conservato, quindi puoi leggere la versione
+                esatta da cui è nata una risposta con <code>{`help.read(path, { at })`}</code>.
               </p>,
             ],
             [
               "E i documenti molto lunghi?",
               <p key="a">
-                Dividili in sezioni prima di indicizzarli, un documento per sezione, così ogni
-                risultato porta l’agente alla parte giusta della pagina.
+                Ogni risultato porta la parte del file che corrisponde, così l’agente sa dove
+                guardare. Dividere una pagina molto lunga in file più piccoli aiuta comunque.
               </p>,
             ],
           ]}

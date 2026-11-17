@@ -1,4 +1,4 @@
-import { SkywakeError } from "@skywake/sdk";
+import { InvalidRequest } from "@skywake/sdk";
 import type { CommandContext, ExecResult } from "just-bash";
 
 export function done(stdout: string, exitCode = 0, stderr = ""): ExecResult {
@@ -15,7 +15,7 @@ export async function builtIn(
 }
 
 export function refused(name: string, error: unknown): ExecResult {
-  if (error instanceof SkywakeError && error.status === 400) {
+  if (error instanceof InvalidRequest) {
     return done("", 2, `${name}: ${error.message}\n`);
   }
   throw error;

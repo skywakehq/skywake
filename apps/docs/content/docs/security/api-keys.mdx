@@ -1,73 +1,87 @@
 ---
 title: API keys
 icon: KeyRound
-description: Give agents, the SDKs, the MCP server and the CLI their own key, limited by role and namespace.
+description: Give agents, the SDKs, the MCP server and the CLI their own key, limited by environment, role and name.
 ---
 
-Every call to the API needs a key. Give each agent or tool its own key, with only the role and namespaces it needs, so you can see what it did and revoke it on its own.
+Every call to the API needs a key. A key belongs to one organization and one environment, and has a role. Give each agent or tool its own key, with only what it needs, so you can see what it did and revoke it on its own.
 
-```bash
-curl -X POST "$SKYWAKE_URL/v1/keys" \
-  -H "Authorization: Bearer $SKYWAKE_KEY" -H "Content-Type: application/json" \
-  -d '{"name": "agent-fleet", "role": "write", "namespaces": "prod/*", "expires_in_days": 30}'
-# {"id": "...", "key": "sw_..."}
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/security/keys.ts
+</include>
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/security/keys.py
+</include>
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/security/keys.sh
+</include>
+
+The key is shown only once, so keep it right away. Pass it as `SKYWAKE_API_KEY`, as `key` in an SDK, or as a bearer token: `Authorization: Bearer sw_...`. You can also make one in the console under **Settings → API keys**.
+
+## Sign in from the CLI
+
+On your own machine, you don't need to copy a key at all:
+
+```bash norun
+skywake login
 ```
 
-You can also make one in the console under **Settings → API keys**. The key is shown only once, so copy it right away. Send it as a bearer token: `Authorization: Bearer sw_...`.
+The CLI shows a code and opens the console at `/cli/CODE`. Check that the browser shows the same code, then allow it. The CLI makes the key itself and sends only its id, so the key never passes through the browser. It saves the key in `~/.config/skywake/credentials.toml`.
+
+- Any member can allow a key for one environment, with a role up to their own.
+- A key for every environment needs an organization admin.
+- `skywake login --paste` saves a key you paste instead. `--profile NAME` saves it under another profile, and `--url` points that profile at another server, such as [your own](../self-hosting/local-api.mdx).
 
 ## Roles
 
 Each role can do everything the role before it can, and more.
 
-| Role    | Files                                                                                                                    | Indexes                                                                            |
-| ------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `read`  | Read files, history, diffs and sessions.                                                                                 | List and describe indexes, query, search, and list branches and versions.          |
-| `write` | Also fork, commit, revert, reset, merge and start sessions.                                                              | Also upsert and delete documents; fork, merge, restore and delete branches; build. |
-| `admin` | Also make namespaces, merge into [protected branches](../filesystem/protection.mdx), manage keys and read the audit log. | Also create, copy, change and delete indexes, and collect old data.                |
+| Role    | Disks                                                                                                    | Indexes                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `read`  | Read, list, grep, find and query files; read history and diffs.                                          | Get, query, count and aggregate rows; list branches and versions. |
+| `write` | Also write, delete and move files; fork, merge, revert and restore.                                      | Also upsert, update and delete rows; fork, merge and restore.     |
+| `admin` | Also create, configure and destroy disks; merge into [protected branches](../filesystem/protection.mdx). | Also create, configure, copy and destroy indexes.                 |
 
-If a key lacks the role a call needs, the call fails with `403`. For example, an upsert with a `read` key returns ``this needs the `write` role``. An upsert that [creates the index](../indexes/create.mdx#create-on-first-write) needs `admin`.
+Managing keys and reading the [audit log](./audit-log.mdx) need an organization admin.
 
-The key's `namespaces` pattern limits both files and indexes. A key can reach a namespace or an index only when the pattern matches its whole name. For example, a key for `team/*` can reach the index `team/code`. See [index names](../indexes/index.mdx#names-and-environments).
+If a key lacks what a call needs, the call fails with `PermissionError` (`403`), and the message says which role it needs. Creating a disk or an index, including by the first write to a new name, needs `admin`. That is why the example creates `app` with the admin key before the agent writes to it.
+
+## Environments and names
+
+A key works in one environment, such as `prod` or `staging`. Requests with it go to that environment, and names like `app` mean the disk in that environment.
+
+`only` narrows a key to some disks and indexes in its environment: names, or prefixes that end in `*`, such as `["app", "docs-*"]`. The default is every name (`["*"]`). A key can't reach more than the key that makes it.
+
+An organization admin can make an **all-environments** key with `environment: null` (CLI `--all-environments`). Requests with it name the environment: `new Skywake({ environment: "staging" })`, the `SKYWAKE_ENV` variable, `--env` in the CLI, or the `Skywake-Environment` header. With none of these, they go to `default`.
+
+<Callout type="warn">
+  When an all-environments key makes a key without naming an environment, the new key is also an
+  all-environments key, and `only` is ignored. Name the environment, as the example does.
+</Callout>
 
 ## Fields
 
-| Field             | Meaning                                                                                                                             |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `name`            | 1 to 100 characters.                                                                                                                |
-| `role`            | `read`, `write` or `admin`.                                                                                                         |
-| `namespaces`      | A namespace name, `FOLDER/*` for every namespace under a folder, or `*` (the default). `prod/*` matches `prod/x`, not `production`. |
-| `expires_in_days` | 1 to 3650. Without it, the key does not expire.                                                                                     |
+| Field                                      | Meaning                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `name`                                     | 1 to 100 characters.                                                                 |
+| `role`                                     | `read`, `write` or `admin`.                                                          |
+| `environment`                              | The environment it works in. Null for every environment. The maker's own by default. |
+| `only`                                     | Up to 50 names or prefixes. `["*"]` by default.                                      |
+| `expiresInDays` (Python `expires_in_days`) | 1 to 3650. Without it, the key does not expire.                                      |
 
-To make a key, you need `admin` on the namespaces it names. A key made with another key never outlives the key that made it.
+A key made with another key never outlives the key that made it.
 
 A key belongs to the person who made it in the console. When that person leaves the organization or is removed from it, their keys are revoked, and so are any keys made with those keys.
 
 ## List and revoke
 
-```bash
-curl "$SKYWAKE_URL/v1/keys" -H "Authorization: Bearer $SKYWAKE_KEY"
-curl -X DELETE "$SKYWAKE_URL/v1/keys/KEY_ID" -H "Authorization: Bearer $SKYWAKE_KEY"
-```
+Listing keys never returns the keys themselves. It returns each key's `id`, `name`, `role`, `environment`, `only`, `expires`, `last_used`, `created`, and who made it:
 
-## From TypeScript
-
-```ts
-const made = await sky.keys.create("agent-fleet", "write", {
-  namespaces: "prod/*",
-  expiresInDays: 30,
-});
-// made.key is shown only this once
-const all = await sky.keys.list();
-await sky.keys.revoke(made.id);
-```
-
-[Listing keys](/reference/api/keys/listKeys) never returns the keys themselves. It returns each key's id, name, role, namespaces, expiry, last use and who made it:
-
-- `created_by` is the person's id, or `key:ID` for a key made with another key.
+- `created_by` is `user:ID` for a person in the console, or `key:ID` for a key made with another key.
 - `created_by_email` is that person's email.
-- Both are empty for the key made with the organization.
+- Both are empty for the first key of an organization.
 
-[Revoking a key](/reference/api/keys/deleteKey) takes effect at once for API calls. To list or revoke keys, you need an `admin` key for every namespace (`*`).
+Revoking a key takes effect at once. Over HTTP, keys are `GET /v2/keys`, `POST /v2/keys` and `DELETE /v2/keys/{id}`, and `GET /v2/whoami` shows what the current key may do.
 
 <Callout type="info">
   Keys look like `sw_...` and end in a checksum, so secret scanners can spot a leaked one. Store
@@ -82,5 +96,5 @@ Making and revoking keys is recorded in the [audit log](./audit-log.mdx).
 <Cards>
   <Card href="./scoped-credentials.mdx" />
   <Card href="../agents/mcp.mdx" />
-  <Card href="/reference/api/keys/createKey" />
+  <Card href="/reference/cli/keys" />
 </Cards>

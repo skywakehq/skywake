@@ -36,9 +36,9 @@ def run(ctx):
     big_size, big_files = make_mixed(big, ctx.size(1024, 256), ctx.seed)
     suite.setting("big tree", {"bytes": big_size, "files": big_files})
     for name, tree in [("repo", repo), ("big", big)]:
-        ctx.skywake("new", f"{ctx.run}-{name}", root=no_daemon)
-        ctx.skywake("commit", f"{ctx.run}-{name}", tree, "-m", "base", root=no_daemon)
-        ctx.skywake("new", f"{ctx.run}-{name}-fork", "--from", f"{ctx.run}-{name}", root=no_daemon)
+        ctx.skywake("create", "disk", f"@{ctx.run}-{name}", root=no_daemon)
+        ctx.skywake("upload", tree, f"@{ctx.run}-{name}", "-m", "base", root=no_daemon)
+        ctx.skywake("fork", f"@{ctx.run}-{name}", f"{ctx.run}-{name}-fork", root=no_daemon)
 
     mount_ms = []
     for name, label in [("repo", "this repository"), ("big", f"{big_size / 1e9:.1f} GB tree")]:
@@ -102,7 +102,7 @@ def run(ctx):
                 # A new fork and daemon each time, so every workload starts
                 # with an empty cache.
                 fork, cold_mnt = f"{ctx.run}-repo-cold-{k}", ctx.scratch / f"cold-{k}"
-                ctx.skywake("new", fork, "--from", f"{ctx.run}-repo", root=no_daemon)
+                ctx.skywake("fork", f"@{ctx.run}-repo", fork, root=no_daemon)
                 with Daemon(ctx, ctx.scratch / f"cold-host-{k}") as cold:
                     mount_and_list(cold, fork, cold_mnt)
                     with ctx.requests() as requests:

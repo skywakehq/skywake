@@ -15,6 +15,7 @@ export async function skywake(
   path: string,
   init: RequestInit & { duplex?: "half" } = {},
   orgs?: Record<string, string>,
+  base = URL,
 ) {
   const payload = {
     sub: caller.userID,
@@ -32,7 +33,15 @@ export async function skywake(
   headers.set("authorization", `Bearer ${token}`);
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
   if (caller.userAgent) headers.set("user-agent", caller.userAgent);
-  return fetch(`${URL}${path}`, { ...init, headers, cache: "no-store" });
+  return fetch(`${base}${path}`, { ...init, headers, cache: "no-store" });
+}
+
+const V2 = URL?.replace(/\/v1\/?$/, "/v2");
+
+export async function skywakeV2(caller: Caller, env: string, path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("skywake-environment", env);
+  return skywake(caller, path, { ...init, headers }, undefined, V2);
 }
 
 /** Like `skywake`, but sends JSON and throws the API's message on failure. */

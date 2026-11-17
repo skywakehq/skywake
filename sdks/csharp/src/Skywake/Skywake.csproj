@@ -6,10 +6,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Skywake</RootNamespace>
     <PackageId>Skywake</PackageId>
-    <Version>0.1.3</Version>
+    <Version>0.2.0</Version>
     <Authors>Skywake</Authors>
-    <Description>Skywake for .NET: vector, full-text and hybrid search over indexes on your own S3 bucket, with branches.</Description>
-    <PackageTags>skywake;vector-search;full-text-search;hybrid-search;bm25;s3;object-storage;rag;ai-agents</PackageTags>
+    <Description>Skywake for .NET: disks (files with branches) and search indexes, for AI agents.</Description>
+    <PackageTags>skywake;vector-search;full-text-search;branches;files;rag;ai-agents</PackageTags>
     <PackageProjectUrl>https://skywake.dev</PackageProjectUrl>
     <RepositoryUrl>https://github.com/skywakehq/skywake</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

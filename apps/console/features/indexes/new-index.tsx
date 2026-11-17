@@ -49,7 +49,7 @@ const TYPES: { value: AttributeColumn["type"]; note: string }[] = [
 const DIMS = [384, 512, 768, 1024, 1536, 3072];
 
 // The same limits as the API, so most mistakes show before a request.
-const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
+const NAME = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
 const COLUMN = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const DIMS_MAX = 4096;
 const VECTORS_MAX = 8;
@@ -62,15 +62,15 @@ type Errors = Record<string, string>;
 function check(name: string, vectors: VectorColumn[], attributes: AttributeColumn[]): Errors {
   const errors: Errors = {};
   if (!name) errors.name = "Give the index a name";
-  else if (!NAME.test(name)) errors.name = "Use letters, digits, `.`, `_` and `-`, split by `/`";
+  else if (!NAME.test(name)) errors.name = "Use letters, digits, `.`, `_` and `-`";
   const column = (key: string, value: string, seen: Set<string>) => {
     if (!value) errors[key] = "Needs a name";
     else if (!COLUMN.test(value)) errors[key] = "Letters, digits and `_`; not a digit first";
-    else if (seen.has(value)) errors[key] = "Two columns have this name";
+    else if (seen.has(value)) errors[key] = "Two fields have this name";
     seen.add(value);
   };
   if (!vectors.length && !attributes.some((a) => a.type === "text")) {
-    errors.vectors = "Add a vector column or a text attribute";
+    errors.vectors = "Add a vector field or a text field";
   }
   const vectorNames = new Set<string>();
   vectors.forEach((v, i) => {
@@ -80,7 +80,7 @@ function check(name: string, vectors: VectorColumn[], attributes: AttributeColum
     }
     const from = v.embed?.from;
     if (from && !sources(attributes).includes(from)) {
-      errors[`vectors.${i}.from`] = "Embed from a string or text attribute";
+      errors[`vectors.${i}.from`] = "Embed from a string or text field";
     }
   });
   const attributeNames = new Set<string>();
@@ -104,7 +104,7 @@ const sent = ({ embed, ...column }: VectorColumn): VectorColumn => {
 /** `schema.vectors[0].dims` from the API, as this form names its fields. */
 const fieldOf = (path: string) => path.replace(/^schema\./, "").replace(/\[(\d+)\]/g, ".$1");
 
-/** Makes an index in an environment: its name, region, vector columns and attributes. */
+/** Makes an index in an environment: its name, region, vector fields and other fields. */
 export function NewIndex({
   env,
   open,
@@ -169,7 +169,7 @@ export function NewIndex({
       onOpenChange(false);
       onCreated();
       reset();
-      toast.success(`Created ${full}`);
+      toast.success(`Created ${name.trim()}`);
       navigate(indexPath(full));
     } catch (failure) {
       const message = failure instanceof Error ? failure.message : String(failure);
@@ -218,14 +218,13 @@ export function NewIndex({
         <DialogHeader>
           <DialogTitle className="text-base">New index in {env}</DialogTitle>
           <DialogDescription className="text-sm">
-            Every document has an id, a vector for each vector column, and any of the attributes.
-            The schema can&apos;t change later; make a new index for a new one.
+            Every row has an id, a vector for each vector field, and any of the other fields. The
+            schema can&apos;t change later; make a new index for a new one.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} noValidate className="grid gap-6">
           <Section label="Name" error={errorOf("name")}>
             <div className="rounded-md flex min-w-0 items-center bg-muted/60 text-sm focus-within:bg-muted">
-              <span className="shrink-0 pl-2.5 text-faint">{env}/</span>
               <input
                 aria-label="Name"
                 aria-invalid={!!errorOf("name")}
@@ -234,7 +233,7 @@ export function NewIndex({
                 onChange={(event) => (setServerError(undefined), setName(event.target.value))}
                 onBlur={touch("name")}
                 autoFocus
-                className="h-8 min-w-0 flex-1 bg-transparent pr-2.5 outline-none"
+                className="h-8 min-w-0 flex-1 bg-transparent px-2.5 outline-none"
               />
             </div>
           </Section>
@@ -244,12 +243,12 @@ export function NewIndex({
           </Section>
 
           <Section
-            label="Vector columns"
+            label="Vector fields"
             hint={`${vectors.length} of ${VECTORS_MAX}`}
             error={errorOf("vectors")}
           >
             <div className="grid grid-cols-[1fr_6rem_8rem_2rem] gap-x-2 text-xs text-muted-foreground max-sm:hidden">
-              <span>Column</span>
+              <span>Field</span>
               <span>Dims</span>
               <span>Metric</span>
             </div>
@@ -265,7 +264,7 @@ export function NewIndex({
                 <div key={i} className="grid gap-1">
                   <div className="grid grid-cols-[1fr_6rem_8rem_2rem] items-center gap-2 max-sm:grid-cols-[1fr_5rem_2rem]">
                     <TextField
-                      aria-label="Column name"
+                      aria-label="Vector field name"
                       autoFocus={added && i === vectors.length - 1}
                       aria-invalid={!!nameError}
                       value={column.name}
@@ -298,7 +297,7 @@ export function NewIndex({
                       ))}
                     </Select>
                     <Remove
-                      label={`Remove ${column.name || "vector column"}`}
+                      label={`Remove ${column.name || "vector field"}`}
                       disabled={vectors.length === 1 && !attributes.some((a) => a.type === "text")}
                       onClick={() => {
                         dropRow("vectors", i);
@@ -328,18 +327,18 @@ export function NewIndex({
                   ]);
                 }}
               >
-                Vector column
+                Vector field
               </Add>
             )}
           </Section>
 
           <Section
-            label="Attributes"
+            label="Fields"
             hint={attributes.length ? `${attributes.length} of ${ATTRIBUTES_MAX}` : "optional"}
           >
             {attributes.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                Values stored with each document, to filter on and to return with hits.
+                Values stored with each row, to filter on and to return with hits.
               </p>
             )}
             {attributes.map((column, i) => {
@@ -348,7 +347,7 @@ export function NewIndex({
                 <div key={i} className="grid gap-1">
                   <div className="grid grid-cols-[1fr_8rem_2rem] items-center gap-2">
                     <TextField
-                      aria-label="Attribute name"
+                      aria-label="Field name"
                       autoFocus={added && i === attributes.length - 1}
                       aria-invalid={!!error}
                       value={column.name}
@@ -369,7 +368,7 @@ export function NewIndex({
                       ))}
                     </Select>
                     <Remove
-                      label={`Remove ${column.name || "attribute"}`}
+                      label={`Remove ${column.name || "field"}`}
                       onClick={() => {
                         dropRow("attributes", i);
                         setAttributes(attributes.filter((_, j) => j !== i));
@@ -391,7 +390,7 @@ export function NewIndex({
                   setAttributes([...attributes, { name: "", type: "string" }]);
                 }}
               >
-                Attribute
+                Field
               </Add>
             )}
           </Section>
@@ -425,10 +424,8 @@ const summary = (vectors: VectorColumn[], attributes: AttributeColumn[]) => {
   const parts = named.map((v) => `${v.name} ${v.dims}d`);
   const texts = attributes.filter((a) => a.name && a.type === "text").length;
   if (texts) parts.push(`${texts} text`);
-  return `${parts.join(", ") || "No vector column yet"}${
-    attributes.length
-      ? ` · ${attributes.length} attribute${attributes.length === 1 ? "" : "s"}`
-      : ""
+  return `${parts.join(", ") || "No vector field yet"}${
+    attributes.length ? ` · ${attributes.length} field${attributes.length === 1 ? "" : "s"}` : ""
   }`;
 };
 
@@ -473,8 +470,8 @@ function EmbedFields({
       <FieldNote error={error}>
         {model.trim()
           ? from
-            ? `Documents without a vector get one from ${from}; queries can be text`
-            : "Documents and queries can give text in place of a vector"
+            ? `Rows without a vector get one from ${from}; queries can be text`
+            : "Rows and queries can give text in place of a vector"
           : "Set a model to let the server turn text into vectors"}
       </FieldNote>
     </div>

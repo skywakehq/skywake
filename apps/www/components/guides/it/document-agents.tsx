@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/document-agents";
 
 export function DocumentAgentsGuide({
   locale,
@@ -39,7 +40,7 @@ export function DocumentAgentsGuide({
         toc={[
           ["start", "Una riga sbagliata nel libro contabile"],
           ["plan", "Cosa costruiamo"],
-          ["save", "1. Salva la cartella e bloccala"],
+          ["save", "1. Salva la cartella"],
           ["copy", "2. Dai all’agente la sua copia"],
           ["tools", "3. Dagli strumenti che scrivono sulla copia"],
           ["review", "4. Leggi cosa ha cambiato"],
@@ -68,10 +69,10 @@ export function DocumentAgentsGuide({
         </p>
         <TwoSetups />
         <p>
-          In questa guida faremo il contrario. La cartella vera del cliente è bloccata. L’agente
-          lavora sulla sua copia, che non costa nulla da creare, e ogni salvataggio che fa viene
+          In questa guida faremo il contrario. L’agente non tocca mai i file veri del cliente.
+          Lavora sulla sua copia, che non costa nulla da creare, e ogni salvataggio che fa viene
           registrato con un motivo. Tu leggi le modifiche, correggi ciò che è sbagliato e approvi.
-          Nient’altro può arrivare ai file veri.
+          Solo allora arrivano ai file veri.
         </p>
 
         <Chapter id="plan" title="Cosa costruiamo" />
@@ -79,20 +80,20 @@ export function DocumentAgentsGuide({
         <div>
           <Checklist
             items={[
-              "La cartella di un cliente salvata e bloccata, così nemmeno il tuo codice può modificarla direttamente.",
+              "La cartella di un cliente salvata su un disco, con ogni versione.",
               "Una chiave per l’agente che raggiunge solo quel cliente.",
               "Una copia privata per ogni run dell’agente, pronta in 10 ms.",
               "Un elenco chiaro di cosa ha cambiato l’agente, commit per commit e riga per riga.",
-              "Un unico passo di approvazione che solo tu puoi fare, e un modo per annullarlo in seguito.",
+              "Un unico passo di approvazione, fatto da te, e un modo per annullarlo in seguito.",
             ]}
           />
         </div>
         <p>
-          Ti servono una API key di Skywake con ruolo admin e Node. Imposta <code>SKYWAKE_URL</code>{" "}
-          e <code>SKYWAKE_KEY</code>, poi installa l’SDK con <code>npm i @skywake/sdk</code>.
+          Ti servono una API key di Skywake con ruolo admin e Node. Imposta{" "}
+          <code>SKYWAKE_API_KEY</code>, poi installa l’SDK con <code>npm i skywake</code>.
         </p>
 
-        <Chapter id="save" step={1} title="Salva la cartella e bloccala" />
+        <Chapter id="save" step={1} title="Salva la cartella" />
         <p>
           Come esempio usiamo la contabilità di Acme Bakery, un piccolo cliente. È una cartella
           piccola: un libro contabile, le fatture del trimestre e una nota del commercialista.
@@ -108,41 +109,17 @@ export function DocumentAgentsGuide({
           ]}
         />
         <p>
-          Ogni cliente ha il suo namespace, un repository di file. Al suo interno salviamo la
-          cartella come branch chiamato <code>main</code>. Un branch è una sequenza di versioni
+          Ogni cliente ha il suo disco: un insieme di file con branch e cronologia. Carichiamo la
+          cartella sul suo primo branch, <code>main</code>. Un branch è una sequenza di versioni
           salvate, come un branch di Git. Ogni salvataggio è un commit, e ogni commit viene
           conservato.
         </p>
-        <Code
-          file="save-folder.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const acme = await sky.createNamespace("clients/acme");
-const main = await acme.createBranch("main");
-const start = await main.commitFolder("./acme-books", {
-  message: "Acme books before the Q3 close",
-});
-await main.protect();
-`}
-        />
+        <Code file="save-folder.ts" code={code["save-folder.ts"]} />
         <p>
           <code>start</code> è il commit che abbiamo appena fatto. Conservalo: segna il punto da cui
-          è partito l’agente. L’ultima riga è quella importante. Un branch protetto cambia{" "}
-          <b>solo tramite merge</b>, quindi anche una scrittura diretta con la tua chiave admin
-          viene rifiutata:
+          è partito l’agente. Da qui in poi, <code>main</code> contiene la contabilità vera, e
+          l’agente non ci scrive mai.
         </p>
-        <Code
-          file="output"
-          code={`
-branch \`main\` is protected; change it with a merge
-`}
-        />
 
         <Chapter id="copy" step={2} title="Dai all’agente la sua copia" />
         <p>
@@ -154,26 +131,11 @@ branch \`main\` is protected; change it with a merge
           esattamente da dove si trova quello vecchio. Non copia nulla, quindi è pronto subito,
           qualunque sia la dimensione della cartella.
         </p>
-        <Code
-          file="agent-copy.ts"
-          code={`
-const { key } = await sky.keys.create("bookkeeper", "write", {
-  namespaces: "clients/acme",
-  expiresInDays: 7,
-});
-const agentSky = new Skywake({ url: process.env.SKYWAKE_URL!, key });
-
-const work = await agentSky
-  .namespace("clients/acme")
-  .branch("main")
-  .fork("agent/q3-books");
-`}
-        />
+        <Code file="agent-copy.ts" code={code["agent-copy.ts"]} />
         <p>
-          Ora l’agente ha <code>agent/q3-books</code>, una copia completa della contabilità di Acme.
-          Con la sua chiave può leggere e scrivere quella copia. Non può scrivere su{" "}
-          <code>main</code>, e se prova ad aprire la cartella di un altro cliente, la risposta è{" "}
-          <code>no access</code>.
+          Ora l’agente ha <code>q3-books</code>, una copia completa della contabilità di Acme. La
+          sua chiave raggiunge solo il disco <code>acme</code>. Se prova ad aprire il disco di un
+          altro cliente, la richiesta viene rifiutata.
         </p>
 
         <Chapter id="tools" step={3} title="Dagli strumenti che scrivono sulla copia" />
@@ -182,23 +144,7 @@ const work = await agentSky
           Gliene diamo tre. Può elencare i file, leggerne uno e scriverne uno. Ogni strumento punta
           a <code>work</code>, quindi non ha modo di raggiungere la cartella vera.
         </p>
-        <Code
-          file="tools.ts"
-          code={`
-const tools = {
-  list: async () => {
-    const paths: string[] = [];
-    for await (const entry of work.walk()) {
-      if (entry.kind === "file") paths.push(entry.path);
-    }
-    return paths;
-  },
-  read: (path: string) => work.readText(path),
-  write: (path: string, text: string, reason: string) =>
-    work.write({ [path]: text }, reason),
-};
-`}
-        />
+        <Code file="tools.ts" code={code["tools.ts"]} />
         <p>
           Guarda <code>write</code>. Chiede all’agente un <b>motivo</b>, e quel motivo diventa il
           messaggio del commit. Così ogni modifica arriva con le parole dell’agente stesso sul
@@ -212,8 +158,9 @@ const tools = {
           </p>
         </Note>
         <p>
-          Ora passa gli strumenti al tuo modello e lascialo lavorare. Nel nostro run, l’agente ha
-          aggiunto tre righe a <code>ledger.csv</code>, una per fattura, e ha scritto un nuovo file,{" "}
+          Ora passa gli strumenti al tuo modello e lascialo lavorare. Qui <code>yourAgent</code> sta
+          per il tuo ciclo dell’agente. Nel nostro run, l’agente ha aggiunto tre righe a{" "}
+          <code>ledger.csv</code>, una per fattura, e ha scritto un nuovo file,{" "}
           <code>q3-summary.md</code>. Sono due commit sulla sua copia. <code>main</code> non è
           cambiato per niente.
         </p>
@@ -221,25 +168,13 @@ const tools = {
         <Chapter id="review" step={4} title="Leggi cosa ha cambiato" />
         <p>
           Il run è finito. Ora tocca a te, con la tua chiave. Prima di tutto, la storia del run:
-          cosa ha cambiato ogni commit da <code>start</code> in poi, in ordine.
+          ogni commit da <code>start</code> in poi, con il suo motivo.
         </p>
-        <Code
-          file="review.ts"
-          code={`
-const review = acme.branch("agent/q3-books");
-
-const run = await review.changes(start);
-for (const commit of run) {
-  console.log(commit.message, commit.changes.map((c) => c.path));
-}
-
-const changed = await review.diff("main", { against: "base" });
-`}
-        />
+        <Code file="review.ts" code={code["review.ts"]} />
         <p>
-          <code>changes</code> elenca i commit uno per uno. <code>diff</code> ne dà la somma: ogni
-          file che l’agente ha aggiunto, rimosso o modificato, rispetto al punto in cui è iniziata
-          la sua copia.
+          <code>log</code> elenca i commit del branch, dal più recente, quindi ci fermiamo a{" "}
+          <code>start</code>. <code>diff</code> ne dà la somma: ogni file che l’agente ha aggiunto,
+          rimosso o modificato, rispetto a <code>main</code>.
         </p>
         <RunLog />
         <p>
@@ -247,14 +182,7 @@ const changed = await review.diff("main", { against: "base" });
           modificato, quindi vuoi vedere le righe esatte. Leggi il file su entrambi i branch e tieni
           le righe nuove:
         </p>
-        <Code
-          file="lines.ts"
-          code={`
-const before = (await main.readText("ledger.csv")).split("\\n");
-const after = (await review.readText("ledger.csv")).split("\\n");
-const added = after.filter((line) => !before.includes(line));
-`}
-        />
+        <Code file="lines.ts" code={code["lines.ts"]} />
         <p>
           <code>added</code> contiene le tre nuove righe. Due sono giuste. La terza registra la
           riparazione del forno come <code>Equipment</code>, anche se le note di Acme dicono che le
@@ -267,82 +195,41 @@ const added = after.filter((line) => !before.includes(line));
           con un altro commit e un tuo motivo. Poi fai merge: porta le modifiche della copia in{" "}
           <code>main</code>.
         </p>
-        <Code
-          file="approve.ts"
-          code={`
-const fixed = after.join("\\n").replace(
-  "Hearth Oven Repair,845.00,Equipment",
-  "Hearth Oven Repair,845.00,Repairs",
-);
-await review.write(
-  { "ledger.csv": fixed },
-  "Oven repair goes to Repairs",
-);
-
-const preview = await review.mergeInto("main", { dryRun: true });
-if (preview.conflicts.length === 0) {
-  await review.mergeInto("main", { message: "Approve Q3 books" });
-}
-`}
-        />
+        <Code file="approve.ts" code={code["approve.ts"]} />
         <p>
-          Il dry run non salva nulla. Ti dice solo se il merge andrebbe in conflitto con qualcosa
-          che nel frattempo è cambiato su <code>main</code>. Qui è tutto pulito, quindi il merge
-          vero entra: il libro contabile su <code>main</code> ora ha tutte e tre le righe, con la
-          tua correzione, e c’è anche il riassunto.
+          Se nel frattempo lo stesso file è cambiato su <code>main</code>, il merge si ferma con un{" "}
+          <code>MergeConflict</code> che indica il file, e non viene salvato nulla. Qui non c’è
+          nessun conflitto, quindi il merge entra: il libro contabile su <code>main</code> ora ha
+          tutte e tre le righe, con la tua correzione, e c’è anche il riassunto.
         </p>
         <ReviewedLines />
         <p>
-          C’è un’altra cosa che rende tutto sicuro. Fare merge in un branch protetto richiede il
-          ruolo <b>admin</b>. Se l’agente prova a fare merge della sua copia, riceve{" "}
-          <code>this needs the `admin` role</code>. L’agente può fare il lavoro. Solo tu puoi
-          approvarlo.
+          Tieni il merge fuori dagli strumenti dell’agente. L’agente fa il lavoro. Solo tu lo
+          approvi.
         </p>
 
         <Chapter id="record" step={6} title="Conserva la traccia, annulla se serve" />
         <p>
           Settimane dopo, un cliente chiede perché la riparazione del forno sta sotto Repairs. Ogni
-          versione del libro contabile viene conservata, con il messaggio che l’ha creata:
+          commit che ha cambiato il libro contabile viene conservato, con il suo messaggio:
         </p>
-        <Code
-          file="record.ts"
-          code={`
-for (const version of await main.history("ledger.csv")) {
-  console.log(version.message, version.size);
-}
-`}
-        />
+        <Code file="record.ts" code={code["record.ts"]} />
         <p>
-          La versione più recente è <code>Approve Q3 books</code>, e prima di quella{" "}
+          Il più recente è <code>Approve Q3 books</code>, il più vecchio{" "}
           <code>Acme books before the Q3 close</code>. L’approvazione è un merge commit, e registra
           quale commit ha portato dentro.
         </p>
         <p>
-          Hai cambiato idea dopo aver approvato? <code>main</code> cambia ancora solo tramite merge,
-          quindi annulla allo stesso modo: fai un fork, fai il revert dell’approvazione sul fork e
-          fai merge del risultato. Un revert è un nuovo commit che rimette com’era ciò che un commit
-          vecchio aveva cambiato.
+          Hai cambiato idea dopo aver approvato? Fai il revert dell’approvazione. Un revert è un
+          nuovo commit che rimette com’era ciò che un commit vecchio aveva cambiato.
         </p>
-        <Code
-          file="undo.ts"
-          code={`
-const approved = (await main.log(1))[0]!;
-const undo = await main.fork("undo/q3-books");
-await undo.revert(approved.hash);
-await undo.mergeInto("main", { message: "Undo the Q3 approval" });
-`}
-        />
+        <Code file="undo.ts" code={code["undo.ts"]} />
         <p>
           Il libro contabile torna com’era prima del run, e anche l’annullamento resta nella
-          cronologia. E se un run non ti piace per niente, non ti serve nulla di tutto questo.
-          Cancella il suo branch, e <code>main</code> non l’ha mai visto:
+          cronologia. Quando un run è approvato o scartato, cancella il suo branch. Se lo scarti,
+          basta questo: <code>main</code> non l’ha mai visto.
         </p>
-        <Code
-          file="reject.ts"
-          code={`
-await acme.branch("agent/q4-draft").delete();
-`}
-        />
+        <Code file="reject.ts" code={code["reject.ts"]} />
 
         <Chapter id="scale" title="Farlo per ogni cliente" />
         <p>
@@ -351,9 +238,8 @@ await acme.branch("agent/q4-draft").delete();
         </p>
         <ul>
           <li>
-            <b>Un namespace per cliente.</b> Chiamali <code>clients/acme</code>,{" "}
-            <code>clients/globex</code>, e dai a ogni agente una chiave solo per il cliente su cui
-            lavora.
+            <b>Un disco per cliente.</b> Chiamali <code>acme</code>, <code>globex</code>, e dai a
+            ogni agente una chiave solo per il cliente su cui lavora.
           </li>
           <li>
             <b>Le copie restano istantanee.</b> Un fork non copia nulla, quindi una copia di 20.000
@@ -378,31 +264,33 @@ await acme.branch("agent/q4-draft").delete();
             [
               "L’agente può approvare il proprio lavoro?",
               <p key="a">
-                No. La sua chiave ha il ruolo write, e fare merge in un branch protetto richiede il
-                ruolo admin. L’agente può modificare solo la sua copia.
+                Non con i suoi strumenti: raggiungono solo la sua copia. Perché lo rifiuti anche il
+                server, proteggi <code>main</code> (vedi Protection nella documentazione). Allora
+                solo una chiave admin può farci merge.
               </p>,
             ],
             [
               "E se due run cambiano lo stesso file?",
               <p key="a">
-                Il primo merge entra. Il dry run del secondo indica il file in conflitto, e non
-                viene salvato nulla. Leggi entrambe le versioni, poi rifai il merge con{" "}
-                <code>resolve</code>, scegliendo una delle due o scrivendo tu il testo.
+                Il primo merge entra. Il secondo si ferma con un <code>MergeConflict</code> che
+                indica il file, e non viene salvato nulla. Leggi entrambe le versioni, poi rifai il
+                merge con <code>prefer</code> per tenerne una, o scrivi prima tu il testo sul
+                branch.
               </p>,
             ],
             [
               "Un agente può vedere i file di un altro cliente?",
               <p key="a">
-                No, se limiti la sua chiave. Una chiave creata per <code>clients/acme</code> riceve
-                “accesso negato” su ogni altro namespace.
+                No, se limiti la sua chiave. Una chiave creata con <code>{'only: ["acme"]'}</code>{" "}
+                viene rifiutata su ogni altro disco.
               </p>,
             ],
             [
               "Perché una nuova cartella compare come una sola modifica?",
               <p key="a">
                 Un diff elenca una cartella nuova o rimossa una volta sola, non una volta per ogni
-                file al suo interno. Usa <code>walk</code> sul branch dell’agente per vedere ogni
-                file che contiene.
+                file al suo interno. Usa <code>list</code> con <code>recursive</code> sul branch
+                dell’agente per vedere ogni file che contiene.
               </p>,
             ],
           ]}
@@ -420,7 +308,7 @@ function ReviewCover() {
   return (
     <div className="grid">
       <div className={ROW}>
-        <GitBranch className="size-3.5 text-muted-foreground" /> agent/q3-books
+        <GitBranch className="size-3.5 text-muted-foreground" /> q3-books
         <ArrowRight className="size-3 text-muted-foreground" /> main
         <span className="ml-auto flex items-center gap-1 rounded-full bg-signal/12 px-2 text-[12px] leading-5 text-signal">
           Waiting for you
@@ -492,7 +380,7 @@ function RunLog() {
   ];
   return (
     <figure className="rounded-xl border border-border p-5">
-      <p className="t-eyebrow text-muted-foreground">agent/q3-books, da start</p>
+      <p className="t-eyebrow text-muted-foreground">q3-books, da start</p>
       <ol className="mt-3 grid divide-y divide-border">
         {commits.map(([message, path, kind], i) => (
           <li key={path} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-3">

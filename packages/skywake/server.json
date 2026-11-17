@@ -1,0 +1,46 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.skywake/skywake",
+  "title": "Skywake",
+  "description": "Disks with branches and indexes searched by meaning and keywords, for agents: files, bash and search in one server.",
+  "websiteUrl": "https://skywake.dev/docs/agents/mcp",
+  "repository": {
+    "url": "https://github.com/skywakehq/skywake",
+    "source": "github",
+    "subfolder": "packages/skywake"
+  },
+  "version": "0.2.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "skywake",
+      "version": "0.2.0",
+      "transport": { "type": "stdio" },
+      "packageArguments": [{ "type": "positional", "value": "mcp" }],
+      "environmentVariables": [
+        {
+          "name": "SKYWAKE_API_KEY",
+          "description": "A Skywake API key. Its environment is where the server works.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_URL",
+          "description": "The Skywake API. https://api.skywake.dev by default.",
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_DISK",
+          "description": "The disk the file tools use by default.",
+          "format": "string"
+        },
+        {
+          "name": "SKYWAKE_BRANCH",
+          "description": "The branch the file tools write to. Without it, the server forks a branch of its own for the session.",
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

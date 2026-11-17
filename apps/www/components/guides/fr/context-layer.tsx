@@ -1,6 +1,6 @@
 // Guide : comment donner à un agent une mémoire faite de simples fichiers, qui
 // est toujours là au run suivant. À lire du début à la fin.
-import { ArrowDown, ChevronRight, File, Folder, GitCommitHorizontal, X } from "lucide-react";
+import { ArrowDown, File, Folder, GitCommitHorizontal, X } from "lucide-react";
 
 import type { HomeMessages } from "@/content/messages";
 import type { Locale } from "@/lib/i18n";
@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/context-layer";
 
 export function ContextLayerGuide({
   locale,
@@ -87,8 +88,8 @@ export function ContextLayerGuide({
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="folder" step={1} title="Donner un dossier à l’agent" />
@@ -97,7 +98,7 @@ export function ContextLayerGuide({
           Markdown, un par type de chose à retenir :
         </p>
         <Tree
-          root="memory/agent-37"
+          root="memory-agent-37"
           items={[
             ["decisions.md", "ce que nous avons choisi, et ce que nous avons écarté"],
             ["people.md", "qui fait quoi, et comment chacun aime travailler"],
@@ -105,33 +106,12 @@ export function ContextLayerGuide({
           ]}
         />
         <p>
-          Dans Skywake, un dossier comme celui-ci est un <b>namespace</b> : un dépôt de fichiers. À
-          l’intérieur, nous créons une <b>branche</b> appelée <code>main</code>. Voyez-la comme une
-          branche Git : chaque enregistrement est un commit, et toutes les anciennes versions
-          restent.
+          Dans Skywake, un dossier comme celui-ci est un <b>disque</b> : des fichiers avec des
+          branches et un historique. Chaque disque commence par une <b>branche</b> appelée{" "}
+          <code>main</code>. Voyez-la comme une branche Git : chaque enregistrement est un commit,
+          et toutes les anciennes versions restent. La première écriture crée le disque.
         </p>
-        <Code
-          file="new-memory.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const space = await sky.createNamespace("memory/agent-37");
-const main = await space.createBranch("main");
-await main.write(
-  {
-    "decisions.md": "# Decisions\\n",
-    "people.md": "# People\\n",
-    "notes.md": "# Where I left off\\n",
-  },
-  "Empty memory",
-);
-`}
-        />
+        <Code file="new-memory.ts" code={code["new-memory.ts"]} />
         <p>
           L’agent a maintenant une mémoire vide avec trois titres. Elle vit dans votre bucket, pas
           sur la machine où tourne l’agent, donc elle reste quand cette machine disparaît.
@@ -141,21 +121,13 @@ await main.write(
         <p>
           L’agent ne doit pas tourner avec votre clé. Sinon, un run qui s’égare pourrait lire ou
           modifier la mémoire d’un autre agent. Nous lui créons donc sa propre clé, qui n’ouvre
-          qu’un seul namespace.
+          qu’un seul disque.
         </p>
-        <Code
-          file="agent-key.ts"
-          code={`
-const { key } = await sky.keys.create("agent-37", "write", {
-  namespaces: "memory/agent-37",
-});
-`}
-        />
+        <Code file="agent-key.ts" code={code["agent-key.ts"]} />
         <p>
-          Le rôle <code>write</code> permet à l’agent de lire et d’enregistrer des fichiers. Passez
-          la clé au processus de l’agent sous le nom <code>AGENT_KEY</code>. Elle n’est affichée
-          qu’une seule fois. Si l’agent tente d’ouvrir <code>memory/agent-12</code>, le serveur
-          répond « accès refusé ».
+          Le rôle <code>write</code> permet à l’agent de lire et d’enregistrer des fichiers, et{" "}
+          <code>only</code> le limite à ce seul disque. La clé n’est affichée qu’une seule fois. Si
+          l’agent tente d’ouvrir <code>memory-agent-12</code>, le serveur répond « accès refusé ».
         </p>
 
         <Chapter id="remember" step={3} title="Enregistrer ce qu’il apprend" />
@@ -164,35 +136,16 @@ const { key } = await sky.keys.create("agent-37", "write", {
           arrêter. Enregistrez chaque fait dès que l’agent l’apprend. Nous écrirons pour cela une
           petite fonction, que nous donnerons à l’agent comme outil.
         </p>
-        <Code
-          file="remember.ts"
-          code={`
-const agent = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.AGENT_KEY!,
-});
-const memory = agent.namespace("memory/agent-37").branch("main");
-
-async function remember(file: string, line: string) {
-  const before = await memory.readText(file);
-  await memory.write({ [file]: \`\${before}- \${line}\\n\` }, line);
-}
-`}
-        />
+        <Code file="remember.ts" code={code["remember.ts"]} />
         <p>
-          <code>remember</code> lit le fichier, ajoute une ligne à la fin et l’enregistre en un seul
-          commit. La ligne elle-même devient le message de commit, si bien que l’historique se lit
-          comme un journal. Imaginons que lundi, vous travailliez avec l’agent sur un nouveau
-          parcours de connexion. Voici ce que ce run enregistre :
+          L’agent reçoit son propre client, avec sa propre clé. En vrai, passez la clé au processus
+          de l’agent sous le nom <code>SKYWAKE_API_KEY</code>, et <code>new Skywake()</code> la
+          trouve seul. <code>remember</code> lit le fichier, ajoute une ligne à la fin et
+          l’enregistre en un seul commit. La ligne elle-même devient le message de commit, si bien
+          que l’historique se lit comme un journal. Imaginons que lundi, vous travailliez avec
+          l’agent sur un nouveau parcours de connexion. Voici ce que ce run enregistre :
         </p>
-        <Code
-          file="monday.ts"
-          code={`
-await remember("decisions.md", "Login uses passkeys, not SMS codes.");
-await remember("people.md", "Maya reviews all auth changes.");
-await remember("notes.md", "Stopped at: the sign-up form.");
-`}
-        />
+        <Code file="monday.ts" code={code["monday.ts"]} />
         <p>
           Trois faits, trois commits. Si le run avait planté après le premier, la décision sur les
           passkeys serait déjà en sécurité.
@@ -214,23 +167,10 @@ await remember("notes.md", "Stopped at: the sign-up form.");
         </p>
         <p>
           <code>recall</code> lit donc <code>notes.md</code> en entier, puis cherche dans la mémoire
-          les lignes liées à la tâche en cours. La recherche fonctionne comme <code>grep</code> :
-          elle renvoie chaque ligne trouvée et le fichier d’où elle vient. <code>(?i)</code> lui dit
-          d’ignorer la casse.
+          les lignes liées à la tâche en cours. <code>grep</code> renvoie chaque ligne trouvée et le
+          fichier d’où elle vient. <code>ignoreCase</code> lui dit d’ignorer la casse.
         </p>
-        <Code
-          file="recall.ts"
-          code={`
-async function recall(topic: string) {
-  const notes = await memory.readText("notes.md");
-  const hits = await memory.search(\`(?i)\${topic}\`);
-  const known = hits.map((hit) => \`\${hit.path}: \${hit.text}\`);
-  return [notes, \`About \${topic}:\`, ...known].join("\\n");
-}
-
-const context = await recall("login");
-`}
-        />
+        <Code file="recall.ts" code={code["recall.ts"]} />
         <p>
           Placez <code>context</code> en tête du prompt du run. Il contient deux faits courts : le
           run s’est arrêté au formulaire d’inscription, et la connexion utilise des passkeys. La
@@ -246,30 +186,20 @@ const context = await recall("login");
         <Chapter id="review" step={5} title="Lire ce qu’il a retenu" />
         <p>
           La mémoire d’un agent n’est utile que si vous pouvez lui faire confiance, et vous ne
-          pouvez faire confiance qu’à ce que vous pouvez lire. Comme chaque fait est un commit, le
-          log montre ce que l’agent a appris et quand. Cette fois, nous utilisons votre propre clé,
-          pas celle de l’agent :
-        </p>
-        <Code
-          file="look-back.ts"
-          code={`
-const review = sky.namespace("memory/agent-37").branch("main");
-
-for (const commit of await review.log(10)) {
-  console.log(commit.hash.slice(0, 7), commit.message);
-}
-
-await review.checkout("./agent-37");
-`}
-        />
-        <p>
-          Le log affiche le plus récent en premier, et une surprise vous attend en haut. Mardi,
+          pouvez faire confiance qu’à ce que vous pouvez lire. Les agents se trompent aussi. Mardi,
           l’agent a mal lu un message dans un long fil, et a enregistré une décision que personne
           n’a prise :
         </p>
+        <Code file="tuesday.ts" code={code["tuesday.ts"]} />
+        <p>
+          Personne ne l’a remarqué. Comme chaque fait est un commit, le log montre ce que l’agent a
+          appris et quand. Cette fois, nous utilisons votre propre clé, pas celle de l’agent :
+        </p>
+        <Code file="look-back.ts" code={code["look-back.ts"]} />
+        <p>Le log affiche le plus récent en premier, et la fausse note de mardi est en haut :</p>
         <Diary />
         <p>
-          <code>checkout</code> copie aussi la mémoire dans un dossier local, en simples fichiers.
+          <code>download</code> copie aussi la mémoire dans un dossier local, en simples fichiers.
           Ouvrez <code>./agent-37</code> dans votre éditeur et lisez l’esprit de l’agent comme
           n’importe quelles notes.
         </p>
@@ -280,20 +210,13 @@ await review.checkout("./agent-37");
           assurance, run après run. Nous le retirons donc. Un <b>revert</b> crée un nouveau commit
           qui annule un ancien, et laisse tout le reste tel quel.
         </p>
-        <Code
-          file="forget.ts"
-          code={`
-const commits = await review.log(10);
-const wrong = commits.find((c) => c.message.includes("SMS codes"))!;
-await review.revert(wrong.hash, { message: "Forget: SMS backup" });
-`}
-        />
+        <Code file="forget.ts" code={code["forget.ts"]} />
         <p>
           La ligne sur les SMS a disparu de <code>decisions.md</code>, et la décision sur les
           passkeys reste. Le prochain <code>{`recall("login")`}</code> ne ramène plus le SMS de
           secours. Mais rien n’est effacé de l’historique :{" "}
-          <code>{`review.history("decisions.md")`}</code> montre toujours la fausse note, et le
-          commit qui l’a retirée. Si vous vous demandez un jour pourquoi l’agent a fait quelque
+          <code>{`review.log({ path: "decisions.md" })`}</code> montre toujours la fausse note, et
+          le commit qui l’a retirée. Si vous vous demandez un jour pourquoi l’agent a fait quelque
           chose mardi, la réponse est toujours là.
         </p>
 
@@ -304,27 +227,21 @@ await review.revert(wrong.hash, { message: "Forget: SMS backup" });
         </p>
         <ul>
           <li>
-            <b>Un namespace par agent, sous un même dossier.</b> Nommez-les{" "}
-            <code>memory/agent-37</code>, <code>memory/agent-12</code>, etc. La clé de chaque agent
+            <b>Un disque par agent, avec un même préfixe.</b> Nommez-les{" "}
+            <code>memory-agent-37</code>, <code>memory-agent-12</code>, etc. La clé de chaque agent
             n’ouvre que le sien.
           </li>
           <li>
             <b>Une clé de lecture pour tout voir.</b> Un tableau de bord, ou un agent principal qui
-            vérifie le travail des autres, peut recevoir une clé pour tout le dossier. Il peut lire
-            chaque mémoire sans en modifier aucune.
+            vérifie le travail des autres, peut recevoir une clé pour tous les disques de mémoire.
+            Il peut lire chaque mémoire sans en modifier aucune.
           </li>
         </ul>
-        <Code
-          file="read-all.ts"
-          code={`
-const reader = await sky.keys.create("memory-reader", "read", {
-  namespaces: "memory/*",
-});
-`}
-        />
+        <Code file="read-all.ts" code={code["read-all.ts"]} />
         <p>
-          Passez <code>reader.key</code> au tableau de bord. Le <code>*</code> couvre chaque
-          namespace sous <code>memory/</code>, y compris les agents que vous ajouterez plus tard.
+          Passez <code>reader.key</code> au tableau de bord. Le <code>*</code> couvre chaque disque
+          dont le nom commence par <code>memory-</code>, y compris les agents que vous ajouterez
+          plus tard.
         </p>
         <ul>
           <li>
@@ -334,8 +251,8 @@ const reader = await sky.keys.create("memory-reader", "read", {
           </li>
           <li>
             <b>Cherchez par le sens quand la mémoire grossit.</b> La recherche par ligne suffit à la
-            plupart des agents. Si l’un d’eux garde des milliers de notes, ajoutez un index de
-            recherche à côté, comme dans le guide sur la base de connaissances.
+            plupart des agents. Si l’un d’eux garde des milliers de notes, cherchez-les par le sens
+            avec <code>memory.query</code>, comme dans le guide sur la base de connaissances.
           </li>
           <li>
             <b>Tout reste chez vous.</b> Chaque mémoire est un simple fichier dans votre propre
@@ -357,15 +274,15 @@ const reader = await sky.keys.create("memory-reader", "read", {
               "Une personne peut-elle modifier la mémoire de l’agent ?",
               <p key="a">
                 Oui. Écrivez sur la même branche avec votre propre clé, par exemple{" "}
-                <code>{`review.write({ "people.md": … }, "Maya away")`}</code>. L’agent lit votre
-                version la prochaine fois qu’il regarde, et le log garde le changement.
+                <code>{`review.write("people.md", …, { message: "Maya away" })`}</code>. L’agent lit
+                votre version la prochaine fois qu’il regarde, et le log garde le changement.
               </p>,
             ],
             [
               "Deux agents peuvent-ils partager ce qu’ils savent ?",
               <p key="a">
-                Oui. Donnez au second agent une clé de lecture pour le namespace du premier, ou pour{" "}
-                <code>memory/*</code>. Il peut lire les notes de l’autre, mais pas les modifier.
+                Oui. Donnez au second agent une clé de lecture pour le disque du premier, ou pour{" "}
+                <code>memory-*</code>. Il peut lire les notes de l’autre, mais pas les modifier.
               </p>,
             ],
             [
@@ -399,8 +316,7 @@ function MemoryCover() {
   return (
     <div className="grid">
       <div className={ROW}>
-        <Folder className={`size-3.5 ${QUIET}`} /> memory
-        <ChevronRight className={`size-3 ${QUIET}`} /> agent-37
+        <Folder className={`size-3.5 ${QUIET}`} /> memory-agent-37
       </div>
       {["decisions.md", "people.md", "notes.md"].map((name, i) => (
         <div
@@ -455,7 +371,7 @@ function TwoWeeks() {
             <span className="t-small">chacun lit et écrit</span>
           </div>
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/5 p-2">
-            <span className={`${run} font-mono text-[12px]`}>memory/agent-37</span>
+            <span className={`${run} font-mono text-[12px]`}>memory-agent-37</span>
             <span className="t-eyebrow px-1 text-signal">Simples fichiers · votre bucket</span>
           </div>
         </div>

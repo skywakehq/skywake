@@ -21,8 +21,8 @@ def run(ctx):
     suite.note(f"The tree: {size / 1e6:,.0f} MB in {files:,} files, in 20 top-level folders.")
     suite.setting("tree", {"bytes": size, "files": files})
     branch = f"{ctx.run}-save"
-    ctx.skywake("new", branch, root=ctx.scratch / "no-daemon")
-    ctx.skywake("commit", branch, ctx.scratch / "base", "-m", "base", root=ctx.scratch / "no-daemon")
+    ctx.skywake("create", "disk", f"@{branch}", root=ctx.scratch / "no-daemon")
+    ctx.skywake("upload", ctx.scratch / "base", f"@{branch}", "-m", "base", root=ctx.scratch / "no-daemon")
     runs = ctx.size(5, 3)
     suite.setting("saves per change", runs)
     mnt = ctx.scratch / "mnt"
@@ -55,7 +55,7 @@ def run(ctx):
             for i in range(runs):
                 change(i)
                 with ctx.requests() as requests:
-                    seconds = timed(lambda: daemon.call("commit", branch, mnt, "-m", label))
+                    seconds = timed(lambda: daemon.call("upload", mnt, f"@{branch}", "-m", label))
                 measured.append((seconds, requests.summary()))
             measured.sort(key=lambda result: result[0])
             seconds, requests = measured[len(measured) // 2]

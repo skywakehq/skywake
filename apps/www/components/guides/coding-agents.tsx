@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/coding-agents";
 
 export function CodingAgentsGuide({
   locale,
@@ -77,7 +78,7 @@ export function CodingAgentsGuide({
         <div>
           <Checklist
             items={[
-              "Your repo saved once, with its packages, on a branch only merges can change.",
+              "Your repo saved once on a disk, packages and all.",
               "A fresh branch for every agent, ready at once, with nothing to install.",
               "Each agent’s work and test result saved as a commit on its own branch.",
               "A clear list of what each agent changed, so you can pick the right fix.",
@@ -86,8 +87,8 @@ export function CodingAgentsGuide({
           />
         </div>
         <p>
-          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_URL</code> and{" "}
-          <code>SKYWAKE_KEY</code>, then install the SDK with <code>npm i @skywake/sdk</code>.
+          You’ll need a Skywake API key and Node. Set <code>SKYWAKE_API_KEY</code>, then install the
+          SDK with <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Save the repo once" />
@@ -106,30 +107,15 @@ export function CodingAgentsGuide({
           ]}
         />
         <p>
-          We’ll save it in a <b>namespace</b>, which is a repository of files, on a branch called{" "}
-          <code>main</code>. Each save is a <b>commit</b>, a version you can always go back to.
+          We’ll save it on a <b>disk</b>, which is a repository of files. Every disk starts with a
+          branch called <code>main</code>. Each save is a <b>commit</b>, a version you can always go
+          back to.
         </p>
-        <Code
-          file="save-repo.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const shop = await sky.createNamespace("acme/shop");
-const main = await shop.createBranch("main");
-await main.commitFolder("./shop", { message: "Shop, ready to test" });
-await main.protect();
-`}
-        />
+        <Code file="save-repo.ts" code={code["save-repo.ts"]} />
         <p>
           The whole folder is now on <code>main</code>, packages included. The <code>.git</code>{" "}
-          folder is left out. The last line <b>protects</b> <code>main</code>: from now on it
-          changes only through a merge, so no agent can write to it by mistake. Protecting a branch
-          needs an admin key.
+          folder is left out. The first write created the disk <code>shop</code>, so there was
+          nothing to set up.
         </p>
 
         <Chapter id="fork" step={2} title="Give each agent a branch" />
@@ -138,15 +124,7 @@ await main.protect();
           starts with exactly the same files. A fork copies nothing, so it’s ready right away, and a
           change on one fork never shows up on another.
         </p>
-        <Code
-          file="start-agents.ts"
-          code={`
-const task = "Login fails when the email has capital letters.";
-const tries = await Promise.all(
-  [1, 2, 3].map((n) => main.fork(\`try-\${n}\`)),
-);
-`}
-        />
+        <Code file="start-agents.ts" code={code["start-agents.ts"]} />
         <p>
           You now have <code>try-1</code>, <code>try-2</code> and <code>try-3</code>, each starting
           at the same commit as <code>main</code>.
@@ -155,32 +133,10 @@ const tries = await Promise.all(
         <Chapter id="work" step={3} title="Let each agent work in its own folder" />
         <p>
           Agents are good at working in a normal folder, so we give them one. For each try we{" "}
-          <b>check out</b> its branch into a local folder, let the agent edit it, run the tests, and
-          save the folder back to the branch with the result in the message.
+          <b>download</b> its branch into a local folder, let the agent edit it, run the tests, and{" "}
+          <b>upload</b> the folder back to the branch with the result in the message.
         </p>
-        <Code
-          file="run-try.ts"
-          code={`
-import { spawnSync } from "node:child_process";
-import type { Branch } from "@skywake/sdk";
-
-async function runTry(branch: Branch, task: string) {
-  const dir = \`./work/\${branch.name}\`;
-  await branch.checkout(dir);
-
-  await yourAgent(dir, task);
-
-  const tests = spawnSync("npm", ["test"], { cwd: dir });
-  const passed = tests.status === 0;
-  await branch.commitFolder(dir, {
-    message: passed ? "Tests pass" : "Tests fail",
-  });
-  return { branch, passed };
-}
-
-const results = await Promise.all(tries.map((t) => runTry(t, task)));
-`}
-        />
+        <Code file="run-try.ts" code={code["run-try.ts"]} />
         <p>
           <code>yourAgent</code> stands for your own coding agent: anything that takes a folder and
           a task and edits files. Each folder arrives with <code>node_modules</code> in place, so
@@ -197,21 +153,10 @@ const results = await Promise.all(tries.map((t) => runTry(t, task)));
         <Chapter id="review" step={4} title="See what each agent changed" />
         <p>
           Two of our agents say the tests pass. That isn’t enough to pick one. A <b>diff</b> lists
-          the files a branch changed. With <code>{'against: "base"'}</code> it compares with the
-          commit the branch started from, so you see only the agent’s own work.
+          the files a branch changed compared with another. Nothing changed <code>main</code> while
+          the agents worked, so a diff against <code>main</code> shows only the agent’s own work.
         </p>
-        <Code
-          file="review.ts"
-          code={`
-for (const { branch, passed } of results) {
-  const changed = [];
-  for await (const c of branch.allDiff("main", { against: "base" })) {
-    changed.push(\`\${c.kind} \${c.path}\`);
-  }
-  console.log(branch.name, passed ? "pass" : "fail", changed);
-}
-`}
-        />
+        <Code file="review.ts" code={code["review.ts"]} />
         <p>Here is what came back from our three tries:</p>
         <Scorecard />
         <p>
@@ -222,18 +167,11 @@ for (const { branch, passed } of results) {
 
         <Chapter id="keep" step={5} title="Keep the best fix" />
         <p>
-          Merge <code>try-1</code> into <code>main</code>. If it merges cleanly, delete all three
-          tries. You don’t need them any more.
+          Merge <code>try-1</code> into <code>main</code>, then destroy all three tries. You don’t
+          need them any more. If the merge hit a conflict, <code>mergeInto</code> would throw before
+          any branch was destroyed.
         </p>
-        <Code
-          file="keep.ts"
-          code={`
-const merged = await tries[0]!.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  for (const t of tries) await t.delete();
-}
-`}
-        />
+        <Code file="keep.ts" code={code["keep.ts"]} />
         <p>
           <code>main</code> now has the fix, its tests pass, and it is the only branch left. The
           next agent you start will fork from the fixed code.
@@ -245,28 +183,12 @@ if (merged.conflicts.length === 0) {
           often in the same files. Let’s start three at once, all touching <code>src/login.js</code>
           , with the same <code>runTry</code> as before.
         </p>
-        <Code
-          file="many-tasks.ts"
-          code={`
-const jobs = [
-  { name: "longer-sessions", task: "Keep people signed in 30 days." },
-  { name: "trim-spaces", task: "Ignore spaces around the email." },
-  { name: "ignore-case", task: "Saved emails may have capitals." },
-];
-const forks = await Promise.all(jobs.map((j) => main.fork(j.name)));
-await Promise.all(forks.map((f, i) => runTry(f, jobs[i]!.task)));
-
-for (const fork of forks) {
-  const { conflicts } = await fork.mergeInto("main");
-  console.log(fork.name, conflicts.length ? conflicts : "merged");
-}
-`}
-        />
+        <Code file="many-tasks.ts" code={code["many-tasks.ts"]} />
         <p>
           A merge combines files line by line. Two agents can change the same file, and if they
           changed different lines, both changes land. When two agents change the same lines, the
-          merge lists the file as a <b>conflict</b> and saves nothing, so no one’s work is quietly
-          overwritten.
+          merge saves nothing and throws a <code>MergeConflict</code> that lists the file as a{" "}
+          <b>conflict</b>, so no one’s work is quietly overwritten.
         </p>
         <Merges />
         <p>
@@ -286,12 +208,12 @@ for (const fork of forks) {
             repo of 20,000 files.
           </li>
           <li>
-            <b>No setup per agent.</b> Checkout writes the files to the agent’s disk, packages
-            included. There is no clone and no install.
+            <b>No setup per agent.</b> <code>download</code> writes the files to the agent’s disk,
+            packages included. There is no clone and no install.
           </li>
           <li>
-            <b>Main stays safe.</b> With <code>main</code> protected, the only way in is a merge you
-            chose.
+            <b>Main stays clean.</b> Agents write only to their own branches, so <code>main</code>{" "}
+            changes only when you merge.
           </li>
           <li>
             <b>Every try is kept until you delete it.</b> You can open, diff and read any branch
@@ -320,16 +242,17 @@ for (const fork of forks) {
               </p>,
             ],
             [
-              "Can an agent push straight to main?",
+              "Can an agent write straight to main?",
               <p key="a">
-                Not once <code>main</code> is protected. A direct write is refused, and the only way
-                in is a merge.
+                Not if it only gets its own branch. Hand the agent the fork’s handle, or{" "}
+                <code>bashTool(work)</code> from <code>skywake/ai</code> for an AI SDK agent, and
+                its writes land there. <code>main</code> changes only when you merge.
               </p>,
             ],
             [
               "Do I still use Git?",
               <p key="a">
-                Yes, for your project’s history. Saving a folder leaves out its <code>.git</code>{" "}
+                Yes, for your project’s history. Uploading a folder leaves out its <code>.git</code>{" "}
                 folder. Skywake holds the ready-to-run files and your agents’ tries.
               </p>,
             ],

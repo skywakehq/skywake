@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/rl";
 
 export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; title: string }) {
   return (
@@ -71,7 +72,7 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
         <div>
           <Checklist
             items={[
-              "Tu conjunto de tareas guardado una vez, como punto de partida bloqueado.",
+              "Tu conjunto de tareas guardado una vez, como punto de partida fijo.",
               "Una copia nueva y privada para cada rollout, creada en 10 ms.",
               "Herramientas que tu política llama para leer y escribir archivos en su copia.",
               "Una puntuación para cada rollout y la lista exacta de lo que cambió.",
@@ -80,8 +81,8 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           />
         </div>
         <p>
-          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_URL</code> y{" "}
-          <code>SKYWAKE_KEY</code>, y luego instala el SDK con <code>npm i @skywake/sdk</code>.
+          Necesitarás una API key de Skywake y Node. Define <code>SKYWAKE_API_KEY</code> y luego
+          instala el SDK con <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Guarda el mundo una vez" />
@@ -102,63 +103,37 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
           ]}
         />
         <p>
-          Lo guardaremos como una rama llamada <code>main</code>. Una rama es una línea de versiones
-          guardadas de una carpeta, y cada versión guardada es un <b>commit</b>, con su propio id.
+          Lo subiremos a un disco: un conjunto de archivos con ramas e historial. Llega a la primera
+          rama del disco, <code>main</code>. Una rama es una línea de versiones guardadas, y cada
+          versión guardada es un <b>commit</b>, con su propio id.
         </p>
-        <Code
-          file="save-world.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const suite = await sky.createNamespace("rl/task-suite");
-const main = await suite.createBranch("main");
-const start = await main.commitFolder("./task-suite", {
-  message: "Task suite v3",
-});
-await main.protect();
-`}
-        />
+        <Code file="save-world.ts" code={code["save-world.ts"]} />
         <p>
-          Acaban de pasar dos cosas. <code>start</code> es el id del commit que guardamos: este es
-          el mundo en el que empezará cada rollout. Y <code>main</code> ahora está <b>protegida</b>,
-          así que solo cambia con un merge. Si un rollout intenta escribir en ella directamente, la
-          escritura se rechaza.
+          Acaban de pasar dos cosas. <code>start</code> es el id del commit que guardamos. Y{" "}
+          <code>v3</code> es una rama nueva en ese commit: este es el mundo en el que empezará cada
+          rollout. Nada escribe nunca en <code>v3</code>, así que no cambia, aunque{" "}
+          <code>main</code> avance.
         </p>
 
         <Chapter id="fork" step={2} title="Dale a cada rollout su propia copia" />
         <p>
-          Ahora, la idea clave. Un <b>fork</b> es una rama nueva que parte de un commit existente.
-          No copia nada. Apunta a los mismos archivos hasta que alguien cambia uno, y solo se guarda
+          Ahora, la idea clave. Un <b>fork</b> es una rama nueva que parte de donde está otra. No
+          copia nada. Apunta a los mismos archivos hasta que alguien cambia uno, y solo se guarda
           ese cambio, únicamente en el fork.
         </p>
-        <Code
-          file="rollout.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-async function newRollout(id: string): Promise<Branch> {
-  return main.fork(\`rollouts/\${id}\`, start);
-}
-
-const run = await newRollout("0001");
-`}
-        />
+        <Code file="rollout.ts" code={code["rollout.ts"]} />
         <p>
-          <code>run</code> contiene todos los archivos del conjunto, exactamente como estaban en{" "}
-          <code>start</code>. Lo que haga la política a partir de aquí se queda en{" "}
-          <code>rollouts/0001</code>.
+          <code>run</code> contiene todos los archivos del conjunto, exactamente como están en{" "}
+          <code>v3</code>. Lo que haga la política a partir de aquí se queda en{" "}
+          <code>rollout-0001</code>.
         </p>
-        <Note title="Consejo: haz fork desde el commit, no desde la rama">
+        <Note title="Consejo: haz fork desde v3, no desde main">
           <p>
-            Pasamos <code>start</code> a propósito. Si el conjunto cambia la semana que viene, un
-            fork desde <code>start</code> sigue recibiendo los archivos de esta semana. Guarda el id
-            del commit junto a cada resultado y siempre podrás reconstruir el mundo exacto del que
-            salió una puntuación.
+            Hacemos fork de <code>v3</code> a propósito. Si el conjunto cambia la semana que viene,{" "}
+            <code>main</code> avanza, pero <code>v3</code> sigue teniendo los archivos de esta
+            semana. Guarda también <code>start</code> junto a cada resultado:{" "}
+            <code>{"fork(name, { at: start })"}</code> reconstruye el mundo exacto del que salió una
+            puntuación.
           </p>
         </Note>
 
@@ -168,59 +143,20 @@ const run = await newRollout("0001");
           escribir un archivo. Las dos están ligadas a un rollout, así que la política no puede
           llegar a ninguna otra copia, ni a <code>main</code>.
         </p>
-        <Code
-          file="tools.ts"
-          code={`
-function toolsFor(run: Branch) {
-  return {
-    readFile: (path: string) => run.readText(path),
-    writeFile: (path: string, text: string) =>
-      run.write({ [path]: text }, \`policy: write \${path}\`),
-  };
-}
-
-const tools = toolsFor(run);
-`}
-        />
+        <Code file="tools.ts" code={code["tools.ts"]} />
         <p>
-          Pásale <code>tools</code> a tu bucle de agente. Cada escritura se convierte en su propio
-          commit en el rollout, así que obtienes gratis un registro paso a paso de lo que hizo la
-          política.
+          Pásale <code>tools</code> a tu bucle de agente, aquí <code>policy</code>. Cada escritura
+          se convierte en su propio commit en el rollout, así que obtienes gratis un registro paso a
+          paso de lo que hizo la política.
         </p>
 
         <Chapter id="score" step={4} title="Puntúa el rollout" />
         <p>
           Algunas recompensas necesitan una carpeta real en disco, por ejemplo para ejecutar un
-          test. <code>checkout</code> escribe los archivos del rollout en una carpeta local. Ahí
+          test. <code>download</code> escribe los archivos del rollout en una carpeta local. Ahí
           ejecutamos el test de la tarea: si pasa, recompensa 1; si falla, recompensa 0.
         </p>
-        <Code
-          file="score.ts"
-          code={`
-import { execFileSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-async function score(run: Branch, task: string) {
-  const dir = await mkdtemp(join(tmpdir(), "rollout-"));
-  await run.checkout(dir);
-  try {
-    execFileSync("node", [\`tasks/\${task}/test.js\`], {
-      cwd: dir,
-      stdio: "ignore",
-    });
-    return 1;
-  } catch {
-    return 0;
-  } finally {
-    await rm(dir, { recursive: true });
-  }
-}
-
-const reward = await score(run, "date-parser");
-`}
-        />
+        <Code file="score.ts" code={code["score.ts"]} />
         <p>
           La carpeta local es solo una copia temporal para el test, y la borramos justo después. El
           rollout en sí sigue viviendo en su rama.
@@ -229,35 +165,19 @@ const reward = await score(run, "date-parser");
         <Chapter id="finish" step={5} title="Reinicia con un solo borrado" />
         <p>
           Antes de tirar un rollout, mira qué cambió. <code>diff</code> lista cada archivo que el
-          rollout añadió, borró o editó desde que hizo fork. Así es fácil atrapar un tipo de trampa:
-          una política que “pasa” reescribiendo el test.
+          rollout añadió, borró o editó, comparado con <code>v3</code>. Así es fácil atrapar un tipo
+          de trampa: una política que “pasa” reescribiendo el test.
         </p>
-        <Code
-          file="finish.ts"
-          code={`
-async function finish(id: string, run: Branch) {
-  const changed = await run.diff("main", { against: "base" });
-  const touchedTests = changed.some((c) => c.path.endsWith("test.js"));
-  if (touchedTests) {
-    console.log(\`Look at rollouts/\${id}:\`, changed);
-  } else {
-    await run.delete();
-  }
-}
-
-await finish("0001", run);
-`}
-        />
+        <Code file="finish.ts" code={code["finish.ts"]} />
         <p>
-          <code>{'against: "base"'}</code> compara el rollout con el commit desde el que hizo fork,
-          así que solo aparecen los cambios de la propia política. Un rollout honesto se borra, y
-          ese es todo el reinicio. Un rollout que editó un test se queda en su rama, listo para que
-          lo abras:
+          <code>v3</code> nunca se mueve, así que solo aparecen los cambios de la propia política.
+          Un rollout honesto se borra, y ese es todo el reinicio. Un rollout que editó un test se
+          queda en su rama, listo para que lo abras:
         </p>
         <Rollouts />
         <p>
           Los dos rollouts sacaron 1. Solo la lista de archivos cambiados los distingue. El
-          siguiente rollout que lances vuelve a hacer fork desde <code>start</code>, con el bug otra
+          siguiente rollout que lances vuelve a hacer fork desde <code>v3</code>, con el bug otra
           vez en su sitio.
         </p>
 
@@ -267,22 +187,7 @@ await finish("0001", run);
           pueda atender. Aquí van ocho, en paralelo. <code>policy</code> es tu propio bucle de
           agente, llamado con las herramientas del rollout.
         </p>
-        <Code
-          file="many.ts"
-          code={`
-const ids = Array.from({ length: 8 }, (_, i) => \`run-\${i}\`);
-
-const rewards = await Promise.all(
-  ids.map(async (id) => {
-    const run = await newRollout(id);
-    await policy(toolsFor(run));
-    const reward = await score(run, "date-parser");
-    await finish(id, run);
-    return reward;
-  }),
-);
-`}
-        />
+        <Code file="many.ts" code={code["many.ts"]} />
         <p>
           Aquí es donde un entorno compartido falla, y ahora está resuelto. Lo probamos con una
           política que arregla el bug solo en los cuatro primeros rollouts que recibe. Volvieron
@@ -315,25 +220,14 @@ const rewards = await Promise.all(
         </ul>
         <h3>Publicar una nueva versión del conjunto</h3>
         <p>
-          Como <code>main</code> está protegida, la cambias con cuidado: haces fork, editas el fork
-          y lo fusionas de vuelta.
+          Cambia también <code>main</code> con cuidado: haz fork, edita el fork y fusiónalo de
+          vuelta. Así <code>main</code> pasa a la v4 en un solo paso.
         </p>
-        <Code
-          file="new-version.ts"
-          code={`
-const v4 = await main.fork("suite-v4");
-await v4.write(
-  { "tasks/slugify/README.md": "Also handle tabs and many spaces." },
-  "Task suite v4",
-);
-await v4.mergeInto("main");
-`}
-        />
+        <Code file="new-version.ts" code={code["new-version.ts"]} />
         <p>
           Las ejecuciones nuevas pueden hacer fork desde el nuevo head de <code>main</code>. Las que
-          hacen fork desde el antiguo <code>start</code> siguen recibiendo la v3, archivo por
-          archivo. Así puedes comparar un checkpoint en la v3 y en la v4 sin guardar dos copias de
-          nada.
+          hacen fork desde <code>v3</code> siguen recibiendo la v3, archivo por archivo. Así puedes
+          comparar un checkpoint en la v3 y en la v4 sin guardar dos copias de nada.
         </p>
 
         <Chapter id="questions" title="Preguntas" />
@@ -358,15 +252,15 @@ await v4.mergeInto("main");
             [
               "Mi entorno necesita una carpeta real. ¿Esto sigue funcionando?",
               <p key="a">
-                Sí. <code>checkout</code> escribe cualquier rollout, o cualquier commit anterior, en
+                Sí. <code>download</code> escribe cualquier rollout, o cualquier commit anterior, en
                 una carpeta local, como hicimos para los tests en el paso 4.
               </p>,
             ],
             [
               "¿Qué impide que un rollout con errores cambie el estado inicial?",
               <p key="a">
-                <code>main</code> está protegida, así que solo cambia con un merge. Una escritura
-                directa se rechaza. Proteger una rama requiere una key de administrador.
+                Las herramientas de la política solo llegan a su propia rama. Y cada rollout hace
+                fork desde <code>v3</code>, donde nada escribe, así que el inicio no cambia.
               </p>,
             ],
           ]}
@@ -382,7 +276,7 @@ function RlCover() {
   return <Runs tone="blue" />;
 }
 
-/** One shared folder that each run leaves things in, next to one locked start and a copy per run. */
+/** One shared folder that each run leaves things in, next to one fixed start and a copy per run. */
 function TwoWorlds() {
   const box = "t-small rounded-lg border border-border bg-card px-3 py-2 text-foreground";
   const run = "t-small rounded-lg border border-border bg-card px-3 py-2 font-mono text-[12px]";
@@ -406,12 +300,12 @@ function TwoWorlds() {
         <p className="t-eyebrow text-muted-foreground">Lo que vamos a construir</p>
         <div className="mt-3 flex flex-wrap items-center gap-2.5">
           <span className="flex flex-wrap items-center gap-2 rounded-xl border border-signal/40 bg-signal/5 p-2">
-            <span className={box}>main</span>
-            <span className="t-eyebrow px-1 text-signal">Guardado una vez · bloqueado</span>
+            <span className={box}>v3</span>
+            <span className="t-eyebrow px-1 text-signal">Guardado una vez · no cambia</span>
           </span>
           <ArrowRight className="size-4 text-muted-foreground" />
           <span className="flex flex-wrap gap-2">
-            {["rollouts/0001", "rollouts/0002", "rollouts/0003"].map((name) => (
+            {["rollout-0001", "rollout-0002", "rollout-0003"].map((name) => (
               <span key={name} className={run}>
                 {name}
               </span>
@@ -427,13 +321,13 @@ function TwoWorlds() {
 function Rollouts() {
   const rows = [
     {
-      name: "rollouts/0001",
+      name: "rollout-0001",
       file: "tasks/date-parser/parse.js",
       outcome: "Borrado",
       flagged: false,
     },
     {
-      name: "rollouts/0002",
+      name: "rollout-0002",
       file: "tasks/date-parser/test.js",
       outcome: "Guardado para revisar",
       flagged: true,

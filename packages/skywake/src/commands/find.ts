@@ -61,10 +61,10 @@ async function served(
   for (const { start, scope } of scopes) {
     if (asked.name === undefined && asked.kind !== "files") out.push(start);
     const found = await trusted(() =>
-      fs.branch.find(asked.name ?? "*", {
+      fs.disk.find(asked.name ?? "*", {
         path: remote(scope.folder),
         kind: asked.kind,
-        at: scope.at,
+        at: scope.at || undefined,
         limit: LIMIT,
       }),
     );

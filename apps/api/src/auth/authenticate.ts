@@ -51,7 +51,13 @@ export class Authenticator {
     const id = caller.actor.slice("key:".length);
     const key = await keys.find(this.#db, id);
     this.#keys.drop(id);
-    if (!key || expired(key) || key.org !== caller.org || key.role !== caller.role) {
+    if (
+      !key ||
+      expired(key) ||
+      key.org !== caller.org ||
+      key.role !== caller.role ||
+      key.environment !== caller.environment
+    ) {
       throw unauthorized();
     }
   }
@@ -79,7 +85,8 @@ export class Authenticator {
     return {
       org: key.org,
       role: key.role,
-      namespaces: key.namespaces,
+      environment: key.environment,
+      only: key.only,
       actor: `key:${id}`,
       expires: key.expires,
     };
@@ -103,7 +110,8 @@ export class Authenticator {
     return {
       org: claims.org,
       role: roleFrom(claims.role),
-      namespaces: "*",
+      environment: null,
+      only: ["*"],
       actor: `user:${claims.sub}`,
       expires: null,
       address: claims.ip,

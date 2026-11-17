@@ -1,15 +1,24 @@
 import { createRoute } from "@hono/zod-openapi";
 
-import { body, errors, json, noContent, orDefault, signedIn } from "./http.ts";
-import { NamespacePattern, Role, Time, z } from "./schemas.ts";
+import { body, errors, json, noContent, signedIn } from "./http.ts";
+import { EnvironmentName, NamePattern, NamespacePattern, Role, Time, z } from "./schemas.ts";
 
 export const Key = z
   .object({
     id: z.string(),
     name: z.string(),
     role: Role,
+    environment: z.string().nullable().openapi({
+      description: "The environment the key works in. Null for a key that works in every one.",
+    }),
+    only: z.array(z.string()).openapi({
+      description:
+        "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+        "or `*` for all.",
+    }),
     namespaces: z.string().openapi({
-      description: "A namespace name, `<folder>/*` for every namespace under it, or `*`.",
+      description:
+        "Deprecated: the same reach as one pattern of full names. Use `environment` and `only`.",
     }),
     expires: Time.nullable(),
     last_used: Time.nullable(),
@@ -32,10 +41,26 @@ export const NewKey = z
   .object({
     name: z.string().min(1).max(100),
     role: Role,
-    namespaces: orDefault(NamespacePattern, "*").openapi({
+    environment: EnvironmentName.nullable()
+      .optional()
+      .openapi({
+        description:
+          "The environment it works in. A key made by a key of one environment gets that one. " +
+          "Null makes a key for every environment, which only an organization admin may make.",
+      }),
+    only: z
+      .array(NamePattern)
+      .min(1)
+      .max(50)
+      .optional()
+      .openapi({
+        description:
+          "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+          "or `*` for all, the default.",
+      }),
+    namespaces: NamespacePattern.optional().openapi({
       description:
-        "A namespace name, `<folder>/*` for every namespace under a folder, or `*` for all of " +
-        "them, the default.",
+        "Deprecated: one pattern of full names, such as `prod/*`. Use `environment` and `only`.",
     }),
     expires_in_days: z
       .number()
@@ -109,4 +134,34 @@ export const deleteKey = createRoute({
   security: signedIn,
   request: { params: z.object({ id: z.string().openapi({ param: { name: "id", in: "path" } }) }) },
   responses: { 204: noContent, ...errors(401, 403, 404) },
+});
+
+export const Whoami = z
+  .object({
+    organization: z.string(),
+    environment: z
+      .string()
+      .nullable()
+      .openapi({
+        description:
+          "The environment requests work in: the key's own, or the `Skywake-Environment` header " +
+          "for a key or person that may use every environment. Null when neither says.",
+      }),
+    role: Role,
+    only: z.array(z.string()),
+    key: z.string().nullable().openapi({ description: "The key's id, when a key is used." }),
+    user: z.string().nullable().openapi({ description: "The person, when the console calls." }),
+    email: z.string().nullable(),
+    expires: Time.nullable(),
+  })
+  .openapi("Whoami");
+
+export const whoami = createRoute({
+  method: "get",
+  path: "/whoami",
+  operationId: "whoami",
+  tags: ["keys"],
+  summary: "Who is calling: the organization, environment and role the key or person has.",
+  security: signedIn,
+  responses: { 200: json(Whoami, "The caller."), ...errors(401, 403) },
 });

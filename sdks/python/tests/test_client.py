@@ -1,218 +1,242 @@
+import asyncio
 import json
+from datetime import datetime
 
 import httpx
 import pytest
-from skywake import Skywake, SkywakeError
+from skywake import (
+    AsyncSkywake,
+    AuthError,
+    MergeConflict,
+    NotFound,
+    PermissionError,
+    RateLimited,
+    ServerError,
+    Skywake,
+)
 
 
-def fake(answers):
-    """A transport that gives `answers` in turn and records each request."""
+def fake(reply):
     seen = []
 
     def handle(request):
         seen.append(request)
-        answer = answers[min(len(seen), len(answers)) - 1]
+        answer = reply(request, len(seen))
         if isinstance(answer, Exception):
             raise answer
         return answer
 
-    return httpx.MockTransport(handle), seen
+    return seen, httpx.MockTransport(handle)
 
 
-def failure(status, code, **headers):
-    body = {"error": "nope", "code": code, "request_id": "req-1"}
+def failure(status, code, headers=None, **extra):
+    body = {"error": {"code": code, "message": "nope", "hint": None, "request_id": "req-1", **extra}}
     return httpx.Response(status, json=body, headers=headers)
 
 
+def ok(body=None, status=200):
+    return httpx.Response(status, json=body)
+
+
 def client(transport, **options):
-    return Skywake("http://api", "sw_key", transport=transport, backoff=0.001, **options)
+    return Skywake(url="http://api", key="sw_key", transport=transport, backoff=0.001, **options)
 
 
-def test_idempotent_requests_are_retried_after_a_5xx():
-    transport, seen = fake([failure(503, "unavailable"), httpx.Response(200, json=[])])
-    assert client(transport).namespaces() == []
-    assert len(seen) == 2
+def body(request):
+    return json.loads(request.content)
 
 
-def test_network_errors_are_retried_for_idempotent_requests():
-    transport, seen = fake([httpx.ConnectError("down"), httpx.Response(200, json=[])])
-    assert client(transport).namespaces() == []
-    assert len(seen) == 2
+def test_requests_go_to_v2_with_the_key_and_the_environment():
+    seen, transport = fake(lambda *_: ok({"environment": "prod"}))
+    assert client(transport, environment="prod").whoami() == {"environment": "prod"}
+    assert str(seen[0].url) == "http://api/v2/whoami"
+    assert seen[0].headers["authorization"] == "Bearer sw_key"
+    assert seen[0].headers["skywake-environment"] == "prod"
 
 
-def test_a_post_is_not_retried_after_a_5xx_or_a_network_error():
-    transport, seen = fake([failure(503, "unavailable")])
-    with pytest.raises(SkywakeError):
-        client(transport).create_environment("prod")
-    assert len(seen) == 1
+def test_each_status_becomes_its_own_error_with_the_hint_in_the_message():
+    replies = [failure(401, "unauthorized"), failure(403, "forbidden"), failure(500, "internal")]
+    seen, transport = fake(lambda _, n: replies[n - 1])
+    sky = client(transport, retries=0)
+    with pytest.raises(AuthError):
+        sky.whoami()
+    with pytest.raises(PermissionError):
+        sky.whoami()
+    with pytest.raises(ServerError):
+        sky.whoami()
 
-    transport, seen = fake([httpx.ReadTimeout("slow")])
-    with pytest.raises(httpx.ReadTimeout):
-        client(transport).create_environment("prod")
-    assert len(seen) == 1
-
-
-def test_any_request_is_retried_after_a_429(monkeypatch):
-    waits = []
-    monkeypatch.setattr("skywake._http.time.sleep", waits.append)
-    made = httpx.Response(201, json={"name": "prod"})
-    transport, seen = fake([failure(429, "rate_limited", **{"retry-after": "2"}), made])
-    sky = Skywake("http://api", "sw_key", transport=transport)
-    assert sky.create_environment("prod") == {"name": "prod"}
-    assert len(seen) == 2
-    assert seen[1].content == seen[0].content
-    assert waits == [2.0]
-
-
-def test_errors_carry_the_code_and_request_id_after_the_last_retry():
-    transport, seen = fake([failure(500, "internal")])
-    with pytest.raises(SkywakeError) as raised:
-        client(transport, retries=2).namespaces()
-    assert len(seen) == 3
-    assert raised.value.status == 500
-    assert raised.value.code == "internal"
+    seen, transport = fake(lambda *_: failure(404, "not_found", hint="did you mean `products`?"))
+    with pytest.raises(NotFound) as raised:
+        client(transport).index("prodcts").info()
+    assert raised.value.hint == "did you mean `products`?"
+    assert "did you mean `products`?" in str(raised.value)
     assert raised.value.request_id == "req-1"
 
 
-def test_a_4xx_is_not_retried():
-    transport, seen = fake([failure(404, "not_found")])
-    with pytest.raises(SkywakeError) as raised:
-        client(transport).namespace("x").branches()
-    assert raised.value.code == "not_found"
+def test_idempotent_requests_are_retried_after_a_5xx_or_a_network_error():
+    replies = [failure(503, "unavailable"), httpx.ConnectError("down"), ok({"organization": "o"})]
+    seen, transport = fake(lambda _, n: replies[n - 1])
+    assert client(transport).whoami() == {"organization": "o"}
+    assert len(seen) == 3
+
+
+def test_a_post_is_not_retried_after_a_5xx():
+    seen, transport = fake(lambda *_: failure(503, "unavailable"))
+    with pytest.raises(ServerError):
+        client(transport).create_environment("prod")
     assert len(seen) == 1
 
 
-def test_credentials_are_asked_for_one_namespace():
-    answer = {"store": "s3://b/o/n", "access": "read"}
-    transport, seen = fake([httpx.Response(200, json=answer)])
-    assert client(transport).namespace("prod/app").credentials("read") == answer
-    assert seen[0].url.raw_path == b"/v1/namespaces/prod%2Fapp/credentials"
-    assert seen[0].content == b'{"access":"read"}'
-
-
-def test_a_wait_the_server_asks_for_is_kept_up_to_its_longest(monkeypatch):
+def test_a_429_is_retried_as_asked_then_reported_with_retry_after(monkeypatch):
     waits = []
-    monkeypatch.setattr("skywake._http.time.sleep", waits.append)
-    transport, _ = fake([failure(429, "rate_limited", **{"retry-after": "60"}), httpx.Response(200, json=[])])
-    assert client(transport).namespaces() == []
-    assert waits == [60.0]
+    monkeypatch.setattr("skywake._transport.time.sleep", waits.append)
+    seen, transport = fake(lambda *_: failure(429, "rate_limited", {"retry-after": "2"}))
+    with pytest.raises(RateLimited) as raised:
+        client(transport, retries=1).create_environment("prod")
+    assert raised.value.retry_after == 2.0
+    assert waits == [2.0]
+    assert seen[1].content == seen[0].content
 
 
-def test_a_delete_retried_after_a_failure_that_may_have_landed_takes_404_as_done():
-    transport, seen = fake([failure(503, "unavailable"), failure(404, "not_found")])
-    client(transport).namespace("x").branch("gone").delete()
-    assert len(seen) == 2
-
-    transport, seen = fake([httpx.ConnectError("down"), failure(404, "not_found")])
-    client(transport).namespace("x").branch("gone").delete()
-
-    # A 404 on the first try is still an error.
-    transport, seen = fake([failure(404, "not_found")])
-    with pytest.raises(SkywakeError):
-        client(transport).namespace("x").branch("gone").delete()
+def test_a_merge_that_cannot_finish_is_a_merge_conflict():
+    seen, transport = fake(lambda *_: failure(409, "conflict", conflicts=["README.md"]))
+    with pytest.raises(MergeConflict) as raised:
+        client(transport).disk("app", branch="agent-1").merge_into(dry_run=False)
+    assert raised.value.conflicts == ["README.md"]
+    assert body(seen[0]) == {"from": "agent-1", "into": "main", "dry_run": False}
 
 
-def test_a_file_can_be_read_as_a_stream():
-    transport, seen = fake([httpx.Response(200, content=iter([b"hello ", b"world"]))])
-    branch = client(transport).namespace("x").branch("main")
-    assert b"".join(branch.read_stream("a.txt", offset=1)) == b"hello world"
-    assert seen[0].url.params["path"] == "a.txt"
-    assert seen[0].url.params["offset"] == "1"
+def test_lists_follow_next_until_the_last_page():
+    def reply(request, _):
+        if request.url.params.get("cursor") == "b":
+            return ok({"data": [{"name": "c"}], "next": None})
+        return ok({"data": [{"name": "a"}, {"name": "b"}], "next": "b"})
 
-    transport, _ = fake([failure(404, "not_found")])
-    with pytest.raises(SkywakeError) as raised:
-        client(transport).namespace("x").branch("main").read_stream("a.txt")
-    assert raised.value.code == "not_found"
+    seen, transport = fake(reply)
+    assert [disk["name"] for disk in client(transport).list_disks()] == ["a", "b", "c"]
 
 
-def test_a_list_takes_a_page_and_iter_follows_after_until_a_short_page():
-    names = [f"b{i:04}" for i in range(1001)]
+def test_upsert_takes_any_number_of_rows_in_batches():
+    def reply(request, _):
+        rows = body(request)
+        return ok({"ids": [row["id"] for row in rows], "count": len(rows)})
 
-    def handle(request):
-        seen.append(request.url.params)
-        after = request.url.params.get("after")
-        start = names.index(after) + 1 if after else 0
-        limit = int(request.url.params.get("limit", 1000))
-        return httpx.Response(200, json=[{"name": name} for name in names[start : start + limit]])
-
-    seen = []
-    ns = client(httpx.MockTransport(handle)).namespace("prod/app")
-    assert ns.branches(limit=2, after="b0005") == [{"name": "b0006"}, {"name": "b0007"}]
-    assert str(seen[0]) == "limit=2&after=b0005"
-
-    assert [branch["name"] for branch in ns.iter_branches()] == names
-    assert [str(params) for params in seen[1:]] == ["limit=1000", "limit=1000&after=b0999"]
+    seen, transport = fake(reply)
+    rows = [{"id": i, "text": f"row {i}"} for i in range(25_000)]
+    done = client(transport).index("products").upsert(rows)
+    assert done["count"] == 25_000
+    assert [len(body(request)) for request in seen] == [10_000, 10_000, 5_000]
+    assert seen[0].url.params["branch"] == "main"
 
 
-def test_folder_entries_are_paged_by_name():
-    pages = [[{"name": f"a{i:04}"} for i in range(1000)], [{"name": "b"}]]
-    transport, seen = fake([httpx.Response(200, json={"entries": entries}) for entries in pages])
-    main = client(transport).namespace("app").branch("main")
-    assert len(list(main.iter_entries("src"))) == 1001
-    assert [str(request.url.params) for request in seen] == [
-        "path=src&limit=1000",
-        "path=src&limit=1000&after=a0999",
+def test_update_and_delete_take_an_id_ids_or_a_filter():
+    seen, transport = fake(lambda *_: ok({"count": 1}))
+    products = client(transport).index("products")
+    products.update(7, {"stock": 3})
+    products.update({"tag": {"eq": "sale"}}, {"stock": 0})
+    products.delete([1, 2])
+    products.delete({"filter": {"stock": {"eq": 0}}})
+    assert [(r.method, r.url.path, body(r)) for r in seen] == [
+        ("PATCH", "/v2/indexes/products/rows", {"id": 7, "fields": {"stock": 3}}),
+        ("PATCH", "/v2/indexes/products/rows", {"filter": {"tag": {"eq": "sale"}}, "fields": {"stock": 0}}),
+        ("POST", "/v2/indexes/products/rows/delete", {"ids": [1, 2]}),
+        ("POST", "/v2/indexes/products/rows/delete", {"filter": {"stock": {"eq": 0}}}),
     ]
 
 
-def test_revert_reset_resolve_and_diff_against_the_base():
-    conflict = {"error": "nope", "code": "conflict", "request_id": "r", "conflicts": ["a.txt"]}
-    transport, seen = fake(
-        [
-            httpx.Response(201, json={"head": "h1", "changed": True}),
-            httpx.Response(409, json=conflict),
-            httpx.Response(200, json={"head": "h0", "changed": False}),
-            httpx.Response(409, json={"head": None, **conflict, "conflicts": ["b.txt"]}),
-            httpx.Response(200, json=[]),
-        ]
-    )
-    ns = client(transport).namespace("app")
-    main = ns.branch("main")
-    assert main.revert("c1", message="undo") == {"head": "h1", "changed": True}
-    with pytest.raises(SkywakeError) as raised:
-        main.revert("bad")
-    assert raised.value.status == 409
-    assert raised.value.conflicts == ["a.txt"]
-    assert main.reset("c0") == {"head": "h0", "changed": False}
+def test_get_gives_none_for_a_missing_row_but_raises_for_a_missing_index():
+    def reply(request, _):
+        if "/rows/" in request.url.path:
+            return failure(404, "not_found", path="id")
+        return failure(404, "not_found", hint="did you mean `products`?")
 
-    resolve = [{"path": "a.txt", "take": "ours"}]
-    merged = ns.branch("try").merge_into("main", resolve=resolve)
-    assert merged.conflicts == ["b.txt"]
-    main.diff("dev", against="base")
-
-    assert [(request.url.path, request.content) for request in seen[:4]] == [
-        ("/v1/namespaces/app/branches/main/revert", b'{"commit":"c1","message":"undo"}'),
-        ("/v1/namespaces/app/branches/main/revert", b'{"commit":"bad"}'),
-        ("/v1/namespaces/app/branches/main/reset", b'{"to":"c0"}'),
-        ("/v1/namespaces/app/merges", b'{"from":"try","into":"main","resolve":[{"path":"a.txt","take":"ours"}]}'),
-    ]
-    assert str(seen[4].url.params) == "from=dev&against=base"
+    seen, transport = fake(reply)
+    sky = client(transport)
+    assert sky.index("products").get("a b") is None
+    assert seen[0].url.raw_path.decode().startswith("/v2/indexes/products/rows/a%20b")
+    with pytest.raises(NotFound):
+        sky.index("prodcts").info()
 
 
-def test_a_dry_run_merge_saves_nothing_and_lists_conflicts():
-    transport, seen = fake([httpx.Response(200, json={"head": None, "conflicts": ["a.txt"]})])
-    merged = client(transport).namespace("app").branch("try").merge_into("main", dry_run=True)
-    assert (merged.head, merged.conflicts) == (None, ["a.txt"])
-    assert seen[0].content == b'{"from":"try","into":"main","dry_run":true}'
+def test_query_takes_text_first_and_options_by_keyword():
+    seen, transport = fake(lambda *_: ok({"data": [{"id": 1, "score": 0.9, "title": "mug"}], "next": None}))
+    products = client(transport).index("products", branch="draft")
+    assert products.query("coffee", limit=3, mode="keywords")[0]["title"] == "mug"
+    assert body(seen[0]) == {"text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft"}
 
 
-def test_a_fork_can_start_at_an_older_commit():
-    transport, seen = fake([httpx.Response(201, json={"name": "old"})])
-    client(transport).namespace("app").branch("main").fork("old", at="c0ffee")
-    assert json.loads(seen[0].content) == {"name": "old", "from": "main", "at": "c0ffee"}
+def test_files_are_read_and_written_by_path():
+    def reply(request, _):
+        if request.method == "GET":
+            return httpx.Response(200, content=b"hello")
+        return ok({"commit": "c1", "changed": True})
 
-
-def test_find_and_search_send_only_what_is_given():
-    transport, seen = fake([httpx.Response(200, json=[])])
-    branch = client(transport).namespace("prod/app").branch("main")
-    branch.find("*.ts", kind="files")
-    branch.search("todo", glob="src/**", ignore_case=True)
-    assert seen[0].url.raw_path.decode().startswith("/v1/namespaces/prod%2Fapp/branches/main/find?")
-    assert dict(seen[0].url.params) == {"glob": "*.ts", "path": "", "kind": "files", "limit": "1000"}
-    assert dict(seen[1].url.params) == {
-        "pattern": "todo",
-        "path": "",
-        "limit": "100",
-        "glob": "src/**",
-        "ignoreCase": "true",
+    seen, transport = fake(reply)
+    app = client(transport).disk("app")
+    assert app.read("/docs/a b.md", at="c0") == "hello"
+    assert app.read("x", binary=True) == b"hello"
+    app.write({"a.md": "one", "b.bin": b"\xff\x00"}, message="two")
+    assert seen[0].url.raw_path.decode().split("?")[0] == "/v2/disks/app/files/docs/a%20b.md"
+    assert seen[0].url.params["at"] == "c0"
+    assert body(seen[2]) == {
+        "message": "two",
+        "branch": "main",
+        "changes": [{"path": "a.md", "text": "one"}, {"path": "b.bin", "base64": "/wA="}],
     }
+
+
+def test_a_large_file_goes_up_in_parts_before_its_commit():
+    def reply(request, _):
+        if request.url.path.endswith("/uploads"):
+            return ok({"part": f"p{len(request.content)}", "size": len(request.content)}, 201)
+        return ok({"commit": "c1", "changed": True})
+
+    seen, transport = fake(reply)
+    client(transport).disk("app").write("big.bin", bytes(20 * 1024 * 1024))
+    sizes = [len(r.content) for r in seen if r.url.path.endswith("/uploads")]
+    assert sizes == [16 * 1024 * 1024, 4 * 1024 * 1024]
+    assert body(seen[-1])["changes"] == [{"path": "big.bin", "parts": [f"p{16 * 1024 * 1024}", f"p{4 * 1024 * 1024}"]}]
+
+
+def test_a_fork_is_a_handle_and_destroy_removes_just_the_branch():
+    def reply(request, _):
+        return httpx.Response(204) if request.method == "DELETE" else ok({"name": "agent-1"}, 201)
+
+    seen, transport = fake(reply)
+    work = client(transport).disk("app").fork("agent-1", at="c3")
+    assert work.branch == "agent-1"
+    work.destroy()
+    assert body(seen[0]) == {"name": "agent-1", "from": "main", "at": "c3"}
+    assert (seen[1].method, seen[1].url.path) == ("DELETE", "/v2/disks/app/branches/agent-1")
+
+
+def test_restore_to_a_time_picks_the_newest_commit_at_or_before_it():
+    commits = [
+        {"id": "c3", "message": "", "created": "2026-01-03T00:00:00Z", "merged": None},
+        {"id": "c2", "message": "", "created": "2026-01-02T00:00:00Z", "merged": None},
+    ]
+
+    def reply(request, _):
+        if request.method == "GET":
+            return ok({"data": commits, "next": None})
+        return ok({"commit": "c4", "changed": True})
+
+    seen, transport = fake(reply)
+    client(transport).disk("app").restore(datetime.fromisoformat("2026-01-02T12:00:00+00:00"))
+    assert body(seen[1]) == {"to": "c2", "branch": "main"}
+
+
+def test_the_async_client_has_the_same_handles():
+    def reply(request, _):
+        if request.url.path.endswith("/rows/delete"):
+            return ok({"count": 2})
+        return ok({"data": [{"name": "a"}], "next": None})
+
+    seen, transport = fake(reply)
+
+    async def main():
+        async with AsyncSkywake(url="http://api", key="sw_key", transport=transport) as sky:
+            assert await sky.index("products").delete([1, 2]) == 2
+            return [disk["name"] async for disk in sky.list_disks()]
+
+    assert asyncio.run(main()) == ["a"]

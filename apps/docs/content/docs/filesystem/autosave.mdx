@@ -4,12 +4,14 @@ icon: Save
 description: Mounts save every 2 seconds, fsync waits until your data is saved, and unsaved changes are never deleted.
 ---
 
-You don't have to save a mount yourself: `skywaked` saves it every few seconds. These commands show how each mount is doing and let you save right away.
+You don't have to save a [mount](./mount.mdx) yourself: `skywaked` saves it every few seconds. These commands show how each mount is doing and let you save right away.
 
-```bash
+```bash norun
 skywake status              # each mount's save lag, unsaved bytes and last error
 skywake sync /work          # save now; returns once it is in the bucket
 ```
+
+Autosave is about mounts only. Every SDK and CLI write (`write`, `delete`, `upload`) is its own commit as soon as the call returns.
 
 ## Autosave
 
@@ -22,14 +24,14 @@ Every 2 seconds, `skywaked` saves what changed in each mount. It uploads the cha
 
 ## Recover
 
-Sometimes a mount can't save its changes, for example after a crash, a failed save or a [move](./mount.mdx#moving-a-branch). Then `skywaked` keeps them in `unsaved/` in its root folder, with a manifest of paths and content, and logs where the folder is. To get the changes back, commit the folder as a [fork](./branches.mdx#forks) of the mount's branch:
+Sometimes a mount can't save its changes, for example after a crash, a failed save or a [move](./mount.mdx#moving-a-branch). Then `skywaked` keeps them in `unsaved/` in its root folder, with a manifest of paths and content, and logs where the folder is. To get the changes back, save the folder as a new branch, forked from the mount's branch, and compare:
 
-```bash
-skywake recover /var/lib/skywake/unsaved/<folder> agent-37-recovered
-skywake diff agent-37 agent-37-recovered
+```bash norun
+skywake recover --local /var/lib/skywake/unsaved/<folder> agent-37-recovered
+skywake diff --local app@agent-37-recovered agent-37
 ```
 
-After that, delete the kept folder. `-m` sets the commit message (the default is `Recover unsaved changes`).
+After that, delete the kept folder. `-m` sets the commit message (the default is `Recover unsaved changes`). [`recover`](/reference/cli/recover) works on a store, not through the API, so it needs `--local` (with no `DIR` it uses the running `skywaked`'s store).
 
 ## Disk limits
 

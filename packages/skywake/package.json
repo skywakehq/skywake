@@ -1,6 +1,6 @@
 {
   "name": "skywake",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Skywake in one package: the TypeScript SDK, a bash shell for AI agents over a branch, and the skywake command.",
   "keywords": [
     "skywake",
@@ -43,8 +43,7 @@
     }
   },
   "bin": {
-    "skywake": "bin/skywake.cjs",
-    "skywake-bash-mcp": "dist/mcp.js"
+    "skywake": "bin/skywake.cjs"
   },
   "files": [
     "bin",

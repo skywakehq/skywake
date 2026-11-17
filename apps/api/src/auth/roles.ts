@@ -1,11 +1,14 @@
-import type { Role } from "@skywake/contract";
+import { environmentOf, globCovers, globMatches, nameIn, type Role } from "@skywake/contract";
 
 import { forbidden } from "../http/errors.ts";
 
 export interface Caller {
   org: string;
   role: Role;
-  namespaces: string;
+  /** The environment the caller works in; null when it may use every one. */
+  environment: string | null;
+  /** Names or prefixes ending in `*` it reaches within its environment. */
+  only: string[];
   actor: string;
   /** When the caller's key expires; null for a key that never does, or a console token. */
   expires: Date | null;
@@ -27,27 +30,46 @@ export function roleFrom(text: string): Role {
   return "read";
 }
 
-/**
- * Whether a key's pattern reaches `name`: `*` reaches every namespace, `prod/*`
- * those under `prod/`, and anything else only itself.
- */
-export function matches(pattern: string, name: string) {
-  if (pattern === "*") return true;
-  if (pattern.endsWith("/*")) return name.startsWith(pattern.slice(0, -1));
-  return pattern === name;
+export const everyEnvironment = (caller: Caller) => caller.environment === null;
+
+export const mayUseEnvironment = (caller: Caller, environment: string) =>
+  caller.environment === null || caller.environment === environment;
+
+export function mayUse(caller: Caller, name: string) {
+  if (!mayUseEnvironment(caller, environmentOf(name))) return false;
+  const local = nameIn(name);
+  return caller.only.some((pattern) => globMatches(pattern, local));
 }
 
-export const mayUse = (caller: Caller, namespace: string) => matches(caller.namespaces, namespace);
+export function covers(caller: Caller, only: string[]) {
+  return only.every((inner) => caller.only.some((outer) => globCovers(outer, inner)));
+}
 
-/** Keys and the audit log belong to the whole organization. */
+export const isOrgAdmin = (caller: Caller) =>
+  atLeast(caller.role, "admin") && everyEnvironment(caller) && caller.only.includes("*");
+
 export function allowOrgAdmin(caller: Caller) {
   allow(caller, "admin");
-  if (caller.namespaces !== "*") throw forbidden("this needs an admin key for every namespace");
+  if (!everyEnvironment(caller) || !caller.only.includes("*")) {
+    throw forbidden("this needs an admin key for every environment");
+  }
 }
 
-export function allow(caller: Caller, role: Role, namespace?: string) {
-  if (!atLeast(caller.role, role)) throw forbidden(`this needs the \`${role}\` role`);
-  if (namespace !== undefined && !mayUse(caller, namespace)) {
-    throw forbidden(`no access to \`${namespace}\``);
+export function allowEnvironment(caller: Caller, role: Role, environment: string) {
+  allow(caller, role);
+  if (!mayUseEnvironment(caller, environment)) {
+    throw forbidden(`this key works in \`${caller.environment}\`, not \`${environment}\``);
   }
+}
+
+export function allow(caller: Caller, role: Role, name?: string) {
+  if (!atLeast(caller.role, role)) throw forbidden(`this needs the \`${role}\` role`);
+  if (name === undefined) return;
+  const environment = environmentOf(name);
+  if (!mayUseEnvironment(caller, environment)) {
+    throw forbidden(
+      `this key works in \`${caller.environment}\`; \`${name}\` is in \`${environment}\``,
+    );
+  }
+  if (!mayUse(caller, name)) throw forbidden(`no access to \`${name}\``);
 }

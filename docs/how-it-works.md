@@ -9,7 +9,8 @@ Everything lives in one bucket, and almost all of it is immutable.
 
 ```
 chunks/<blake3>          file content, split at content-defined boundaries
-objects/<blake3>         commits, and packs of trees (directories)
+commits/<blake3>         commits
+objects/<blake3>         packs of trees (directories)
 refs/<branch>            the branch head: its current commit
 ```
 
@@ -42,8 +43,8 @@ their uncompressed bytes, and checked against that hash on every read.
   its own first try) is settled by reading the head back. Deleting a
   branch is a conditional write too: it replaces the head with an empty
   object, so a delete never erases a commit that landed after it looked.
-- **Garbage collection.** `skywake delete` removes a branch; `skywake gc`
-  deletes every chunk, pack and commit that no branch or commit history
+- **Garbage collection.** `skywake destroy app@agent-37` removes a branch;
+  `skywake gc --local` deletes every chunk, pack and commit that no branch or commit history
   can reach. It spares anything younger than a grace period (eight days
   by default), so a save that has uploaded its data but not yet moved its
   branch, or a part uploaded for a commit still to come, is never touched.
@@ -62,19 +63,20 @@ their uncompressed bytes, and checked against that hash on every read.
   from old chunks, first writes that object again so it stays young. A
   missing commit or pack is reported and skipped rather than stopping
   every later collection. Collection needs delete rights on the whole
-  bucket, so it runs with the server's keys, not with namespace
+  bucket, so it runs with the server's keys, not with scoped
   credentials.
 - **Few requests in a row.** On real S3 each request takes 10–50 ms, so
   what matters is how many wait on each other. A fork is 2 (read the head,
   write the new one), a mount 2 (read the head, then claim it and fetch the
   trees at once), and a save of small files 2 (read the collection lock,
   write the head).
-- **Commits.** Checkout restores each file's timestamp, and a commit reuses
-  any file whose size, timestamp and mode match the previous commit, so an
-  agent's commit only reads the files it touched. (A tool that edits a
+- **Commits.** `skywake download --local` restores each file's timestamp,
+  and `skywake upload --local` reuses any file whose size, timestamp and
+  mode match the previous commit, so an agent's commit only reads the files
+  it touched. (A tool that edits a
   file in place, keeps its size and sets its old time back goes unseen;
   the inode's change time would catch it but cannot be restored, so every
-  checkout would make the next commit read everything.) Checkout never
+  download would make the next commit read everything.) A download never
   writes outside its folder: unsafe names are refused, and every file is
   created new, so nothing follows a symlink.
 - **Build output and caches stay out.** Commits skip what `.skywakeignore`
@@ -99,7 +101,7 @@ A search index is built on the same storage engine: it keeps `refs/`,
 bucket, never a folder:
 
 ```
-<bucket>/<prefix>/fs/ns_…/        a namespace (in the hosted store: <org>/ns_…)
+<bucket>/<prefix>/fs/ns_…/        a disk     (in the hosted store: <org>/ns_…)
 <bucket>/<prefix>/ix/ix_…/        an index    (in the hosted store: <org>/indexes/ix_…)
 ```
 
@@ -112,8 +114,9 @@ bucket, never a folder:
   made before the marker is judged by what only one kind writes
   (`commits/`, `bundles/`, `moved/` against `blobs/`, `shards/`) and marked
   then. Scoped credentials may not write the marker.
-- **Linked indexes follow branches.** A namespace may link one index. Each
-  linked branch has a row in Postgres saying which commit its index branch
+- **Disk search follows branches.** A disk's `search` setting keeps an index
+  of its files, so `app.query(text)` finds files by meaning. Each searched
+  branch has a row in Postgres saying which commit its index branch
   matches and whether it is behind. Commits through the API mark it due at
   once; saves are marked due 30 seconds on (`/advanced`), and a branch
   nobody marks is still read every 5 minutes, since most saves are written
@@ -125,19 +128,19 @@ bucket, never a folder:
   which index version matches which commit, and a branch forked with its
   index starts from such a version: any one is right, since the diff is
   between trees, not history.
-- **Deletes are queued.** Deleting a namespace or an index removes its row
+- **Deletes are queued.** Deleting a disk or an index removes its row
   and queues its folder in one SQL statement, and a worker on every server
   deletes queued folders until they are empty. Nothing is left in the
   bucket by a crash between the two.
 - **A customer's bucket.** An environment may keep its data in a bucket its
   owner brings, reached through a role Skywake assumes (with an external
-  ID) or through keys sealed with AES-256-GCM. Its namespaces and indexes
+  ID) or through keys sealed with AES-256-GCM. Its disks and indexes
   have the region `bucket:<org>/<environment>`, and the bucket can't change
   while the environment holds data.
 
 ## The mount
 
-On Linux, `skywake mount agent-37 /work` serves a branch as a folder,
+On Linux, `skywake mount app@agent-37 /work` serves a branch as a folder,
 without downloading it first. Mounts are run by `skywaked`, one daemon per
 machine; `skywake` sends it requests over a Unix socket. Every folder's
 listing arrives with the mount, and files are read chunk by chunk through a cache on
@@ -155,7 +158,7 @@ read from the cache, and its local copy is deleted.
   through `mmap`, so a crash loses at most the last 2 seconds (plus the
   save in flight); whatever the daemon
   couldn't save is kept in `unsaved/` with a manifest of paths and content,
-  and `skywake recover <folder> <new-branch>` commits it as a fork of the
+  and `skywake recover --local <folder> <new-branch>` commits it as a fork of the
   mount's branch. `skywake status` shows each mount's save lag, unsaved
   bytes and last error.
 - **Each save is one instant.** A save stores the mount exactly as it was
@@ -173,8 +176,6 @@ read from the cache, and its local copy is deleted.
 - **Small files** (under 4 KiB) are stored inside their folder's tree, and
   new trees travel inside the branch head, so a save of only small files
   is a single request.
-- **Commits.** `skywake commit agent-37 /work -m "..."` saves the mount
-  the same way, as a named commit.
 - **Unmounting.** `skywake unmount` unmounts first and then saves the last
   changes from memory, so no write can slip in after the last save. If a
   process still uses the folder, the unmount fails and the mount stays,
@@ -219,54 +220,52 @@ a folder while deleting from it, as `rm -rf` does, skips nothing.
 
 ## For agents and orchestrators
 
-Agents that do not mount use the HTTP API through the Python or
-TypeScript SDK or the MCP server. All three follow one OpenAPI spec
-([`packages/contract/generated/openapi.json`](../packages/contract/generated/openapi.json)),
-written from the same contract the server is built on. The SDKs retry
-rate-limited and failed requests when that is safe, time out, and raise
-errors that carry the API's `code` and `request_id`. A delete retried after
-a failure that may have landed counts a 404 as done. Both read a large
-file as a stream (`readStream`, `read_stream`); a timeout limits the wait
-for an answer, never the reading of a long one. Long lists (branches,
-folders, file history, diffs, sessions, claims) come in pages of up to
-1,000: each list method takes `limit` and `after` (the last item's name,
-path, hash or id). To get every item, `allBranches()`, `allEntries(path)`
-and the other `all…` methods in TypeScript, and `iter_branches()`,
-`iter_entries(path)` and the other `iter_…` methods in Python, follow the
-pages for you.
+Agents that do not mount use the HTTP API (`/v2`) through an SDK, the CLI
+or the MCP server (`skywake mcp`). The API is described by one OpenAPI spec
+(`GET /v2/openapi.json`), written from the same contract the server is
+built on. The SDKs retry rate-limited and failed requests when that is
+safe, time out, and raise typed errors (`NotFound`, `MergeConflict` and so
+on) that carry the API's `code`, `hint` and `request_id`. A delete retried
+after a failure that may have landed counts a 404 as done. A large file
+can be read as a stream (`read(path, { as: "stream" })`); a timeout limits
+the wait for an answer, never the reading of a long one. Lists come in
+pages (`?limit=` and `?cursor=`), and the SDKs follow them for you.
 
 ```python
-from skywake import Skywake
+from skywake import MergeConflict, Skywake
 
-sky = Skywake("http://localhost:8080", key)
-namespace = sky.namespace("prod/app")
-with namespace.session("agent-42") as session:
-    fork = namespace.branch("main").fork("agents/42")
-    fork.claim("src/auth", session.id)
-    fork.write({"src/auth/login.py": code}, "fix login", session.id)
-    result = fork.merge_into("main", session=session.id)
-    print(result.conflicts or result.head)
+app = Skywake().disk("app")
+work = app.fork("agent-42")
+work.write({"src/auth/login.py": code}, message="fix login")
+try:
+    print(work.merge_into("main")["commit"])
+except MergeConflict as conflict:
+    print(conflict.conflicts)
 ```
 
-- An **organization** holds **namespaces** such as `prod/app` and
-  `staging/app`. Each namespace is its own folder of the bucket, so data is
-  shared (stored once) inside a namespace and never across them.
-- **API keys** belong to an organization and reach only the namespaces
-  their pattern allows (`prod/*`), as `read`, `write` or `admin`, with an
-  optional expiry. Keys look like `sw_...` and end in a checksum, so secret
-  scanners can spot a leaked one. The console's sign-in tokens (JWTs) work
-  too. Every call goes into a tamper-evident audit log.
-- **Credentials for one namespace**: with an STS role configured,
-  `POST /v1/namespaces/{namespace}/credentials` hands a daemon or the CLI
-  S3 credentials that reach only that namespace's folder, for 15 minutes.
-  They cannot delete objects, move a protected branch, or take garbage
-  collection's lock. They can still overwrite other branches, content and
-  `deleted/` records in that namespace; content is checked against its
-  hash, so damage is noticed rather than silent. Credentials already handed
-  out keep working until they expire, so protecting a branch reaches them
-  only then (900 seconds by default).
-- **Files over HTTP**: list, read (or a byte range), search with a regular
-  expression, and commit a set of writes and deletes at once.
+- An **organization** holds **environments** such as `prod` and
+  `staging`, and each environment holds **disks** and **indexes** by name,
+  such as `app`. Each disk is its own folder of the bucket, so data is
+  shared (stored once) inside a disk and never across them.
+- **API keys** belong to one organization and one environment, as `read`,
+  `write` or `admin`, may be narrowed to some disks and indexes
+  (`only: ["app"]`), and may expire. An organization admin may make a key
+  for every environment; requests with it send `Skywake-Environment`.
+  Keys look like `sw_...` and end in a checksum, so secret scanners can
+  spot a leaked one. The console's sign-in tokens (JWTs) work too. Every
+  call goes into a tamper-evident audit log.
+- **Scoped credentials**: with an STS role configured, a daemon or the CLI
+  can get S3 credentials that reach only one disk's folder, for 15
+  minutes. This route is on `/v1` only
+  (`POST /v1/namespaces/{namespace}/credentials`), and `/v1` goes away one
+  release after v2. They cannot delete objects, move a protected branch,
+  or take garbage collection's lock. They can still overwrite other
+  branches, content and `deleted/` records in that disk; content is
+  checked against its hash, so damage is noticed rather than silent.
+  Credentials already handed out keep working until they expire, so
+  protecting a branch reaches them only then (900 seconds by default).
+- **Files over HTTP**: list, read (or a byte range), `grep`, `find`,
+  `query`, and write many files and deletes as one commit.
 - **Merge** is three-way against the newest commit both branches came
   from. Text files merge line by line, and a file's mode merges on its
   own; changes that overlap are reported per file and nothing is saved.
@@ -277,7 +276,8 @@ with namespace.session("agent-42") as session:
 - **Sessions** are agents at work: they send heartbeats and end when they
   stop. Commits record their session. **Claims** say "this session is on
   `src/auth`" so others can pick other work; they are advice, not locks.
-- The **change feed** lists what each commit touched since a given one.
+  Sessions, claims and the **change feed** (what each commit touched since
+  a given one) are on `/v1` only for now.
 - `skywake mount --read-only` mounts a branch for reading without claiming
   it, so any number of readers can share it with one writer, and
   `--fork NAME` forks before mounting.
@@ -297,14 +297,15 @@ docker compose up -d    # the console on localhost:3100, the API on :8080
 To run it in your own cloud account on Kubernetes, with the API scaling
 with the load, see [deploy/helm/skywake/README.md](../deploy/helm/skywake/README.md).
 
-A local directory works as a store out of the box (`.skywake` by default).
+Disk commands with `--local` (or `SKYWAKE_STORE`) work on a store with no
+server. A local directory works out of the box (`.skywake` by default).
 For S3, start the bundled S3-compatible server and point Skywake at it:
 
 ```bash
 docker compose -f docker/dev/compose.yaml up -d
 export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
        AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
-cargo run -p skywake-cli -- new main
+cargo run -p skywake-cli -- upload --local ./project app
 ```
 
 Any S3 that supports conditional writes (`If-None-Match` and `If-Match`)
@@ -312,8 +313,9 @@ works: AWS S3, Cloudflare R2, RustFS and others. Skywake checks this once
 before its first conditional write and refuses a store that ignores them.
 `s3://bucket/folder` keeps a store in one folder of a bucket.
 `skywake://<namespace>` asks the API (`SKYWAKE_API_URL`, `SKYWAKE_API_KEY`)
-for short-lived credentials that reach only that namespace, and renews
+for short-lived credentials that reach only that disk, and renews
 them before they end: `write` ones, or `read` with `SKYWAKE_STORE_ACCESS=read`.
+It uses the `/v1` credentials route, which goes away one release after v2.
 
 To mount branches, run `skywaked` (Linux, as root for the best write speed)
 with the same store settings. It keeps its socket, chunk cache and the
@@ -338,8 +340,8 @@ group:ci      read   *
 `write` includes `read`; `prod/*` matches `prod/x` but not `production`,
 as in API key scopes. A member may do what any line for them or one of
 their groups allows: mount read-only needs `read`, a writable mount or a
-commit `write`, `new --from` and `merge` need `read` on the source and
-`write` on the target, `delete` and `recover` need `write`. Root and the
+commit `write`, `fork` and `merge` need `read` on the source and
+`write` on the target, `destroy` and `recover` need `write`. Root and the
 daemon's user may do anything. The file must belong to root (or the
 daemon's user) and be writable by no one else, or `skywaked` won't start.
 Edits apply to the next request; an edit that can't be read is logged
@@ -348,9 +350,9 @@ with until it is unmounted. Without the file, every member may use every
 branch, and `skywaked` says so when it starts.
 
 The rules hold only if members can't reach the store themselves, so
-give them no store keys: without `SKYWAKE_STORE`, `skywake new`, `merge`,
-`delete` and `recover` go through `skywaked`, to its store, and
-`mount --fork` always does. Members read other branches by mounting them
+give them no store keys: with `--local` and no store named, `skywake
+fork`, `merge`, `destroy` and `recover` go through `skywaked`, to its
+store, and `mount --fork` always does. Members read other branches by mounting them
 read-only. With a `skywake://` store, a better path is for each member
 to use their own API key, so the API applies its own scopes; `skywaked`
 does not do that yet. Cached chunks are checked against their hash before use, so a bad
@@ -373,7 +375,7 @@ lines. With `SKYWAKE_METRICS_LISTEN=127.0.0.1:9464` they serve Prometheus
 metrics at `/metrics`, such as `skywake_save_lag_seconds{mount}` (alert on
 it), `skywake_save_failures_total` and `skywake_cache_hits_total`.
 
-For a VM sandbox, `skywake mount <branch> /run/vm.sock --vm` serves the
+For a VM sandbox, `skywake mount app@agent-37 /run/vm.sock --vm` serves the
 branch on a vhost-user socket instead of a folder. Point the hypervisor
 at it (QEMU: `-chardev socket,id=fs,path=/run/vm.sock -device
 vhost-user-fs-pci,chardev=fs,tag=skywake`, with shared guest memory) and
@@ -397,7 +399,7 @@ after `pnpm install` and `pnpm --filter @skywake/engine build`) with a
 Postgres database (`SKYWAKE_API_DATABASE`), the store (`SKYWAKE_STORE`) and an
 admin token (`SKYWAKE_API_ADMIN_TOKEN`). `POST /v1/orgs` with the admin token
 creates an organization and returns its first admin key; everything else
-uses keys. `GET /v1/openapi.json` describes every route. To accept the
+uses keys. `GET /v2/openapi.json` describes every route. To accept the
 console's sign-in tokens, set `SKYWAKE_API_JWKS_URL`, `SKYWAKE_API_JWT_ISSUER`
 and `SKYWAKE_API_JWT_AUDIENCE`. Every setting lives in one `.env` at the root
 (`scripts/setup.sh` makes it; `.env.example` lists them all), and
@@ -425,9 +427,8 @@ Auth (passwords, passkeys, two-factor) and work in organizations. A sync
 engine, [Zero](https://zero.rocicorp.dev), copies the organization's
 branches, commits, sessions and activity from the API's Postgres into each
 browser and keeps them current, so the fork tree, merges and activity
-update as agents work. An environment opens on a table of its
-filesystems. The console groups namespaces, which it calls filesystems, into environments by the first part of the name:
-`prod/app` is the filesystem `app` in `prod`. Changes go through Zero to the API, signed as the
+update as agents work. The console shows one environment at a time, and
+opens on a table of its disks and indexes. Changes go through Zero to the API, signed as the
 person making them; file contents and diffs are read from the API when
 needed. Postgres needs `wal_level=logical` (the bundled one has it).
 

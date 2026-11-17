@@ -1,20 +1,21 @@
-/** One page of a list: at most `limit` items (1000 at most), after the key `after`. */
-export interface Page {
-  limit?: number;
-  after?: string;
+export interface Page<T> {
+  data: T[];
+  next: string | null;
 }
 
-const PAGE = 1000;
-
-/** Every item of a list, asking for one page at a time until a short one. */
-export async function* everything<T>(
-  get: (page: Page) => Promise<T[]>,
-  key: (item: T) => string,
+export async function* pages<T>(
+  load: (cursor: string | undefined) => Promise<Page<T>>,
 ): AsyncGenerator<T, void, undefined> {
-  for (let after: string | undefined; ; ) {
-    const items = await get({ limit: PAGE, after });
-    yield* items;
-    if (items.length < PAGE) return;
-    after = key(items[items.length - 1]!);
+  for (let cursor: string | undefined; ; ) {
+    const page = await load(cursor);
+    yield* page.data;
+    if (!page.next) return;
+    cursor = page.next;
   }
+}
+
+export async function collect<T>(items: AsyncIterable<T>): Promise<T[]> {
+  const all: T[] = [];
+  for await (const item of items) all.push(item);
+  return all;
 }

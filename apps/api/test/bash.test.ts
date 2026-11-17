@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createShell, type Shell } from "skywake/bash";
+import { shell as open, type Shell } from "skywake/bash";
 import { Skywake } from "@skywake/sdk";
 
 import { server, skip, type Server } from "./helpers.ts";
@@ -13,13 +13,14 @@ function shell(s: Server, key: string) {
   const client = new Skywake({
     url: "http://api.test",
     key,
+    environment: "prod",
     fetch: (input, init) => {
       const request = new Request(input, init);
       asked.push(new URL(request.url).pathname.split("/").pop()!);
       return Promise.resolve(s.app.fetch(request));
     },
   });
-  return { sh: createShell(client.namespace("prod/app").branch("main")), asked };
+  return { sh: open(client.disk("app")), asked };
 }
 
 async function seeded() {
@@ -43,7 +44,7 @@ async function out(sh: Shell, command: string) {
   return { stdout: ran.stdout, stderr: ran.stderr, code: ran.exitCode };
 }
 
-test("bash reads a branch like a disk", { skip }, async () => {
+test("bash reads a disk", { skip }, async () => {
   const { sh } = await seeded();
   assert.equal((await out(sh, "ls /src")).stdout, "app.ts\nlib\n");
   assert.equal((await out(sh, "cat src/lib/util.ts | wc -l")).stdout.trim(), "2");
@@ -67,7 +68,7 @@ test("rg, grep -r and find run on the server", { skip }, async () => {
   assert.equal((await out(sh, "rg '('")).code, 2);
   assert.equal((await out(sh, "find . -name '*.ts'")).stdout, "./src/app.ts\n./src/lib/util.ts\n");
   assert.equal((await out(sh, "find src -type d")).stdout, "src\nsrc/lib\n");
-  assert.equal(asked.filter((route) => route === "search").length, 7);
+  assert.equal(asked.filter((route) => route === "grep").length, 7);
   assert.equal(asked.filter((route) => route === "find").length, 2);
 });
 

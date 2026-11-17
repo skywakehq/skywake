@@ -1,44 +1,45 @@
 # Skywake for Java
 
-A client for Skywake search indexes. Java 17+, with Jackson for JSON.
+Disks (files with branches) and indexes (rows searched by meaning, keywords and
+filters), for AI agents. Java 17+, with Jackson for JSON.
 
 ```xml
 <dependency>
   <groupId>dev.skywake</groupId>
   <artifactId>skywake</artifactId>
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
 ```java
-var sky = new Skywake("https://api.skywake.dev", System.getenv("SKYWAKE_KEY"));
+Skywake sky = new Skywake();
 
-SearchIndex products = sky.indexes().create(new NewIndex("products", new Schema(
-        List.of(new VectorColumn("embedding", 3)),
-        List.of(new Attribute("title", "text"), new Attribute("price", "number")))));
-products.upsert(List.of(new Document(1,
-        Map.of("embedding", new float[] {0.1f, 0.2f, 0.3f}),
-        Map.of("title", "Desk lamp", "price", 40))));
+Index products = sky.index("products");
+products.upsert(Map.of("id", 1, "text", "red running shoes", "price", 89));
+List<Map<String, Object>> hits = products.query("shoes for running");
 
-Results<Hit> hits = products.query(new Query("embedding", new float[] {0.1f, 0.2f, 0.3f})
-        .topK(5)
-        .filter(Map.of("price", Map.of("lt", 50))));
-System.out.println(hits.items() + " " + hits.performance().serverMs());
+Disk app = sky.disk("app");
+app.write("notes.md", "hello");
+Disk work = app.fork("agent-1");
+work.write("notes.md", "changed");
+work.mergeInto("main");
 ```
 
-- **Branches.** `products.fork("try")` copies nothing; `at(branch)` reads
-  another; `merge("try")` brings its writes back.
-- **History.** `versions()` lists a branch's versions; `restore(version)` and
-  `fork(name, version)` go back in time; `collect()` frees what no version keeps.
-- **Reads.** `query`, `search` (BM25), `hybrid`, `order`, `rank` (sparse and
-  late-interaction scores), `aggregate`, and `multi` for several on one snapshot.
-  Each returns `items()`, `performance()` and `billing()`.
-- **Writes.** `upsert`, `patch` and `delete` send 1,000 at a time; `write` is one
-  change with conditions.
-- **Lists.** `allBranches()`, `allDocuments()`, `indexes().all()` and `export()`
-  are streams that read a page at a time. Close an export you stop early.
-- **Errors** are `SkywakeException` with `status()`, `code()`, `requestId()` and,
-  for a bad request, the `path()` of the field that is wrong. A 429 is always
-  retried; a network error or 5xx only for GET, PUT and DELETE.
+- **Settings.** `new Skywake()` reads `SKYWAKE_API_KEY`, `SKYWAKE_URL` and
+  `SKYWAKE_ENV`, then the profile in `~/.config/skywake/credentials.toml` that
+  `skywake login` writes. `Skywake.builder()` sets `key`, `url`, `environment`,
+  `profile`, `retries` and `timeout` in code.
+- **Handles.** `sky.index(name)` and `sky.disk(name)` make no call; pass a
+  branch as the second argument. `fork` returns a handle on the new branch.
+- **Options** are small objects: `new QueryOptions().limit(5).mode(Mode.KEYWORDS)`.
+- **Lists** such as `listDisks()`, `rows()` and `log()` are `Iterable`s that
+  fetch a page at a time.
+- **Errors** extend `SkywakeException` (`status()`, `code()`, `hint()`,
+  `requestId()`, `path()`): `AuthException`, `PermissionException`,
+  `NotFoundException`, `ConflictException`, `MergeConflictException`
+  (`conflicts()`), `InvalidRequestException`, `RateLimitedException`
+  (`retryAfter()`) and `ServerException`.
 
-Tests: `mvn test`.
+Tests: `mvn test`. The scenario test runs against a server when
+`SKYWAKE_SCENARIO_URL` and `SKYWAKE_SCENARIO_KEY` are set:
+`mvn -q test -Dtest=ScenarioTest`.

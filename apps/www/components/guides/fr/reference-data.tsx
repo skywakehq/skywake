@@ -15,6 +15,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/reference-data";
 
 export function ReferenceDataGuide({
   locale,
@@ -80,7 +81,7 @@ export function ReferenceDataGuide({
           <Checklist
             items={[
               "L’ensemble de référence enregistré une fois dans votre propre bucket, chaque release étant conservée.",
-              "Une branche protégée et une clé en lecture seule, pour qu’aucun agent ne puisse modifier les fichiers.",
+              "Une clé en lecture seule, limitée à ce seul disque, pour qu’aucun agent ne puisse modifier les fichiers.",
               "La lecture d’une simple tranche d’un gros fichier, pour les agents qui n’en ont besoin que d’un peu.",
               "Une copie locale par machine, partagée par tous ses agents.",
               "Un moyen de publier une nouvelle release qui n’envoie aux machines que ce qui a changé.",
@@ -88,8 +89,8 @@ export function ReferenceDataGuide({
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Enregistrer l’ensemble de référence une fois" />
@@ -106,60 +107,30 @@ export function ReferenceDataGuide({
           ]}
         />
         <p>
-          Nous l’enregistrons dans un <b>namespace</b>, c’est-à-dire un dépôt de fichiers, sur une
-          branche appelée <code>main</code>. Une branche fonctionne comme une branche Git, mais pour
-          des fichiers : chaque enregistrement est un <b>commit</b>, une version figée à laquelle
-          vous pouvez toujours revenir.
+          Nous l’enregistrons sur un <b>disque</b>, c’est-à-dire un ensemble de fichiers avec des
+          branches et un historique. Il commence sur une branche appelée <code>main</code>. Une
+          branche fonctionne comme une branche Git, mais pour des fichiers : chaque enregistrement
+          est un <b>commit</b>, une version figée à laquelle vous pouvez toujours revenir.
         </p>
-        <Code
-          file="save-refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const genome = await sky.createNamespace("refs/genome");
-const main = await genome.createBranch("main");
-const release = await main.commitFolder("./grch38", {
-  message: "GRCh38, first release",
-});
-`}
-        />
+        <Code file="save-refs.ts" code={code["save-refs.ts"]} />
         <p>
-          <code>commitFolder</code> envoie chaque fichier et renvoie le nouveau commit. Les gros
-          fichiers sont envoyés en plusieurs parties automatiquement, inutile de les découper.
-          Gardez <code>release</code> : il désigne cette version exacte de l’ensemble, et nous nous
-          en resservirons.
+          <code>upload</code> envoie chaque fichier en un seul commit. Les gros fichiers sont
+          envoyés en plusieurs parties automatiquement, inutile de les découper. Nous forkons
+          ensuite <code>main</code> vers une branche qui porte le nom de la release,{" "}
+          <code>grch38</code>. Personne n’y écrit plus : ce nom désigne toujours cette version
+          exacte de l’ensemble.
         </p>
 
         <Chapter id="lock" step={2} title="Le passer en lecture seule pour les agents" />
         <p>
-          Des données de référence ne doivent jamais changer par accident. Nous les verrouillons de
-          deux façons. D’abord, nous <b>protégeons</b> <code>main</code>. Une branche protégée ne
-          change que par un merge : même un admin ne peut pas y faire de commit direct.
+          Des données de référence ne doivent jamais changer par accident. Nous donnons donc aux
+          agents leur propre clé. Elle a le rôle <code>read</code>, et n’atteint que ce disque.
         </p>
+        <Code file="lock.ts" code={code["lock.ts"]} />
         <p>
-          Ensuite, nous donnons aux agents leur propre clé. Elle a le rôle <code>read</code>, et
-          n’atteint que ce namespace.
-        </p>
-        <Code
-          file="lock.ts"
-          code={`
-await main.protect();
-
-const agents = await sky.keys.create("agents", "read", {
-  namespaces: "refs/genome",
-});
-`}
-        />
-        <p>
-          <code>agents.key</code> n’est affichée qu’une seule fois : stockez-la tout de suite comme
-          secret. Désormais, une écriture avec cette clé échoue avec « this needs the{" "}
-          <code>write</code> role ». Un commit direct sur <code>main</code> échoue aussi, même avec
-          une clé admin.
+          <code>agents.key</code> n’est affichée qu’une seule fois : nous la stockons tout de suite
+          comme secret. <code>saveSecret</code> représente votre propre coffre à secrets. Désormais,
+          une écriture avec cette clé échoue avec « this needs the <code>write</code> role ».
         </p>
         <Note title="Astuce : une clé par usage">
           <p>
@@ -171,46 +142,21 @@ const agents = await sky.keys.create("agents", "read", {
 
         <Chapter id="read" step={3} title="Ne lire que la partie utile" />
         <p>
-          Chaque agent se connecte avec la clé de lecture. Nous la plaçons dans un petit fichier,
-          pour que le code de l’agent reste court :
+          Chaque agent se connecte avec la clé de lecture, sur la release qu’il doit utiliser. La
+          release vient de <code>REFS_RELEASE</code>, que vous définissez une fois par machine :
         </p>
-        <Code
-          file="refs.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.AGENT_KEY!,
-});
-
-export const refs = sky.namespace("refs/genome").branch("main");
-`}
-        />
+        <Code file="refs.ts" code={code["refs.ts"]} />
         <p>
           Certains agents n’ont besoin que d’un petit morceau d’un gros fichier : un gène, une
           région. Ils n’ont pas besoin du chromosome entier. Une <b>lecture par plage</b> ne demande
           que ces octets-là, et l’agent peut se mettre au travail immédiatement.
         </p>
-        <Code
-          file="read.ts"
-          code={`
-import { refs } from "./refs.ts";
-
-const release = process.env.REFS_RELEASE!;
-
-// Only the bytes this agent needs, at the agreed release.
-const piece = await refs.read("chr1.fa", {
-  offset: 120_000,
-  length: 600,
-  at: release,
-});
-`}
-        />
+        <Code file="read.ts" code={code["read.ts"]} />
         <p>
-          La ligne <code>at</code> fixe la lecture sur la première release. Même si une nouvelle
-          release arrive pendant que l’agent tourne, il continue de lire la même version. Tous les
-          agents lancés avec le même <code>REFS_RELEASE</code> voient exactement les mêmes octets.
+          <code>refs</code> lit la branche <code>grch38</code>, et personne n’y écrit. Même si une
+          nouvelle release arrive pendant que l’agent tourne, il continue de lire la même version.
+          Tous les agents lancés avec le même <code>REFS_RELEASE</code> voient exactement les mêmes
+          octets.
         </p>
 
         <Chapter id="machine" step={4} title="Une copie par machine" />
@@ -221,69 +167,17 @@ const piece = await refs.read("chr1.fa", {
           vers ce dossier.
         </p>
         <p>
-          <code>syncRefs</code> s’en charge. Sur une nouvelle machine, il récupère l’ensemble
-          complet. Il écrit le commit obtenu dans un petit fichier <code>.release</code>. La fois
-          suivante, si ce commit est toujours le plus récent, il ne fait rien.
+          <code>syncRefs</code> s’en charge. Sur une nouvelle machine, il télécharge toute la
+          release. Il écrit le nom de la release dans un petit fichier <code>.release</code>. La
+          fois suivante, si c’est toujours la release que la machine doit utiliser, il ne fait rien.
         </p>
-        <Code
-          file="sync-refs.ts"
-          code={`
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { refs } from "./refs.ts";
-
-export const REFS = process.env.REFS_DIR ?? "/srv/refs";
-
-export async function syncRefs(dir = REFS) {
-  const mark = join(dir, ".release");
-  const have = await readFile(mark, "utf8").catch(() => "");
-  const { head } = await refs.info();
-  if (have === head) return;
-
-  if (!have) {
-    await refs.checkout(dir, { at: head });
-  } else {
-    // Only the files that changed since this machine's release.
-    const changed = new Map<string, string>();
-    for (const commit of await refs.changes(have)) {
-      for (const change of commit.changes) {
-        changed.set(change.path, change.kind);
-      }
-    }
-    for (const [path, kind] of changed) {
-      const file = join(dir, path);
-      await rm(file, { force: true });
-      if (kind === "removed") continue;
-      await mkdir(dirname(file), { recursive: true });
-      await writeFile(file, await refs.readStream(path, { at: head }));
-    }
-  }
-  await writeFile(mark, head);
-}
-`}
-        />
+        <Code file="sync-refs.ts" code={code["sync-refs.ts"]} />
         <p>
           Lancez-le une fois au démarrage de la machine, avant tout agent. Chaque agent lit ensuite
           de simples fichiers dans le dossier, sans aucun accès réseau :
         </p>
-        <Code
-          file="start.ts"
-          code={`
-import { syncRefs } from "./sync-refs.ts";
-
-// Once when the machine starts, before any agent runs.
-await syncRefs();
-`}
-        />
-        <Code
-          file="agent.ts"
-          code={`
-import { readFile } from "node:fs/promises";
-import { REFS } from "./sync-refs.ts";
-
-const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
-`}
-        />
+        <Code file="start.ts" code={code["start.ts"]} />
+        <Code file="agent.ts" code={code["agent.ts"]} />
         <p>
           Fini les vingt téléchargements. Vingt agents démarrent, et la machine a déjà téléchargé
           l’ensemble une fois. Redémarrez la machine demain : <code>syncRefs</code> voit la même
@@ -292,37 +186,28 @@ const genes = await readFile(\`\${REFS}/genes.gtf\`, "utf8");
 
         <Chapter id="release" step={5} title="Publier une nouvelle release" />
         <p>
-          Un patch pour le chromosome 2 sort, avec un nouveau fichier pour le chromosome Y.
-          Rappelez-vous : <code>main</code> ne change que par un merge. Nous commençons donc par la{" "}
-          <b>forker</b> : un fork est une nouvelle branche qui démarre comme une copie exacte, sans
-          copier aucune donnée.
+          Un patch pour le chromosome 2 sort, avec un nouveau fichier pour le chromosome Y. Chaque
+          release a sa propre branche : nous <b>forkons</b> donc <code>main</code> vers{" "}
+          <code>grch38-p2</code>. Un fork est une nouvelle branche qui démarre comme une copie
+          exacte, sans copier aucune donnée.
         </p>
         <p>
-          Nous enregistrons le nouveau dossier sur le fork, puis le <b>fusionnons</b> dans{" "}
-          <code>main</code>. Un merge apporte les changements du fork dans <code>main</code> sous la
-          forme d’un nouveau commit.
+          Nous envoyons le nouveau dossier sur le fork, puis le <b>fusionnons</b> dans{" "}
+          <code>main</code>, pour que <code>main</code> contienne toujours la release la plus
+          récente. Les machines sur <code>grch38</code> ne voient rien changer.
         </p>
-        <Code
-          file="release.ts"
-          code={`
-const next = await main.fork("next");
-await next.commitFolder("./grch38-p2", { message: "GRCh38 patch 2" });
-
-const merged = await next.mergeInto("main");
-if (merged.conflicts.length === 0) await next.delete();
-`}
-        />
+        <Code file="release.ts" code={code["release.ts"]} />
         <p>
           Nous avons envoyé tout le nouveau dossier, mais Skywake n’enregistre que les fichiers qui
-          diffèrent : <code>chr2.fa</code> a changé et <code>chrY.fa</code> est nouveau. La
-          prochaine fois qu’une machine lance <code>syncRefs</code>, elle demande les changements
-          depuis son <code>.release</code> et ne télécharge que ces deux fichiers :
+          diffèrent : <code>chr2.fa</code> a changé et <code>chrY.fa</code> est nouveau. Réglez{" "}
+          <code>REFS_RELEASE</code> sur <code>grch38-p2</code> sur une machine. La prochaine fois
+          qu’elle lance <code>syncRefs</code>, elle demande les changements depuis son{" "}
+          <code>.release</code> et ne télécharge que ces deux fichiers :
         </p>
         <ReleaseUpdate />
         <p>
-          Les agents fixés sur la première release avec <code>at</code> lisent toujours l’ancien{" "}
-          <code>chr2.fa</code>. Chaque release reste dans l’historique : rien de ce dont ils
-          dépendent ne disparaît.
+          Les machines restées sur <code>grch38</code> lisent toujours l’ancien <code>chr2.fa</code>
+          . Chaque release reste sa propre branche : rien de ce dont ils dépendent ne disparaît.
         </p>
 
         <Chapter id="real" title="En production" />
@@ -347,9 +232,9 @@ if (merged.conflicts.length === 0) await next.delete();
             lectures par plage, comme à l’étape 3.
           </li>
           <li>
-            <b>Chaque réponse a une version.</b> Notez le commit de <code>.release</code> à côté de
-            chaque résultat. Des semaines plus tard, vous pouvez lire les fichiers exacts d’où vient
-            cette réponse.
+            <b>Chaque réponse a une version.</b> Notez le nom inscrit dans <code>.release</code> à
+            côté de chaque résultat. Des semaines plus tard, vous pouvez lire les fichiers exacts
+            d’où vient cette réponse.
           </li>
           <li>
             <b>Tout reste chez vous.</b> Les fichiers vivent dans votre propre bucket. Aucun disque
@@ -363,31 +248,31 @@ if (merged.conflicts.length === 0) await next.delete();
             [
               "Un agent peut-il modifier les fichiers de référence par erreur ?",
               <p key="a">
-                Pas via Skywake. Sa clé a le rôle de lecture, donc toute écriture échoue. Et{" "}
-                <code>main</code> est protégée : même une clé qui peut écrire doit passer par un
-                merge.
+                Pas via Skywake. Sa clé a le rôle de lecture, donc toute écriture échoue avec une{" "}
+                <code>PermissionError</code>.
               </p>,
             ],
             [
               "Une nouvelle release renvoie-t-elle tout ?",
               <p key="a">
-                <code>commitFolder</code> envoie tout le dossier, mais seuls les fichiers qui
-                diffèrent comptent comme des changements. Les machines ne téléchargent que ceux-là.
+                <code>upload</code> envoie tout le dossier, mais seuls les fichiers qui diffèrent
+                comptent comme des changements. Les machines ne téléchargent que ceux-là.
               </p>,
             ],
             [
               "Comment revenir à une ancienne release ?",
               <p key="a">
-                Chaque release est un commit, et les commits sont conservés. Lisez n’importe quel
-                fichier avec <code>at</code> réglé sur la release voulue, ou récupérez ce commit
-                dans son propre dossier.
+                Chaque release est une branche, et les branches sont conservées. Remettez{" "}
+                <code>REFS_RELEASE</code> sur la release voulue, et <code>syncRefs</code> ne
+                télécharge que les fichiers qui diffèrent.
               </p>,
             ],
             [
               "Et si un fichier est plus gros que la mémoire de la machine ?",
               <p key="a">
-                Le checkout et <code>readStream</code> écrivent les fichiers sur disque en
-                streaming : un fichier n’a jamais besoin de tenir en mémoire d’un seul bloc.
+                <code>download</code> et <code>{`read(path, { as: "stream" })`}</code> écrivent les
+                fichiers sur disque en streaming : un fichier n’a jamais besoin de tenir en mémoire
+                d’un seul bloc.
               </p>,
             ],
             [
@@ -395,7 +280,7 @@ if (merged.conflicts.length === 0) await next.delete();
               <p key="a">
                 <code>syncRefs</code> gère les changements de fichiers individuels, ce qui est la
                 façon dont évoluent la plupart des releases de référence. Pour une réorganisation
-                plus importante, récupérez plutôt la nouvelle release dans un dossier neuf.
+                plus importante, téléchargez plutôt la nouvelle release dans un dossier neuf.
               </p>,
             ],
           ]}

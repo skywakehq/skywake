@@ -273,9 +273,6 @@ jobs:
           cd sdks/python
           sed -i "s/^version = .*/version = \"${GITHUB_REF_NAME#v}\"/" pyproject.toml
           uv build --out-dir ../../dist-python
-          cd mcp
-          sed -i "s/^version = .*/version = \"${GITHUB_REF_NAME#v}\"/; s/skywake\[mcp\]==[^\"]*/skywake[mcp]==${GITHUB_REF_NAME#v}/" pyproject.toml
-          uv build --out-dir ../../../dist-python
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: dist-python

@@ -40,7 +40,8 @@ export const orgsFeature: Feature = {
         hash: key.hash,
         name: "first admin key",
         role: "admin" as const,
-        namespaces: "*",
+        environment: null,
+        only: ["*"],
         expires: null,
         // Made by the operator, so no person's leaving takes it.
         createdBy: null,

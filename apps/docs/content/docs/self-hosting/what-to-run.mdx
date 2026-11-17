@@ -10,11 +10,11 @@ Each app runs on its own, so you only run the ones you need.
 
 This is the default setup: the API, the console and zero-cache, each on its own [port](./docker-compose.mdx#services) or host.
 
-```bash tab="Compose"
+```bash norun tab="Compose"
 docker compose up -d
 ```
 
-```bash tab="Helm"
+```bash norun tab="Helm"
 helm install skywake oci://ghcr.io/skywakehq/charts/skywake   # docs.enabled is false by default
 ```
 
@@ -23,12 +23,12 @@ helm install skywake oci://ghcr.io/skywakehq/charts/skywake   # docs.enabled is 
 The docs don't need any other app. They are served at the root of their port or host,
 or under a path you choose when you build the image.
 
-```bash tab="Compose"
+```bash norun tab="Compose"
 docker compose --profile docs up -d        # http://localhost:3200
 docker compose --profile docs up -d docs   # the docs alone
 ```
 
-```bash tab="Helm"
+```bash norun tab="Helm"
 helm upgrade skywake oci://ghcr.io/skywakehq/charts/skywake --reuse-values \
   --set docs.enabled=true
 ```

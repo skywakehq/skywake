@@ -78,6 +78,11 @@ export const keys = api.table(
     name: text("name").notNull(),
     role: text("role").notNull(),
     namespaces: text("namespaces").notNull(),
+    environment: text("environment"),
+    only: text("only")
+      .array()
+      .notNull()
+      .default(sql`'{*}'::text[]`),
     expires: time("expires"),
     lastUsed: time("last_used"),
     created: time("created").notNull().defaultNow(),
@@ -90,6 +95,19 @@ export const keys = api.table(
       "cascade",
     ),
   ],
+);
+
+export const logins = api.table(
+  "logins",
+  {
+    code: text("code").primaryKey(),
+    keyId: text("key_id").notNull().unique("logins_key_id_key"),
+    keyHash: bytea("key_hash").notNull(),
+    device: text("device").notNull(),
+    expires: time("expires").notNull(),
+    created: time("created").notNull().defaultNow(),
+  },
+  (table) => [index("logins_expires").on(table.expires)],
 );
 
 export const environments = api.table(

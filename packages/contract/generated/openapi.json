@@ -677,6 +677,76 @@
           "orgs"
         ]
       },
+      "Whoami": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": "string"
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The environment requests work in: the key's own, or the `Skywake-Environment` header for a key or person that may use every environment. Null when neither says."
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key's id, when a key is used."
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The person, when the console calls."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "organization",
+          "environment",
+          "role",
+          "only",
+          "key",
+          "user",
+          "email",
+          "expires"
+        ]
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "read",
+          "write",
+          "admin"
+        ],
+        "description": "What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge and start sessions. `admin`: also keys, namespaces, protected branches and the audit log."
+      },
       "Key": {
         "type": "object",
         "properties": {
@@ -689,9 +759,23 @@
           "role": {
             "$ref": "#/components/schemas/Role"
           },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The environment the key works in. Null for a key that works in every one."
+          },
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, or `*` for all."
+          },
           "namespaces": {
             "type": "string",
-            "description": "A namespace name, `<folder>/*` for every namespace under it, or `*`."
+            "description": "Deprecated: the same reach as one pattern of full names. Use `environment` and `only`."
           },
           "expires": {
             "type": [
@@ -730,6 +814,8 @@
           "id",
           "name",
           "role",
+          "environment",
+          "only",
           "namespaces",
           "expires",
           "last_used",
@@ -737,15 +823,6 @@
           "created_by",
           "created_by_email"
         ]
-      },
-      "Role": {
-        "type": "string",
-        "enum": [
-          "read",
-          "write",
-          "admin"
-        ],
-        "description": "What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge and start sessions. `admin`: also keys, namespaces, protected branches and the audit log."
       },
       "CreatedKey": {
         "type": "object",
@@ -774,11 +851,30 @@
           "role": {
             "$ref": "#/components/schemas/Role"
           },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$",
+            "example": "prod",
+            "description": "The environment it works in. A key made by a key of one environment gets that one. Null makes a key for every environment, which only an organization admin may make."
+          },
+          "only": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200,
+              "example": "docs-*"
+            },
+            "minItems": 1,
+            "maxItems": 50,
+            "description": "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, or `*` for all, the default."
+          },
           "namespaces": {
             "type": "string",
             "maxLength": 200,
-            "default": "*",
-            "description": "A namespace name, `<folder>/*` for every namespace under a folder, or `*` for all of them, the default."
+            "description": "Deprecated: one pattern of full names, such as `prod/*`. Use `environment` and `only`."
           },
           "expires_in_days": {
             "type": "integer",
@@ -803,6 +899,90 @@
         "required": [
           "revoked"
         ]
+      },
+      "Login": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "role": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Role"
+              },
+              {
+                "description": "The most the person approving may give the key."
+              }
+            ]
+          },
+          "every_environment": {
+            "type": "boolean",
+            "description": "Whether the person may give a key for every environment."
+          }
+        },
+        "required": [
+          "code",
+          "device",
+          "expires",
+          "role",
+          "every_environment"
+        ]
+      },
+      "ApprovedLogin": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "environment"
+        ]
+      },
+      "Approval": {
+        "type": "object",
+        "properties": {
+          "environment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$",
+            "example": "prod",
+            "description": "The environment the key works in. Null for every one: organization admins only."
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "required": [
+          "environment",
+          "role"
+        ],
+        "additionalProperties": false
       },
       "AuditLog": {
         "type": "object",
@@ -6567,6 +6747,62 @@
         }
       }
     },
+    "/whoami": {
+      "get": {
+        "operationId": "whoami",
+        "tags": [
+          "keys"
+        ],
+        "summary": "Who is calling: the organization, environment and role the key or person has.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Whoami"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/keys": {
       "get": {
         "operationId": "listKeys",
@@ -6812,6 +7048,170 @@
           },
           "401": {
             "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logins/{code}": {
+      "get": {
+        "operationId": "getLogin",
+        "tags": [
+          "keys"
+        ],
+        "summary": "A sign-in the CLI started, for the person approving it.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/i",
+              "example": "ABCD-2345"
+            },
+            "required": true,
+            "name": "code",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The sign-in.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Login"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many requests. Wait for `Retry-After` seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "approveLogin",
+        "tags": [
+          "keys"
+        ],
+        "summary": "Approves a sign-in the CLI started: its key starts to work, with this scope.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/i",
+              "example": "ABCD-2345"
+            },
+            "required": true,
+            "name": "code",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Approval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedLogin"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A valid API key or token is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller may not do this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "It does not exist, or the caller cannot see it.",
             "content": {
               "application/json": {
                 "schema": {

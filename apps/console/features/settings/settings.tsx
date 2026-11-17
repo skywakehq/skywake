@@ -30,6 +30,9 @@ import { Billing } from "./billing";
 import { IpAllowlist } from "./ip-allowlist";
 import { SingleSignOn } from "./sso";
 import { withBase } from "@/lib/zone";
+import { Select } from "@/features/indexes/fields";
+import { useEnvironments } from "@/features/environments/use-environments";
+import { useEnvironment } from "@/hooks/use-ns";
 
 export function SettingsPage() {
   const { data: org } = authClient.useActiveOrganization();
@@ -358,18 +361,24 @@ type Key = {
   id: string;
   name: string;
   role: string;
-  namespaces: string;
+  environment: string | null;
+  only: string[];
   last_used?: string | null;
   expires?: string | null;
   created_by?: string | null;
   created_by_email?: string | null;
 };
 
-/** Who made a key: a person's email, or another key. */
 function maker(key: Key) {
   if (key.created_by_email) return `Made by ${key.created_by_email}`;
   if (key.created_by?.startsWith("key:")) return "Made by another key";
   return null;
+}
+
+function reach(key: Key) {
+  const where = key.environment ? `Only ${key.environment}` : "Every environment";
+  const names = key.only.filter((name) => name !== "*");
+  return names.length ? `${where}: ${names.join(", ")}` : where;
 }
 
 function expiry(time: string | null | undefined, now: number) {
@@ -431,11 +440,9 @@ function Keys() {
             }
             detail={
               <>
-                {key.namespaces === "*" ? "All disks" : <span>{key.namespaces}</span>}
-                {[maker(key), expiry(key.expires, now), used(key.last_used)]
+                {[reach(key), maker(key), expiry(key.expires, now), used(key.last_used)]
                   .filter(Boolean)
-                  .map((part) => ` · ${part}`)
-                  .join("")}
+                  .join(" · ")}
               </>
             }
           />
@@ -469,13 +476,25 @@ function NewKey({
   onMade: () => void;
 }) {
   const [role, setRole] = useState<Access>("write");
+  const { envs } = useEnvironments();
+  const current = useEnvironment();
   const [secret, setSecret] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const body = { name: form.get("name"), role, namespaces: form.get("namespaces") || "*" };
+    const environment = String(form.get("environment") ?? "");
+    const only = String(form.get("only") ?? "")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const body = {
+      name: form.get("name"),
+      role,
+      environment: environment || null,
+      ...(only.length && { only }),
+    };
     setBusy(true);
     await act(async () => {
       const response = await fetch(withBase("/api/keys"), {
@@ -530,8 +549,18 @@ function NewKey({
         <Field label="Name">
           <Input name="name" placeholder="ci-agents" required autoFocus />
         </Field>
-        <Field label="Disks">
-          <Input name="namespaces" placeholder="All, or a pattern like prod/*" />
+        <Field label="Environment">
+          <Select name="environment" defaultValue={current ?? ""} key={current}>
+            <option value="">Every environment</option>
+            {envs.map((env) => (
+              <option key={env.name} value={env.name}>
+                {env.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Only these disks and indexes">
+          <Input name="only" placeholder="All, or names like products, logs-*" />
         </Field>
         <Field label="Access">
           <Choice value={role} options={ACCESS} onChange={setRole} />

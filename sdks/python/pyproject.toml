@@ -1,6 +1,6 @@
 [project]
 name = "skywake"
-version = "0.1.3"
+version = "0.2.0"
 description = "Skywake for Python: a filesystem with branches for AI agents, and vector, full-text and hybrid search, on your own S3 bucket."
 license = "Apache-2.0"
 readme = "README.md"
@@ -26,12 +26,9 @@ Documentation = "https://skywake.dev/docs"
 Repository = "https://github.com/skywakehq/skywake"
 Issues = "https://github.com/skywakehq/skywake/issues"
 
-[project.optional-dependencies]
-mcp = ["mcp>=2.3"]
+[project.scripts]
+skywake = "skywake._cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.sdist]
-exclude = ["mcp"]

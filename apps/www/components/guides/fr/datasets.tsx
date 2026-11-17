@@ -14,6 +14,7 @@ import {
   Questions,
   Tree,
 } from "@/components/guides/guide";
+import { code } from "@/content/guide-code/datasets";
 
 export function DatasetsGuide({
   locale,
@@ -88,8 +89,8 @@ export function DatasetsGuide({
           />
         </div>
         <p>
-          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_URL</code> et{" "}
-          <code>SKYWAKE_KEY</code>, puis installez le SDK avec <code>npm i @skywake/sdk</code>.
+          Il vous faut une clé d’API Skywake et Node. Définissez <code>SKYWAKE_API_KEY</code>, puis
+          installez le SDK avec <code>npm i skywake</code>.
         </p>
 
         <Chapter id="save" step={1} title="Enregistrer le dataset comme une version" />
@@ -108,27 +109,11 @@ export function DatasetsGuide({
           ]}
         />
         <p>
-          Nous l’enregistrons dans un namespace, c’est-à-dire un dépôt de fichiers, sur une branche
-          appelée <code>main</code>. Une branche fonctionne comme une branche Git : chaque
-          enregistrement est un commit, et chaque commit reste lisible.
+          Nous l’enregistrons sur un disque, c’est-à-dire un ensemble de fichiers avec des branches
+          et un historique, sur sa première branche, <code>main</code>. Une branche fonctionne comme
+          une branche Git : chaque enregistrement est un commit, et chaque commit reste lisible.
         </p>
-        <Code
-          file="save-data.ts"
-          code={`
-import { Skywake } from "@skywake/sdk";
-
-const sky = new Skywake({
-  url: process.env.SKYWAKE_URL!,
-  key: process.env.SKYWAKE_KEY!,
-});
-
-const data = await sky.createNamespace("ml/tickets");
-const main = await data.createBranch("main");
-const v1 = await main.commitFolder("./tickets", {
-  message: "Support tickets, March export",
-});
-`}
-        />
+        <Code file="save-data.ts" code={code["save-data.ts"]} />
         <p>
           <code>v1</code> est l’id du commit que nous venons de créer. Cet id désigne cet ensemble
           exact de fichiers, pour toujours, quoi qu’il arrive ensuite à <code>main</code>.
@@ -137,35 +122,14 @@ const v1 = await main.commitFolder("./tickets", {
         <Chapter id="train" step={2} title="Entraîner sur une version, et la noter" />
         <p>
           Voici la pièce qui manquait à l’histoire. Avant l’entraînement, nous écrivons la branche
-          dans un dossier local. <code>checkout</code> lit tous les fichiers d’un seul commit et
-          nous dit lequel. Nous enregistrons ensuite cet id sur une fiche de modèle.
+          dans un dossier local. <code>download</code> lit tous les fichiers d’un seul commit et
+          renvoie son id. Nous enregistrons ensuite cet id sur une fiche de modèle.
         </p>
         <p>
-          Les fiches vivent dans leur propre namespace, pour que l’historique du dataset ne montre
-          que des changements de données.
+          Les fiches vivent sur leur propre disque, pour que l’historique du dataset ne montre que
+          des changements de données.
         </p>
-        <Code
-          file="train.ts"
-          code={`
-import type { Branch } from "@skywake/sdk";
-
-const models = await sky.createNamespace("ml/models");
-const cards = await models.createBranch("main");
-
-async function train(branch: Branch, model: string) {
-  const commit = await branch.checkout(\`./runs/\${model}\`);
-  // Your training code reads ./runs/<model> here.
-  const card = { model, branch: branch.name, commit };
-  await cards.write(
-    { [\`\${model}.json\`]: JSON.stringify(card, null, 2) },
-    \`Trained \${model}\`,
-  );
-  return commit;
-}
-
-await train(main, "ticket-tagger-v7");
-`}
-        />
+        <Code file="train.ts" code={code["train.ts"]} />
         <p>
           La fiche de v7 indique maintenant <code>main</code> et l’id du commit. Si quelqu’un fait
           un commit sur <code>main</code> une minute plus tard, la fiche pointe toujours vers les
@@ -184,14 +148,7 @@ await train(main, "ticket-tagger-v7");
           <code>main</code> ait changé depuis son entraînement. Inutile de deviner. Nous lisons la
           fiche, puis le fichier de spam au commit qu’elle indique :
         </p>
-        <Code
-          file="open-data.ts"
-          code={`
-const card = JSON.parse(await cards.readText("ticket-tagger-v7.json"));
-const bytes = await main.read("train/spam.jsonl", { at: card.commit });
-console.log(new TextDecoder().decode(bytes));
-`}
-        />
+        <Code file="open-data.ts" code={code["open-data.ts"]} />
         <p>
           L’option <code>at</code> lit un fichier tel qu’il était à un commit plus ancien. La
           réponse saute aux yeux : la même ligne de spam deux fois, et une demande de remboursement
@@ -206,30 +163,15 @@ console.log(new TextDecoder().decode(bytes));
           aussi dans son modèle.
         </p>
         <p>
-          Nous forkons donc. Un fork est une nouvelle branche qui part d’un commit de votre choix.
-          Il ne copie aucun fichier : il est rapide quelle que soit la taille des données, et rien
-          de ce que vous y faites ne touche <code>main</code>. Nous le faisons partir du commit de
-          v7, les données que nous corrigeons.
+          Nous forkons donc. Un fork est une nouvelle branche qui part comme copie exacte d’une
+          autre. Il ne copie aucun fichier : il est rapide quelle que soit la taille des données, et
+          rien de ce que vous y faites ne touche <code>main</code>.
         </p>
-        <Code
-          file="fix.ts"
-          code={`
-const fix = await main.fork("fix/spam-labels", card.commit);
-
-const spam = {
-  text: "You won a free cruise, click here",
-  label: "spam",
-};
-await fix.commit("Fix spam labels, drop 2019 tickets", [
-  { path: "train/spam.jsonl", text: JSON.stringify(spam) + "\\n" },
-  { path: "train/old-2019.jsonl", delete: true },
-]);
-`}
-        />
+        <Code file="fix.ts" code={code["fix.ts"]} />
         <p>
-          Un seul commit fait les deux : <code>spam.jsonl</code> garde un vrai exemple de spam, et
-          le fichier obsolète de 2019 disparaît. Sur <code>main</code>, les deux fichiers sont
-          exactement tels qu’ils étaient.
+          Deux petits commits font le travail : <code>spam.jsonl</code> garde un vrai exemple de
+          spam, et le fichier obsolète de 2019 disparaît. Sur <code>main</code>, les deux fichiers
+          sont exactement tels qu’ils étaient.
         </p>
 
         <Chapter id="diff" step={5} title="Voir exactement ce qui a changé" />
@@ -237,18 +179,10 @@ await fix.commit("Fix spam labels, drop 2019 tickets", [
           Avant que quiconque entraîne sur le correctif, il vaut la peine de regarder ce qu’il
           change vraiment. Un diff liste chaque fichier qui diffère entre deux branches.
         </p>
-        <Code
-          file="diff.ts"
-          code={`
-for await (const change of fix.allDiff("main", { against: "base" })) {
-  console.log(change.kind, change.path);
-}
-`}
-        />
+        <Code file="diff.ts" code={code["diff.ts"]} />
         <p>
-          <code>{`against: "base"`}</code> compare avec le dernier commit que les deux branches ont
-          en commun. Ainsi, même si <code>main</code> a reçu de nouveaux tickets de livraison
-          depuis, le diff ne montre que ce que le fork a changé :
+          Personne n’a modifié <code>main</code> depuis le fork, donc le diff ne montre que ce que
+          le fork a changé :
         </p>
         <Changes />
         <p>
@@ -262,20 +196,12 @@ for await (const change of fix.allDiff("main", { against: "base" })) {
           les tickets de holdout, fusionnez le fork dans <code>main</code>, pour que le prochain run
           de chacun parte de données propres.
         </p>
-        <Code
-          file="keep.ts"
-          code={`
-await train(fix, "ticket-tagger-v8");
-
-const merged = await fix.mergeInto("main");
-if (merged.conflicts.length === 0) {
-  console.log("main now has the fix:", merged.head);
-}
-`}
-        />
+        <Code file="keep.ts" code={code["keep.ts"]} />
         <p>
-          Le merge apporte le correctif dans <code>main</code> et garde les tickets de livraison que
-          quelqu’un y a ajoutés entre-temps. Et maintenant, chaque modèle a une source claire :
+          Le merge apporte le correctif dans <code>main</code>. Si quelqu’un a modifié les mêmes
+          fichiers sur <code>main</code> entre-temps, <code>mergeInto</code> lève une{" "}
+          <code>MergeConflict</code> qui les liste, et n’enregistre rien. Et maintenant, chaque
+          modèle a une source claire :
         </p>
         <Lineage />
         <p>
@@ -288,15 +214,16 @@ if (merged.conflicts.length === 0) {
         <p>Quelques habitudes pour que tout tienne quand l’équipe et les données grandissent :</p>
         <ul>
           <li>
-            <b>Protégez main.</b> Faites en sorte que <code>main</code> ne change que par un merge,
-            pour que chaque changement de données passe d’abord par un fork et un diff.
+            <b>Donnez une clé de lecture à l’entraînement.</b> L’entraînement ne fait que
+            télécharger. Une clé avec le rôle <code>read</code>, limitée au disque{" "}
+            <code>tickets</code>, ne peut pas modifier les données par erreur.
           </li>
           <li>
             <b>Les forks restent bon marché.</b> Créer une branche prend environ 13 ms, et ne copie
             aucun fichier. Donnez à chaque expérience la sienne.
           </li>
           <li>
-            <b>Tout modèle peut être réentraîné.</b> Récupérez le commit indiqué sur sa fiche, et
+            <b>Tout modèle peut être réentraîné.</b> Téléchargez le commit indiqué sur sa fiche, et
             vous retrouvez exactement les mêmes fichiers, octet pour octet.
           </li>
           <li>
@@ -304,16 +231,7 @@ if (merged.conflicts.length === 0) {
             bucket, pas dans des copies éparpillées sur les portables.
           </li>
         </ul>
-        <Code
-          file="protect.ts"
-          code={`
-// Needs an admin key. Direct commits to main now fail.
-await main.protect();
-
-// Rebuild v7's training folder, exactly as it was.
-await main.checkout("./runs/v7-again", { at: card.commit });
-`}
-        />
+        <Code file="rebuild.ts" code={code["rebuild.ts"]} />
 
         <Chapter id="questions" title="Questions" />
         <Questions
@@ -329,25 +247,24 @@ await main.checkout("./runs/v7-again", { at: card.commit });
               "Et si deux personnes nettoient le même fichier en même temps ?",
               <p key="a">
                 Chacune travaille sur son propre fork. Le premier merge passe. Si le second fork a
-                modifié le même fichier, son merge n’enregistre rien et liste ce fichier comme
-                conflit : vous décidez alors quelle version garder.
+                modifié le même fichier, son merge lève une <code>MergeConflict</code> qui nomme ce
+                fichier et n’enregistre rien : vous décidez alors quelle version garder.
               </p>,
             ],
             [
               "Comment revenir à une ancienne version des données ?",
               <p key="a">
-                Appelez <code>reset</code> avec le commit voulu. Il redonne aux fichiers leur état
+                Appelez <code>restore</code> avec le commit voulu. Il redonne aux fichiers leur état
                 d’alors, sous la forme d’un nouveau commit par-dessus : l’historique intermédiaire
-                est conservé. Si <code>main</code> est protégée, faites le reset sur un fork, puis
-                fusionnez-le.
+                est conservé.
               </p>,
             ],
             [
               "Puis-je voir tous les modèles que nous avons entraînés ?",
               <p key="a">
-                Oui. Chaque fiche est un commit dans le namespace <code>ml/models</code> : la
-                commande <code>cards.log()</code> liste donc chaque entraînement, et chaque fiche
-                nomme ses données.
+                Oui. Chaque fiche est un commit sur le disque <code>models</code> : la commande{" "}
+                <code>cards.log()</code> liste donc chaque entraînement, et chaque fiche nomme ses
+                données.
               </p>,
             ],
           ]}

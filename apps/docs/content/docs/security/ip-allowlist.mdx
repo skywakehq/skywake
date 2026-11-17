@@ -6,11 +6,11 @@ description: Limit the addresses from which your organization's keys and people 
 
 Set an IP allowlist when your agents and people should only reach Skywake from known networks, such as your office or your own servers. Calls from any other address are refused, even with a valid key.
 
-```bash
-curl -X PUT "$SKYWAKE_URL/v1/orgs/$ORG/ip-allowlist" \
-  -H "Authorization: Bearer $SKYWAKE_KEY" -H "Content-Type: application/json" \
-  -d '{"cidrs": ["203.0.113.0/24", "2001:db8::/32"]}'
-```
+<include lang="bash" meta='tab="HTTP"'>
+  ../../../examples/security/ip-allowlist.sh
+</include>
+
+The example sets a list, reads it back and clears it. Its list includes `127.0.0.0/8` because it runs on the same machine as the API; yours would list your own networks. The allowlist has no v2 route, SDK call or CLI command yet, so it uses `/v1`, which goes away one release after v2.
 
 You can also set it in the console under **Settings → IP allowlist**.
 
@@ -20,7 +20,7 @@ You can also set it in the console under **Settings → IP allowlist**.
 - An empty list lets every address in. That is the default.
 - A call from any other address fails with `403` and the code `ip_not_allowed`. The list applies to API keys and console sessions alike.
 - If the new list leaves out the address you are setting it from, the request fails with `409`. This way an admin can never lock themselves out.
-- To read or set the list, you need to be an org admin, for example with an [`admin` key](./api-keys.mdx#roles) for every namespace (`*`). `$ORG` is your organization's id.
+- To read or set the list, you need to be an org admin, for example with an [`admin` key](./api-keys.mdx#roles) for every environment. `$org` is your organization's id, which `GET /v2/whoami` and `skywake whoami` show.
 - Each API server rereads the list at most every 5 seconds, so a change can take that long to reach every server.
 
 ## Behind a proxy

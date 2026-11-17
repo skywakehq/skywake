@@ -2,39 +2,81 @@ import type { Schemas } from "./api.js";
 
 export type ErrorCode = Schemas["ErrorCode"];
 
-/** An error answer from the API. */
+interface Fields {
+  status: number;
+  code: ErrorCode | undefined;
+  message: string;
+  hint: string | null;
+  requestId: string | null;
+  path?: string;
+}
+
 export class SkywakeError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    /** What kind of error it is, such as `not_found` or `rate_limited`. */
-    readonly code: ErrorCode | undefined,
-    /** Quote it when you report a bug. */
-    readonly requestId: string | undefined,
-    /** For an invalid request, the JSON path of the field that is wrong, such as `filter.and[1]`. */
-    readonly path?: string,
-    /** For a merge or revert that conflicts, the paths in the way. */
-    readonly conflicts?: string[],
-  ) {
-    super(message);
-    this.name = "SkywakeError";
+  readonly status: number;
+  readonly code: ErrorCode | undefined;
+  readonly hint: string | null;
+  readonly requestId: string | null;
+  readonly path: string | undefined;
+
+  constructor(fields: Fields) {
+    super(fields.hint ? `${fields.message}; ${fields.hint}` : fields.message);
+    this.name = new.target.name;
+    this.status = fields.status;
+    this.code = fields.code;
+    this.hint = fields.hint;
+    this.requestId = fields.requestId;
+    this.path = fields.path;
   }
 }
 
-type Answer<T> = { data?: T; error?: unknown; response: Response };
+export class AuthError extends SkywakeError {}
+export class PermissionError extends SkywakeError {}
+export class NotFound extends SkywakeError {}
+export class Conflict extends SkywakeError {}
+export class InvalidRequest extends SkywakeError {}
+export class ServerError extends SkywakeError {}
 
-/** Returns the data of an answer, or throws its error. */
-export function unwrap<T>({ data, error, response }: Answer<T>): T {
-  if (error !== undefined || !response.ok) {
-    const body = (error ?? {}) as Partial<Schemas["ErrorBody"] & Schemas["RevertConflict"]>;
-    throw new SkywakeError(
-      response.status,
-      body.error ?? response.statusText,
-      body.code,
-      body.request_id ?? response.headers.get("x-request-id") ?? undefined,
-      body.path,
-      body.conflicts,
-    );
+export class MergeConflict extends Conflict {
+  readonly conflicts: string[];
+
+  constructor(fields: Fields, conflicts: string[]) {
+    super(fields);
+    this.conflicts = conflicts;
   }
-  return data as T;
+}
+
+export class RateLimited extends SkywakeError {
+  readonly retryAfter: number | null;
+
+  constructor(fields: Fields, retryAfter: number | null) {
+    super(fields);
+    this.retryAfter = retryAfter;
+  }
+}
+
+type Body = { error?: Partial<Schemas["Error"]["error"]> | string; code?: ErrorCode };
+
+export function errorOf(response: Response, body: unknown): SkywakeError {
+  const raw = (body ?? {}) as Body;
+  const error = typeof raw.error === "object" ? raw.error : { message: raw.error, code: raw.code };
+  const fields: Fields = {
+    status: response.status,
+    code: error.code,
+    message: error.message ?? (response.statusText || `HTTP ${response.status}`),
+    hint: error.hint ?? null,
+    requestId: error.request_id ?? response.headers.get("x-request-id"),
+    path: error.path,
+  };
+  const status = response.status;
+  if (status === 401) return new AuthError(fields);
+  if (status === 403) return new PermissionError(fields);
+  if (status === 404) return new NotFound(fields);
+  if (status === 409 && error.conflicts?.length) return new MergeConflict(fields, error.conflicts);
+  if (status === 409) return new Conflict(fields);
+  if (status === 429) {
+    const after = Number(response.headers.get("retry-after"));
+    return new RateLimited(fields, Number.isFinite(after) && after > 0 ? after : null);
+  }
+  if (status >= 500) return new ServerError(fields);
+  return new InvalidRequest(fields);
 }

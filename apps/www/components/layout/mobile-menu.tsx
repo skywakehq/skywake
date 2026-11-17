@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { DropdownContent, DropdownMenu, DropdownTrigger } from "@skywake/ui/components/dropdown";
 import { MenuItem } from "@skywake/ui/components/menu-item";
-import { localizePath, type Locale } from "@/lib/i18n";
+import { isSitePath, localizePath, type Locale } from "@/lib/i18n";
 
 export function MobileMenu({
   links,
@@ -21,7 +21,7 @@ export function MobileMenu({
 
   // Site paths stay in the app; docs and GitHub open as normal pages.
   function go(href: string) {
-    if (href.startsWith("/")) router.push(localizePath(locale, href));
+    if (isSitePath(href)) router.push(localizePath(locale, href));
     else window.location.assign(href);
   }
 

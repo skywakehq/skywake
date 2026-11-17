@@ -68,7 +68,7 @@ const UNITS: Record<string, string> = {
   writes: "GB written",
   queries: "TB scanned",
   embeddings: "texts embedded",
-  reranks: "documents reranked",
+  reranks: "rows reranked",
   pinned: "GB-hours pinned",
 };
 

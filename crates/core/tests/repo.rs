@@ -41,6 +41,23 @@ fn write_project(dir: &Path) {
     symlink("src/main.rs", dir.join("entry")).unwrap();
 }
 
+fn settle(dir: &Path) {
+    let stamp = std::time::SystemTime::now() - Duration::from_secs(3600);
+    for entry in fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            settle(&path);
+        } else if path.is_file() && !path.is_symlink() {
+            fs::File::options()
+                .write(true)
+                .open(&path)
+                .unwrap()
+                .set_modified(stamp)
+                .unwrap();
+        }
+    }
+}
+
 fn pseudo_random(len: usize) -> Vec<u8> {
     let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
     (0..len)
@@ -336,6 +353,7 @@ async fn recommit_trusts_size_and_timestamp() {
     let work = tempdir().unwrap();
     let file = work.path().join("data.txt");
     fs::write(&file, "aaaa").unwrap();
+    settle(work.path());
     repo.create_branch("main", None).await.unwrap();
     repo.commit("main", work.path(), "v1").await.unwrap();
 
@@ -512,6 +530,7 @@ async fn edits_to_a_split_tree_store_only_what_changed() {
             fs::write(path, pseudo_random(1500 + folder * 40 + i)).unwrap();
         }
     }
+    settle(work.path());
     repo.commit("main", work.path(), "large").await.unwrap();
     let before = count(&store, "objects").await;
 
@@ -829,6 +848,7 @@ async fn small_files_share_one_bundle_and_read_back_anywhere() {
         bytes[..8].copy_from_slice(&(i as u64).to_le_bytes());
         fs::write(work.path().join(format!("{folder}/{i}.txt")), bytes).unwrap();
     }
+    settle(work.path());
     repo.create_branch("main", None).await.unwrap();
     repo.commit("main", work.path(), "first").await.unwrap();
     assert_eq!(count(&store, "bundles").await, 1);
@@ -861,4 +881,31 @@ async fn small_files_share_one_bundle_and_read_back_anywhere() {
             ..
         }
     ));
+}
+
+fn write_at(path: &Path, text: &str, stamp: std::time::SystemTime) {
+    fs::write(path, text).unwrap();
+    fs::File::options()
+        .write(true)
+        .open(path)
+        .unwrap()
+        .set_modified(stamp)
+        .unwrap();
+}
+
+#[tokio::test]
+async fn an_edit_with_the_same_size_and_time_is_still_committed() {
+    let (_, repo) = setup();
+    let work = tempdir().unwrap();
+    let path = work.path().join("a.txt");
+    let stamp = std::time::SystemTime::now();
+    write_at(&path, "one", stamp);
+    repo.create_branch("main", None).await.unwrap();
+    repo.commit("main", work.path(), "first").await.unwrap();
+
+    write_at(&path, "two", stamp);
+    repo.commit("main", work.path(), "second").await.unwrap();
+
+    let bytes = repo.read("main", None, "a.txt", 0, u64::MAX).await.unwrap();
+    assert_eq!(bytes, b"two");
 }
