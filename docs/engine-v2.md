@@ -410,9 +410,55 @@ Query-shape log, clustering key choice, automatic composite projections, per-pag
 
 **Exit:** a range-heavy workload on a no-vector index gets faster after one rebuild with no schema change.
 
+### Phase 9: self-hosting (≈3 weeks)
+
+Today there are four separate ways in (`deploy/compose`, `deploy/helm`, `deploy/terraform/aws`, and a CloudFormation
+starter), and only AWS gets the bucket, the database and IAM made for it. Phase 9 makes one path that works the
+same on any cloud and that an agent can drive as easily as a person.
+
+1. **One deployment file, `skywake.deploy.toml`.** It holds the target (`aws`, `gcp`, `azure`, `kubernetes`,
+   `docker`), the region, the size, the domain, and whether to make or reuse the bucket and Postgres. Every
+   other format is rendered from it: Helm values, Terraform variables, the Compose file. Its schema is published, so
+   the docs, the CLI and agents read the same source.
+2. **`skywake deploy`, a guided CLI in `crates/cli`.**
+   - `init` finds the cloud from the credentials it can already see (`aws sts`, `gcloud`, `az`, kube context),
+     asks only what it can't infer, and writes the file.
+   - `plan` shows exactly what will be made and what it will cost each month.
+   - `apply` makes it.
+   - `status`, `upgrade` (migrations, then a rolling restart) and `destroy` (it names what it will delete and
+     asks first).
+   - Every question has a flag. `--yes --json` runs with no prompts and prints machine-readable steps.
+     `--plan-only` never changes anything. The MCP server gets `deploy_plan` and `deploy_status` tools.
+   - Secrets are generated into the cloud's secret manager or a Kubernetes Secret and never printed.
+3. **`skywake doctor`.** It checks a running or planned deployment:
+   - the bucket's conditional writes, list and range reads, and the time to read from it;
+   - Postgres version and `wal_level`;
+   - clock skew, ingress and TLS, and that the image versions match.
+
+   Each failure comes with the exact fix. The docs' troubleshooting page is generated from these checks.
+4. **Modules for every cloud.** Terraform modules for GCP (GCS, Cloud SQL, workload identity, GKE) and Azure
+   (Blob, Flexible Server, managed identity, AKS), shaped like the AWS one. The store already speaks GCS and
+   Azure Blob natively (`crates/core/src/store/open`).
+5. **One-click buttons.** Each one runs `skywake deploy` underneath:
+   - AWS: a CloudFormation quick-create link.
+   - GCP: "Open in Cloud Shell".
+   - Azure: "Deploy to Azure" (Bicep).
+   - Any VM: a single install command.
+   - Kubernetes: `helm install` with every dependency optional and bundled: CloudNativePG for Postgres, MinIO
+     for the bucket, and cert-manager.
+6. **Helm chart hardening.** External Secrets support, a PodDisruptionBudget, network policies, resource
+   presets sized `small`/`medium`/`large`, an upgrade hook that migrates before rolling, and `helm test` running
+   `deploy/test/smoke.sh`.
+7. **Docs.** A self-hosting section with one page per target, a sizing guide, the upgrade policy, and
+   backup and restore. Commands come from the CLI's own `--help` and the published schema, so they can't drift.
+
+**Exit:** from an empty account to a working index and a passing `doctor` in under 10 minutes on AWS, GCP,
+Azure, and kind with MinIO, using one command and no hand edits. kind runs in CI on every change; the real clouds
+run weekly, **each with the user's go-ahead**.
+
 ### Order and regression gates
 
-Phases run one at a time, in order `0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8`, so each phase's effect is measured
+Phases run one at a time, in order `0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9`, so each phase's effect is measured
 alone and a regression points at one phase. About 21 weeks.
 
 Every phase ends with the **full suite**, not only the workloads it targets, compared with the previous
