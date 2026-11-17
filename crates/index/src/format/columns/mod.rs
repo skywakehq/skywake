@@ -93,6 +93,14 @@ pub(crate) async fn ids(storage: &Storage, span: &Span) -> Result<Arc<Vec<Id>>> 
     read(storage, span).await
 }
 
+async fn read<T>(storage: &Storage, span: &Span) -> Result<Arc<T>>
+where
+    T: for<'de> Deserialize<'de> + Send + Sync + 'static,
+{
+    let mut found = read_many(storage, std::slice::from_ref(span)).await?;
+    Ok(found.pop().expect("one span was read"))
+}
+
 pub(crate) async fn warm(storage: &Storage, columns: &Columns) -> Result<()> {
     let rows: Vec<Span> = directory(storage, &columns.ids).await?;
     let mut blobs: Vec<Hash> = rows.iter().map(|span| span.blob).collect();
@@ -192,26 +200,4 @@ where
         .into_iter()
         .map(|v| v.expect("every span was read"))
         .collect())
-}
-
-async fn read<T>(storage: &Storage, span: &Span) -> Result<Arc<T>>
-where
-    T: for<'de> Deserialize<'de> + Send + Sync + 'static,
-{
-    let key = part(span.blob, &format!("column {}..{}", span.start, span.end));
-    if let Some(found) = storage.cache().get(key) {
-        return Ok(found);
-    }
-    let bytes = storage.range(span.blob, span.start..span.end).await?;
-    if checksum(&bytes) != span.check {
-        return Err(Error::Corrupt(format!(
-            "a column chunk of blob {} does not match its checksum",
-            span.blob
-        )));
-    }
-    let value = Arc::new(postcard::from_bytes(&bytes)?);
-    storage
-        .cache()
-        .insert(key, Arc::clone(&value), 2 * bytes.len());
-    Ok(value)
 }

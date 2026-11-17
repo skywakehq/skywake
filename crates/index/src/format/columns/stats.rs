@@ -12,7 +12,6 @@ pub(crate) struct Stats {
     pub min: Option<Value>,
     pub max: Option<Value>,
     pub histogram: Option<Vec<(u32, u32)>>,
-    pub sum: Option<f64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -37,13 +36,6 @@ impl Stats {
             }
             counts.into_iter().collect()
         });
-        let numbers: Vec<f64> = present()
-            .filter_map(|value| match value {
-                Value::Number(n) => Some(*n),
-                Value::Int(n) => Some(*n as f64),
-                _ => None,
-            })
-            .collect();
         let nan = (values.iter().flatten()).any(|v| matches!(v, Value::Number(n) if n.is_nan()));
         let bounded = |pick: Option<&Value>| pick.filter(|_| !nan).cloned();
         Self {
@@ -52,7 +44,6 @@ impl Stats {
             min: bounded(present().min_by(|a, b| a.order(b))),
             max: bounded(present().max_by(|a, b| a.order(b))),
             histogram,
-            sum: (!numbers.is_empty()).then(|| numbers.iter().sum()),
         }
     }
 }
@@ -133,7 +124,6 @@ mod tests {
         let mut coder = Coder::new(Dictionary::default());
         let chunk = Chunk::encode(&numbers, Layout::Floats, &mut coder);
         let stats = Stats::of(&chunk, &numbers);
-        assert_eq!(stats.sum, Some(1.5));
         assert_eq!(stats.histogram, None);
         assert_eq!(stats.min, Some(Value::Number(-1.0)));
     }

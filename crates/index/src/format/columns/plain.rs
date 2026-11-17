@@ -22,7 +22,7 @@ pub(crate) async fn build(
 ) -> Result<Columns> {
     let base = (version.columns.as_ref())
         .filter(|base| !full && !base.rows.is_empty() && covers(base, &version.schema))
-        .filter(|base| small_tail(base, version));
+        .filter(|base| small_tail(base, version) && !fragmented(base, page_rows));
     match base {
         Some(base) => grow(storage, version, base, page_rows, written).await,
         None => rebuild(storage, version, page_rows, written).await,
@@ -32,6 +32,10 @@ pub(crate) async fn build(
 fn small_tail(base: &Columns, version: &Version) -> bool {
     let tail: u64 = version.tail.iter().map(|segment| segment.rows).sum();
     base.live > 0 && tail * 2 <= base.live
+}
+
+fn fragmented(base: &Columns, page_rows: usize) -> bool {
+    base.pages > 2 * base.live.div_ceil(page_rows as u64) + 8
 }
 
 async fn rebuild(

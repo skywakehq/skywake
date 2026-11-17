@@ -58,7 +58,7 @@ impl Coder {
             return None;
         }
         let code = self.dictionary.values.len() as u32;
-        self.dictionary.values.push(value.clone());
+        self.dictionary.values.push(value.clone().canonical());
         self.codes.insert(word, code);
         Some(code)
     }

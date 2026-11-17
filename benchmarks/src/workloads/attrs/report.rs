@@ -26,10 +26,11 @@ impl Temperature {
         }
     }
 
+    pub(super) const ALL: [Temperature; 3] =
+        [Temperature::Hot, Temperature::HotHead, Temperature::Cold];
+
     pub(super) fn parse(text: &str) -> Option<Self> {
-        [Temperature::Hot, Temperature::HotHead, Temperature::Cold]
-            .into_iter()
-            .find(|t| t.name() == text)
+        Self::ALL.into_iter().find(|t| t.name() == text)
     }
 }
 
@@ -152,13 +153,13 @@ impl Report {
             progress::bytes(s.peak_rss_end.max(s.peak_rss_build))
         );
         out.push_str(
-            "| Query | Temperature | n | p50 ms | p90 ms | p99 ms | GETs | Read | Waves |\n",
+            "| Query | Temperature | n | p50 ms | p90 ms | p99 ms | GETs | Store reads | Read | Waves |\n",
         );
-        out.push_str("|---|---|--:|--:|--:|--:|--:|--:|--:|\n");
+        out.push_str("|---|---|--:|--:|--:|--:|--:|--:|--:|--:|\n");
         for p in &self.passes {
             let _ = writeln!(
                 out,
-                "| {} | {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {} | {:.1} |",
+                "| {} | {} | {} | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} | {} | {:.1} |",
                 p.family.name(),
                 p.temperature.name(),
                 p.queries,
@@ -166,6 +167,7 @@ impl Report {
                 p.p90_ms,
                 p.p99_ms,
                 p.gets,
+                p.store_reads,
                 progress::bytes(p.bytes as u64),
                 p.waves
             );

@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use futures::{StreamExt, TryStreamExt};
@@ -16,7 +16,7 @@ use skywake_index::{Doc, Id, Index, Schema, TextOptions, TextQuery};
 use crate::metrics::requests::{Log, Op, waves};
 use crate::metrics::{millis, nearest_rank};
 use crate::results::{Row, Run, Table};
-use crate::stores::{Counted, Slow};
+use crate::stores;
 
 const QUALITY_AT_ONCE: usize = 8;
 
@@ -172,12 +172,15 @@ pub async fn run(args: Args) -> Result<()> {
     drop(index);
 
     let log = Arc::new(Log::default());
-    let slow = Arc::new(Slow::new(
-        raw.clone(),
-        Duration::from_millis(args.latency_ms),
-        args.in_flight,
-    ));
-    let store: Arc<dyn ObjectStore> = Arc::new(Counted::new(slow, log.clone()));
+    let slow = stores::Options {
+        kind: "slow".into(),
+        latency_ms: args.latency_ms,
+        in_flight: args.in_flight,
+        tail: 1.0,
+        mb_per_s: 0.0,
+        allow_remote: false,
+    };
+    let store = stores::slow(raw.clone(), &slow, log.clone());
     let step = (dev.list.len() / args.cold.max(1)).max(1);
     let (mut times, mut all_waves, mut gets, mut bytes) = (Vec::new(), Vec::new(), 0, 0);
     let misses = skywake_index::sync_misses();

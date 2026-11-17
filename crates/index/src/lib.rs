@@ -342,7 +342,7 @@ impl Index {
         let options = &self.options;
         let (budget, rows) = (options.build_bytes, options.cluster_rows);
         let spill = options.spill;
-        let columns = options.columns.then_some(options.page_rows);
+        let columns = options.columns.then_some(options.page_rows.max(1));
         build::build(
             &self.storage,
             &self.branch,

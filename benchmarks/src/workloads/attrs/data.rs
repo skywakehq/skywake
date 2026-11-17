@@ -107,6 +107,18 @@ impl Family {
         }
     }
 
+    pub(crate) fn expected(self) -> (u64, f64) {
+        let category = 1.0 / CATEGORIES as f64;
+        match self {
+            Family::Count => (1, 1.0),
+            Family::CountEq => (1, category),
+            Family::CountAnd => (1, category * 0.1),
+            Family::Grouped => (GROUPS, 1.0),
+            Family::GroupedFiltered => (GROUPS, 0.1),
+            Family::Order | Family::OrderFiltered => (0, 0.0),
+        }
+    }
+
     pub(crate) fn ask(self, n: u64) -> Ask {
         let mut random = Random(mix(n.wrapping_mul(GOLDEN) ^ self as u64));
         let category = Filter::eq(CATEGORY, category_name(random.next() % CATEGORIES));

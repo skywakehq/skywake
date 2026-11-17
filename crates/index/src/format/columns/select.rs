@@ -18,14 +18,14 @@ impl Chunk {
             }
             known[at] == 2
         };
-        match &self.data {
-            Data::Empty => {}
-            Data::Constant(code) => {
+        match (&self.data, compare(leaf, layout)) {
+            (Data::Empty, _) => {}
+            (Data::Constant(code), _) => {
                 if pass(*code) {
                     fill(&mut bits, 0, rows);
                 }
             }
-            Data::Runs { codes, ends } => {
+            (Data::Runs { codes, ends }, _) => {
                 let mut start = 0;
                 for (&code, &end) in codes.iter().zip(ends) {
                     if pass(code) {
@@ -34,11 +34,14 @@ impl Chunk {
                     start = end as usize;
                 }
             }
-            Data::Frequent {
-                common,
-                rows: at,
-                codes,
-            } => {
+            (
+                Data::Frequent {
+                    common,
+                    rows: at,
+                    codes,
+                },
+                _,
+            ) => {
                 if pass(*common) {
                     fill(&mut bits, 0, rows);
                 }
@@ -46,25 +49,21 @@ impl Chunk {
                     set(&mut bits, row as usize, pass(code));
                 }
             }
-            Data::Codes(packed) => {
+            (Data::Codes(packed), _) => {
                 for row in 0..rows {
                     set(&mut bits, row, pass(packed.get(row) as u32));
                 }
             }
-            Data::Ints { base, packed } if compare(leaf, layout).is_some() => {
-                let (op, operand) = compare(leaf, layout).expect("checked");
-                match operand {
-                    Operand::Int(x) => fill_by(&mut bits, rows, |row| {
-                        op.holds(base.wrapping_add(packed.get(row) as i64).cmp(&x))
-                    }),
-                    Operand::Float(x) => fill_by(&mut bits, rows, |row| {
-                        let n = base.wrapping_add(packed.get(row) as i64) as f64;
-                        n.partial_cmp(&x).is_some_and(|o| op.holds(o))
-                    }),
-                }
-            }
-            Data::Floats(floats) if compare(leaf, layout).is_some() => {
-                let (op, operand) = compare(leaf, layout).expect("checked");
+            (Data::Ints { base, packed }, Some((op, operand))) => match operand {
+                Operand::Int(x) => fill_by(&mut bits, rows, |row| {
+                    op.holds(base.wrapping_add(packed.get(row) as i64).cmp(&x))
+                }),
+                Operand::Float(x) => fill_by(&mut bits, rows, |row| {
+                    let n = base.wrapping_add(packed.get(row) as i64) as f64;
+                    n.partial_cmp(&x).is_some_and(|o| op.holds(o))
+                }),
+            },
+            (Data::Floats(floats), Some((op, operand))) => {
                 let x = match operand {
                     Operand::Int(x) => x as f64,
                     Operand::Float(x) => x,
@@ -73,7 +72,7 @@ impl Chunk {
                     floats[row].partial_cmp(&x).is_some_and(|o| op.holds(o))
                 });
             }
-            Data::Ints { base, packed } => {
+            (Data::Ints { base, packed }, None) => {
                 for row in 0..rows {
                     let n = base.wrapping_add(packed.get(row) as i64);
                     let value = match layout {
@@ -83,12 +82,12 @@ impl Chunk {
                     set(&mut bits, row, leaf.test(Some(&value)));
                 }
             }
-            Data::Floats(floats) => {
+            (Data::Floats(floats), None) => {
                 for (row, &n) in floats.iter().enumerate() {
                     set(&mut bits, row, leaf.test(Some(&Value::Number(n))));
                 }
             }
-            Data::Values(values) => {
+            (Data::Values(values), _) => {
                 for (row, value) in values.iter().enumerate() {
                     set(&mut bits, row, leaf.test(Some(value)));
                 }

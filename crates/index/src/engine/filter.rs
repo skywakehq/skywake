@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
-use super::dead::Bits;
 use super::resolve::Resolved;
 use crate::format::columns::chunk::Chunk;
+use crate::format::columns::select::Bits;
 use crate::{Filter, Id, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

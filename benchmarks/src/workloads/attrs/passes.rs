@@ -59,10 +59,13 @@ pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
     let rss_load = peak_rss();
 
     let step = progress::start("build", "");
+    let started = Instant::now();
     index.build().await?;
+    let build = started.elapsed();
     let build_requests = store.log.take();
     let stats = index.stats().await?;
-    let build = step.done(&progress::bytes(stats.bytes));
+    store.log.take();
+    step.done(&progress::bytes(stats.bytes));
     Ok(Setup {
         load_s: load.as_secs_f64(),
         rows_per_s: plan.rows as f64 / load.as_secs_f64(),
@@ -100,7 +103,9 @@ pub(super) async fn measure(store: &Store, plan: &Plan) -> Result<Vec<Pass>> {
             let step = progress::start("query", &what);
             let samples = match (temperature, plan.qps) {
                 (Temperature::Cold, _) => cold(store, family, queries).await?,
-                (_, Some(qps)) => open_loop(&index, temperature, family, qps, plan.seconds).await?,
+                (_, Some(qps)) => {
+                    open_loop(&index, store, temperature, family, qps, plan.seconds).await?
+                }
                 _ => hot(&index, store, temperature, family, queries).await?,
             };
             check(family, plan.rows, &samples)?;
@@ -126,25 +131,16 @@ async fn hot(
     family: Family,
     queries: usize,
 ) -> Result<Vec<Sample>> {
-    for n in 0..queries as u64 {
-        ask(&index.snapshot().await?, &family.ask(n)).await?;
-    }
+    warm(index, temperature, family, queries as u64).await?;
     let mut samples = Vec::new();
     for n in 0..queries as u64 {
         let question = family.ask(n);
-        store.log.take();
-        let started = Instant::now();
-        let (answer, reads) = counted(async {
-            let snapshot = snapshot(index, temperature).await?;
-            ask(&snapshot, &question).await
-        })
-        .await;
-        samples.push(Sample {
-            time: started.elapsed(),
-            requests: store.log.take(),
-            reads,
-            answer: answer?,
-        });
+        samples.push(
+            sample(store, async {
+                ask(&snapshot(index, temperature).await?, &question).await
+            })
+            .await?,
+        );
     }
     Ok(samples)
 }
@@ -153,60 +149,74 @@ async fn cold(store: &Store, family: Family, queries: usize) -> Result<Vec<Sampl
     let mut samples = Vec::new();
     for n in 0..queries as u64 {
         let question = family.ask(n);
-        store.log.take();
-        let started = Instant::now();
-        let (answer, reads) = counted(async {
-            let index = Index::open(store.store.clone(), skywake_index::MAIN).await?;
-            ask(&index.snapshot().await?, &question).await
-        })
-        .await;
-        samples.push(Sample {
-            time: started.elapsed(),
-            requests: store.log.take(),
-            reads,
-            answer: answer?,
-        });
+        samples.push(
+            sample(store, async {
+                let index = Index::open(store.store.clone(), skywake_index::MAIN).await?;
+                ask(&index.snapshot().await?, &question).await
+            })
+            .await?,
+        );
     }
     Ok(samples)
 }
 
+async fn sample(store: &Store, work: impl Future<Output = Result<Answer>>) -> Result<Sample> {
+    store.log.take();
+    let started = Instant::now();
+    let (answer, reads) = counted(work).await;
+    Ok(Sample {
+        time: started.elapsed(),
+        requests: store.log.take(),
+        reads,
+        answer: answer?,
+    })
+}
+
+async fn warm(index: &Index, temperature: Temperature, family: Family, queries: u64) -> Result<()> {
+    for n in 0..queries {
+        ask(&snapshot(index, temperature).await?, &family.ask(n)).await?;
+    }
+    Ok(())
+}
+
 async fn open_loop(
     index: &Index,
+    store: &Store,
     temperature: Temperature,
     family: Family,
     qps: f64,
     seconds: u64,
 ) -> Result<Vec<Sample>> {
     let total = (qps * seconds as f64).ceil() as u64;
-    for n in 0..total.min(64) {
-        ask(&index.snapshot().await?, &family.ask(n)).await?;
-    }
+    warm(index, temperature, family, total.min(64)).await?;
     let interval = Duration::from_secs_f64(1.0 / qps);
     let start = tokio::time::Instant::now();
-    let mut running = FuturesUnordered::new();
-    for n in 0..total {
-        let due = start + interval * n as u32;
-        running.push(async move {
-            tokio::time::sleep_until(due).await;
-            let question = family.ask(n);
-            let (answer, reads) = counted(async {
-                let snapshot = snapshot(index, temperature).await?;
-                ask(&snapshot, &question).await
+    let running: FuturesUnordered<_> = (0..total)
+        .map(|n| {
+            let (index, due) = (index.clone(), start + interval * n as u32);
+            tokio::spawn(async move {
+                tokio::time::sleep_until(due).await;
+                let question = family.ask(n);
+                let (answer, reads) =
+                    counted(async { ask(&snapshot(&index, temperature).await?, &question).await })
+                        .await;
+                Ok::<_, anyhow::Error>(Sample {
+                    time: due.elapsed(),
+                    requests: Vec::new(),
+                    reads,
+                    answer: answer?,
+                })
             })
-            .await;
-            Ok::<_, anyhow::Error>(Sample {
-                time: due.elapsed(),
-                requests: Vec::new(),
-                reads,
-                answer: answer?,
-            })
-        });
-    }
-    let mut samples = Vec::new();
-    while let Some(sample) = running.next().await {
-        samples.push(sample?);
-    }
-    Ok(samples)
+        })
+        .collect();
+    let samples = running
+        .map(|joined| joined?)
+        .collect::<Vec<Result<Sample>>>()
+        .await
+        .into_iter()
+        .collect();
+    store.log.take();
+    samples
 }
 
 async fn snapshot(index: &Index, temperature: Temperature) -> skywake_index::Result<Snapshot> {
@@ -236,10 +246,17 @@ async fn ask(snapshot: &Snapshot, ask: &Ask) -> Result<Answer> {
 fn check(family: Family, rows: u64, samples: &[Sample]) -> Result<()> {
     for sample in samples {
         let ok = match (family, &sample.answer) {
-            (Family::Count | Family::Grouped, Answer::Counts { total, .. }) => *total == rows,
-            (Family::Grouped, _) => false,
             (Family::Order | Family::OrderFiltered, Answer::Rows(found)) => *found == 10,
-            (_, Answer::Counts { total, .. }) => *total > 0 && *total < rows,
+            (_, Answer::Counts { groups, total }) => {
+                let (most_groups, share) = family.expected();
+                let expected = share * rows as f64;
+                let near =
+                    (*total as f64 - expected).abs() <= 0.25 * expected + 10.0 * expected.sqrt();
+                match share == 1.0 {
+                    true => *groups as u64 == most_groups && *total == rows,
+                    false => *groups as u64 <= most_groups && near,
+                }
+            }
             _ => false,
         };
         ensure!(ok, "{} answered {:?}", family.name(), sample.answer);

@@ -25,25 +25,36 @@ pub(crate) struct Old {
 
 impl Old {
     pub(crate) async fn load(storage: &Storage, columns: &Columns) -> Result<Self> {
-        let mut loaded = BTreeMap::new();
-        for (name, column) in &columns.columns {
-            let dictionary = super::dictionary(storage, column).await?;
-            let pages = super::pages(storage, column).await?;
-            loaded.insert(name.clone(), (column.layout, dictionary, pages));
-        }
+        let loads = columns.columns.iter().map(|(name, column)| async move {
+            let (dictionary, pages) = futures::try_join!(
+                super::dictionary(storage, column),
+                super::pages(storage, column),
+            )?;
+            Ok::<_, crate::Error>((name.clone(), (column.layout, dictionary, pages)))
+        });
+        let (ids, loaded) = futures::try_join!(
+            directory(storage, &columns.ids),
+            future::try_join_all(loads),
+        )?;
         Ok(Self {
-            ids: directory(storage, &columns.ids).await?,
-            columns: loaded,
+            ids,
+            columns: loaded.into_iter().collect(),
         })
     }
 
     pub(crate) async fn page(&self, storage: &Storage, at: usize) -> Result<(Vec<Id>, Values)> {
-        let ids = super::ids(storage, &self.ids[at]).await?;
-        let mut values = Values::new();
-        for (name, (layout, dictionary, pages)) in &self.columns {
-            let chunk = super::chunk(storage, &pages[at].span).await?;
-            values.insert(name.clone(), chunk.values(*layout, dictionary));
-        }
+        let spans: Vec<Span> = (self.columns.values())
+            .map(|(_, _, pages)| pages[at].span.clone())
+            .collect();
+        let (ids, chunks) = futures::try_join!(
+            super::ids(storage, &self.ids[at]),
+            super::chunks(storage, &spans),
+        )?;
+        let values = (self.columns.iter().zip(chunks))
+            .map(|((name, (layout, dictionary, _)), chunk)| {
+                (name.clone(), chunk.values(*layout, dictionary))
+            })
+            .collect();
         Ok(((*ids).clone(), values))
     }
 }
@@ -118,13 +129,11 @@ impl<'a> Writer<'a> {
         let encoded = postcard::to_stdvec(ids)?;
         let pending = self.out.add(encoded, self.storage, written).await?;
         self.ids.push(pending);
+        let blank = vec![None; ids.len()];
         for building in &mut self.columns {
-            let values = match values.get(&building.name) {
-                Some(values) => values.clone(),
-                None => vec![None; ids.len()],
-            };
-            let chunk = Chunk::encode(&values, building.layout, &mut building.coder);
-            let stats = Stats::of(&chunk, &values);
+            let values = values.get(&building.name).unwrap_or(&blank);
+            let chunk = Chunk::encode(values, building.layout, &mut building.coder);
+            let stats = Stats::of(&chunk, values);
             let encoded = postcard::to_stdvec(&chunk)?;
             let pending = self.out.add(encoded, self.storage, written).await?;
             building.pages.push((pending, stats));
@@ -304,7 +313,9 @@ fn layout(kind: Kind, sample: Option<&Vec<Option<Value>>>) -> Layout {
         let values = sample.map_or(&[][..], Vec::as_slice);
         let present: Vec<&Value> = values.iter().flatten().collect();
         let distinct: HashSet<Word> = present.iter().filter_map(|v| Word::of(v)).collect();
-        distinct.len() <= DICTIONARY_SAMPLE && distinct.len() * DICTIONARY_SHARE <= present.len()
+        !present.is_empty()
+            && distinct.len() <= DICTIONARY_SAMPLE
+            && distinct.len() * DICTIONARY_SHARE <= present.len()
     };
     match kind {
         Kind::String | Kind::Bool | Kind::Uuid => Layout::Dictionary,

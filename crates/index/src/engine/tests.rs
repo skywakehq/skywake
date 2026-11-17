@@ -23,7 +23,9 @@ fn schema(vectors: bool) -> Schema {
         .attribute("n", Kind::Int)
         .attribute("score", Kind::Number)
         .attribute("ok", Kind::Bool)
-        .attribute("tags", Kind::Strings);
+        .attribute("tags", Kind::Strings)
+        .attribute("level", Kind::Number)
+        .attribute("at", Kind::Datetime);
     match vectors {
         true => schema.vector("v", 8, Metric::Euclidean),
         false => schema.text("body", crate::TextOptions::default()),
@@ -36,13 +38,27 @@ fn docs(draw: &mut Draw, ids: std::ops::Range<u64>, vectors: Option<&[Vec<f32>]>
         if draw.below(8) != 0 {
             doc = doc.attribute("city", format!("c{}", draw.below(12)));
         }
-        doc = doc.attribute("n", draw.below(50) as i64 - 10);
+        let n = match draw.below(40) {
+            0 => i64::MAX / 3,
+            1 => i64::MIN / 3,
+            _ => draw.below(50) as i64 - 10,
+        };
+        doc = doc.attribute("n", n);
         if draw.below(5) != 0 {
             doc = doc.attribute("score", draw.below(400) as f64 / 8.0);
         }
         doc = doc.attribute("ok", draw.below(2) == 0);
         if draw.below(3) == 0 {
             doc = doc.attribute("tags", Value::Strings(vec![format!("t{}", draw.below(4))]));
+        }
+        if draw.below(4) != 0 {
+            doc = doc.attribute("level", LEVELS[draw.below(LEVELS.len() as u64) as usize]);
+        }
+        if draw.below(4) != 0 {
+            doc = doc.attribute(
+                "at",
+                Value::Datetime(1_700_000_000 + draw.below(1000) as i64),
+            );
         }
         match vectors {
             Some(vectors) => doc.vector("v", vectors[(id % vectors.len() as u64) as usize].clone()),
@@ -52,11 +68,15 @@ fn docs(draw: &mut Draw, ids: std::ops::Range<u64>, vectors: Option<&[Vec<f32>]>
     .collect()
 }
 
+const LEVELS: [f64; 5] = [0.0, -0.0, 1.5, f64::NAN, -2.0];
+
 fn leaf(draw: &mut Draw) -> Filter {
     let city = |d: &mut Draw| Value::from(format!("c{}", d.below(14)));
     let n = |d: &mut Draw| Value::Int(d.below(60) as i64 - 15);
     let score = |d: &mut Draw| Value::Number(d.below(420) as f64 / 8.0);
-    match draw.below(11) {
+    let level = |d: &mut Draw| Value::Number(LEVELS[d.below(LEVELS.len() as u64) as usize]);
+    let at = |d: &mut Draw| Value::Datetime(1_700_000_000 + d.below(1100) as i64);
+    match draw.below(16) {
         0 => Filter::Eq("city".into(), city(draw)),
         1 => Filter::In("city".into(), vec![city(draw), city(draw)]),
         2 => Filter::Gt("n".into(), n(draw)),
@@ -67,6 +87,14 @@ fn leaf(draw: &mut Draw) -> Filter {
         7 => Filter::Eq("ok".into(), Value::Bool(draw.below(2) == 0)),
         8 => Filter::Eq("tags".into(), Value::from(format!("t{}", draw.below(4)))),
         9 => Filter::ids((0..3).map(|_| Id::from(draw.below(300))).collect()),
+        10 => Filter::Gt(
+            "n".into(),
+            Value::Number(draw.below(80) as f64 / 2.0 - 15.0),
+        ),
+        11 => Filter::Eq("level".into(), level(draw)),
+        12 => Filter::Lt("level".into(), level(draw)),
+        13 => Filter::Gte("at".into(), at(draw)),
+        14 => Filter::Exists("tags".into()),
         _ => Filter::Eq("n".into(), n(draw)),
     }
 }
@@ -81,11 +109,14 @@ fn filter(draw: &mut Draw, depth: u32) -> Filter {
 }
 
 fn aggregate(draw: &mut Draw) -> Aggregate {
-    let group_by = match draw.below(6) {
+    let group_by = match draw.below(9) {
         0 | 1 => vec![],
         2 => vec!["city".to_string()],
         3 => vec!["ok".to_string()],
         4 => vec!["n".to_string()],
+        5 => vec!["level".to_string()],
+        6 => vec!["tags".to_string()],
+        7 => vec!["score".to_string()],
         _ => vec!["city".to_string(), "ok".to_string()],
     };
     let mut measures = BTreeMap::from([("rows".to_string(), Measure::Count(None))]);
@@ -96,6 +127,13 @@ fn aggregate(draw: &mut Draw) -> Aggregate {
         measures.insert("low".into(), Measure::Min("city".into()));
         measures.insert("high".into(), Measure::Max("score".into()));
     }
+    if draw.below(2) == 0 {
+        measures.insert("least".into(), Measure::Min("level".into()));
+        measures.insert("most".into(), Measure::Max("level".into()));
+        measures.insert("levels".into(), Measure::Sum("level".into()));
+        measures.insert("latest".into(), Measure::Max("at".into()));
+        measures.insert("smallest".into(), Measure::Min("n".into()));
+    }
     Aggregate {
         filter: (draw.below(3) != 0).then(|| filter(draw, 2)),
         group_by,
@@ -104,21 +142,26 @@ fn aggregate(draw: &mut Draw) -> Aggregate {
     }
 }
 
+fn equal(u: &Value, v: &Value) -> bool {
+    match (u, v) {
+        (Value::Number(u), Value::Number(v)) => {
+            (u.is_nan() && v.is_nan()) || (u - v).abs() <= 1e-9 * u.abs().max(1.0)
+        }
+        (u, v) => u == v,
+    }
+}
+
+fn same_map(a: &BTreeMap<String, Value>, b: &BTreeMap<String, Value>) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|((x, u), (y, v))| x == y && equal(u, v))
+}
+
 fn same(a: &[Group], b: &[Group]) -> bool {
     a.len() == b.len()
-        && a.iter().zip(b).all(|(a, b)| {
-            a.key == b.key
-                && a.values.len() == b.values.len()
-                && a.values.iter().zip(&b.values).all(|((x, u), (y, v))| {
-                    x == y
-                        && match (u, v) {
-                            (Value::Number(u), Value::Number(v)) => {
-                                (u - v).abs() <= 1e-9 * u.abs().max(1.0)
-                            }
-                            (u, v) => u == v,
-                        }
-                })
-        })
+        && (a.iter().zip(b))
+            .all(|(a, b)| same_map(&a.key, &b.key) && same_map(&a.values, &b.values))
 }
 
 async fn case(seed: u64) {
@@ -159,10 +202,15 @@ async fn case(seed: u64) {
     }
     for _ in 0..25 {
         let aggregate = aggregate(&mut draw);
-        let got = with.aggregate(&aggregate).await.unwrap();
-        let want = without.aggregate(&aggregate).await.unwrap();
+        let got = with.aggregate(&aggregate).await;
+        let want = without.aggregate(&aggregate).await;
+        let agree = match (&got, &want) {
+            (Ok(got), Ok(want)) => same(got, want),
+            (Err(got), Err(want)) => got.to_string() == want.to_string(),
+            _ => false,
+        };
         assert!(
-            same(&got, &want),
+            agree,
             "seed {seed}: {aggregate:?}\n got {got:?}\nwant {want:?}"
         );
     }

@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::dead::{Bits, Dead};
+use super::dead::Dead;
 use super::filter::{Page, Proof, and, ones, prove, uses_ids};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::chunk::{Chunk, Layout};
+use crate::format::columns::select::Bits;
 use crate::format::columns::writer::covers;
 use crate::format::columns::{self, Span};
 use crate::read::snapshot::{Aggregate, Measure, Tallied, Tally, keys_of};
@@ -22,17 +23,7 @@ pub(crate) async fn aggregate(
     let Some(columns) = &version.columns else {
         return Ok(None);
     };
-    let mut names: Vec<&str> = aggregate.group_by.iter().map(String::as_str).collect();
-    names.extend(
-        aggregate
-            .measures
-            .values()
-            .filter_map(|m| m.attribute())
-            .map(String::as_str),
-    );
-    if let Some(filter) = filter {
-        filter.names(&mut names);
-    }
+    let names = names(aggregate, filter);
     let usable = covers(columns, &version.schema)
         && aggregate.each.is_empty()
         && !columns.columns.is_empty()
@@ -57,19 +48,22 @@ pub(crate) async fn aggregate(
             continue;
         }
         if totals {
-            groups.take_stats(&resolved, page);
+            groups.uncount_page(&resolved, page);
         }
         let proof = filter.map_or(Proof::All, |f| prove(f, &resolved, page));
         if proof == Proof::None {
             continue;
         }
-        if counting && dead_rows.is_none() && groups.add_stats(&resolved, page, proof, filter) {
+        if counting
+            && dead_rows.is_none()
+            && groups.count_from_stats(&resolved, page, proof, filter)
+        {
             continue;
         }
         scans.push(page);
     }
     for batch in scans.chunks(BATCH) {
-        for loaded in load(storage, &resolved, batch, filter, aggregate).await? {
+        for loaded in load(storage, &resolved, batch, filter, &names).await? {
             let mut selected = match filter {
                 Some(filter) => loaded.select(filter),
                 None => ones(loaded.rows),
@@ -87,31 +81,31 @@ pub(crate) async fn aggregate(
             groups.add_row(attributes)?;
         }
     }
-    Ok(Some(groups.finish()))
+    Ok(Some(groups.finish()?))
 }
 
 const BATCH: usize = 256;
+
+fn names<'a>(aggregate: &'a Aggregate, filter: Option<&'a Filter>) -> Vec<&'a str> {
+    let measured = aggregate.measures.values().filter_map(Measure::attribute);
+    let mut names: Vec<&str> = (aggregate.group_by.iter().chain(measured))
+        .map(String::as_str)
+        .collect();
+    if let Some(filter) = filter {
+        filter.names(&mut names);
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
+}
 
 async fn load<'a>(
     storage: &Storage,
     resolved: &'a Resolved,
     pages: &[usize],
     filter: Option<&Filter>,
-    aggregate: &Aggregate,
+    names: &[&str],
 ) -> Result<Vec<Page<'a>>> {
-    let mut names: Vec<&str> = aggregate.group_by.iter().map(String::as_str).collect();
-    names.extend(
-        aggregate
-            .measures
-            .values()
-            .filter_map(|m| m.attribute())
-            .map(String::as_str),
-    );
-    if let Some(filter) = filter {
-        filter.names(&mut names);
-    }
-    names.sort_unstable();
-    names.dedup();
     let spans: Vec<Span> = (pages.iter())
         .flat_map(|&page| {
             let columns = &resolved.columns;
@@ -137,22 +131,13 @@ async fn load<'a>(
         .map(|&page| Page {
             resolved,
             page,
-            rows: rows_of(resolved, page),
+            rows: resolved.rows[page],
             chunks: (names.iter().map(|name| name.to_string()))
                 .zip(chunks.by_ref())
                 .collect(),
             ids: ids.as_mut().and_then(Iterator::next),
         })
         .collect())
-}
-
-fn rows_of(resolved: &Resolved, page: usize) -> usize {
-    let column = resolved
-        .columns
-        .values()
-        .next()
-        .expect("columns are not empty");
-    column.pages[page].stats.rows as usize
 }
 
 struct Groups<'a> {
@@ -177,7 +162,7 @@ impl<'a> Dense<'a> {
         match self.column {
             None => Vec::new(),
             Some(_) if slot == self.missing() => vec![None],
-            Some((_, column)) => vec![Some(column.dictionary.values[slot].clone())],
+            Some((_, column)) => vec![Some(column.dictionary.values[slot].clone().canonical())],
         }
     }
 }
@@ -197,9 +182,7 @@ impl<'a> Groups<'a> {
             Dense {
                 column,
                 rows: vec![0; slots],
-                tallies: (0..slots * measures.len())
-                    .map(|_| Tally::default())
-                    .collect(),
+                tallies: Tally::many(slots * measures.len()),
             }
         });
         Self {
@@ -211,26 +194,25 @@ impl<'a> Groups<'a> {
     }
 
     fn count(&mut self, slot: usize, rows: u64) {
-        let m = self.measures.len();
-        let dense = self.dense.as_mut().expect("counting into dense groups");
-        dense.rows[slot] += rows;
-        for tally in &mut dense.tallies[slot * m..(slot + 1) * m] {
-            tally.count += rows;
-        }
+        self.change_counts(slot, |n| *n += rows);
     }
 
     fn uncount(&mut self, slot: usize, rows: u64) {
+        self.change_counts(slot, |n| *n -= rows);
+    }
+
+    fn change_counts(&mut self, slot: usize, change: impl Fn(&mut u64)) {
         let m = self.measures.len();
         let dense = self.dense.as_mut().expect("counting into dense groups");
-        dense.rows[slot] -= rows;
+        change(&mut dense.rows[slot]);
         for tally in &mut dense.tallies[slot * m..(slot + 1) * m] {
-            tally.count -= rows;
+            change(&mut tally.count);
         }
     }
 
     fn histogram_of(&self, resolved: &Resolved, page: usize) -> Option<Vec<(usize, u64)>> {
         let dense = self.dense.as_ref()?;
-        let rows = rows_of(resolved, page) as u64;
+        let rows = resolved.rows[page] as u64;
         let Some((_, column)) = dense.column else {
             return Some(vec![(0, rows)]);
         };
@@ -270,7 +252,7 @@ impl<'a> Groups<'a> {
         true
     }
 
-    fn take_stats(&mut self, resolved: &Resolved, page: usize) {
+    fn uncount_page(&mut self, resolved: &Resolved, page: usize) {
         let histogram = self.histogram_of(resolved, page);
         for (slot, n) in histogram.expect("totals were complete") {
             if n > 0 {
@@ -279,7 +261,7 @@ impl<'a> Groups<'a> {
         }
     }
 
-    fn add_stats(
+    fn count_from_stats(
         &mut self,
         resolved: &Resolved,
         page: usize,
@@ -358,7 +340,7 @@ impl<'a> Groups<'a> {
                         Some((name, _)) if page.chunks[*name].is_missing(row) => missing,
                         Some((_, codes)) => codes[row] as usize,
                     };
-                    self.tally_dense(slot, row, &measured)?;
+                    self.tally_dense(slot, row, &measured);
                 }
             }
             None => {
@@ -369,7 +351,9 @@ impl<'a> Groups<'a> {
                     })
                     .collect();
                 for row in rows {
-                    let key: Vec<Option<Value>> = keys.iter().map(|k| k[row].clone()).collect();
+                    let key: Vec<Option<Value>> = (keys.iter())
+                        .map(|k| k[row].clone().map(Value::canonical))
+                        .collect();
                     let values: Vec<Option<&Value>> = (measured.iter())
                         .map(|m| m.as_ref().and_then(|v| v[row].as_ref()))
                         .collect();
@@ -380,12 +364,7 @@ impl<'a> Groups<'a> {
         Ok(())
     }
 
-    fn tally_dense(
-        &mut self,
-        slot: usize,
-        row: usize,
-        measured: &[Option<Vec<Option<Value>>>],
-    ) -> Result<()> {
+    fn tally_dense(&mut self, slot: usize, row: usize, measured: &[Option<Vec<Option<Value>>>]) {
         let m = self.measures.len();
         let dense = self.dense.as_mut().expect("dense groups");
         dense.rows[slot] += 1;
@@ -393,20 +372,19 @@ impl<'a> Groups<'a> {
         for ((tally, measure), values) in tallies.iter_mut().zip(&self.measures).zip(measured) {
             match values {
                 None => tally.count += 1,
-                Some(values) => tally.add_value(measure, values[row].as_ref())?,
+                Some(values) => tally.add_value(measure, values[row].as_ref()),
             }
         }
-        Ok(())
     }
 
     fn tally_keyed(&mut self, key: Vec<Option<Value>>, values: &[Option<&Value>]) -> Result<()> {
         let encoded = postcard::to_stdvec(&key)?;
-        let fresh = || self.measures.iter().map(|_| Tally::default()).collect();
-        let (_, tallies) = self.keyed.entry(encoded).or_insert_with(|| (key, fresh()));
+        let count = self.measures.len();
+        let (_, tallies) = (self.keyed.entry(encoded)).or_insert_with(|| (key, Tally::many(count)));
         for ((tally, measure), value) in tallies.iter_mut().zip(&self.measures).zip(values) {
             match measure {
                 Measure::Count(None) => tally.count += 1,
-                measure => tally.add_value(measure, *value)?,
+                measure => tally.add_value(measure, *value),
             }
         }
         Ok(())
@@ -422,7 +400,7 @@ impl<'a> Groups<'a> {
         Ok(())
     }
 
-    fn finish(mut self) -> Vec<Tallied> {
+    fn finish(mut self) -> Result<Vec<Tallied>> {
         if let Some(dense) = self.dense.take() {
             let m = self.measures.len();
             let keys: Vec<Option<Vec<Option<Value>>>> = (0..dense.rows.len())
@@ -432,7 +410,7 @@ impl<'a> Groups<'a> {
             for key in keys {
                 let group: Vec<Tally> = tallies.by_ref().take(m).collect();
                 let Some(key) = key else { continue };
-                let encoded = postcard::to_stdvec(&key).unwrap_or_default();
+                let encoded = postcard::to_stdvec(&key)?;
                 match self.keyed.get_mut(&encoded) {
                     Some((_, existing)) => {
                         for ((tally, other), measure) in
@@ -447,7 +425,7 @@ impl<'a> Groups<'a> {
                 }
             }
         }
-        self.keyed.into_values().collect()
+        Ok(self.keyed.into_values().collect())
     }
 }
 

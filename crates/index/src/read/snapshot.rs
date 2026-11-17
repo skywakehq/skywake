@@ -389,41 +389,45 @@ impl Snapshot {
             aggregate,
             filter.as_ref(),
         );
-        let mut groups = match engine.await? {
+        let groups = match engine.await? {
             Some(groups) => groups,
             None => self.tally(aggregate, filter.as_ref()).await?,
         };
-        let fresh = || {
-            (aggregate.measures.values())
-                .map(|_| Tally::default())
-                .collect()
-        };
-        groups.sort_by(|a, b| {
+        let mut groups: Vec<(Vec<u8>, Tallied)> = (groups.into_iter())
+            .map(|group| Ok((postcard::to_stdvec(&group.0)?, group)))
+            .collect::<Result<_>>()?;
+        groups.sort_by(|(a_bytes, a), (b_bytes, b)| {
             let pairs = a.0.iter().zip(&b.0);
             let order = pairs.map(|(x, y)| match (x, y) {
                 (Some(x), Some(y)) => x.order(y),
                 (x, y) => x.is_some().cmp(&y.is_some()),
             });
-            order.fold(Ordering::Equal, Ordering::then)
+            order
+                .fold(Ordering::Equal, Ordering::then)
+                .then_with(|| a_bytes.cmp(b_bytes))
         });
+        let mut groups: Vec<Tallied> = groups.into_iter().map(|(_, group)| group).collect();
         if groups.is_empty() && aggregate.group_by.is_empty() {
-            groups.push((Vec::new(), fresh()));
+            groups.push((Vec::new(), Tally::many(aggregate.measures.len())));
         }
-        Ok(groups
+        groups
             .into_iter()
-            .map(|(key, tallies)| Group {
-                key: (aggregate.group_by.iter().cloned())
-                    .zip(key)
-                    .filter_map(|(name, value)| Some((name, value?)))
-                    .collect(),
-                values: (aggregate.measures.iter())
-                    .zip(tallies)
-                    .filter_map(|((name, measure), tally)| {
-                        Some((name.clone(), tally.value(measure, schema)?))
-                    })
-                    .collect(),
+            .map(|(key, tallies)| {
+                let mut values = BTreeMap::new();
+                for ((name, measure), tally) in aggregate.measures.iter().zip(tallies) {
+                    if let Some(value) = tally.value(measure, schema)? {
+                        values.insert(name.clone(), value);
+                    }
+                }
+                Ok(Group {
+                    key: (aggregate.group_by.iter().cloned())
+                        .zip(key)
+                        .filter_map(|(name, value)| Some((name, value?.canonical())))
+                        .collect(),
+                    values,
+                })
             })
-            .collect())
+            .collect()
     }
 
     pub(crate) async fn tally(
@@ -432,20 +436,22 @@ impl Snapshot {
         filter: Option<&Filter>,
     ) -> Result<Vec<Tallied>> {
         let mut groups: HashMap<Vec<u8>, Tallied> = HashMap::new();
-        let fresh = || {
-            (aggregate.measures.values())
-                .map(|_| Tally::default())
-                .collect()
-        };
         let mut failed = None;
         live::each(&self.storage, &self.version, filter, |_, all| {
             for key in keys_of(aggregate, &all) {
-                let encoded = postcard::to_stdvec(&key).unwrap_or_default();
-                let (_, tallies) = groups.entry(encoded).or_insert_with(|| (key, fresh()));
-                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
-                    if let Err(e) = tally.add(measure, &all) {
-                        failed.get_or_insert(e);
+                let encoded = match postcard::to_stdvec(&key) {
+                    Ok(encoded) => encoded,
+                    Err(e) => {
+                        failed.get_or_insert(e.into());
+                        continue;
                     }
+                };
+                let count = aggregate.measures.len();
+                let (_, tallies) = groups
+                    .entry(encoded)
+                    .or_insert_with(|| (key, Tally::many(count)));
+                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
+                    tally.add(measure, &all);
                 }
             }
         })
@@ -488,6 +494,7 @@ pub(crate) fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option
             Some(list) if aggregate.each.contains(name) => {
                 let mut unique: Vec<Value> = Vec::new();
                 for item in list.items() {
+                    let item = item.canonical();
                     if !unique.contains(&item) {
                         unique.push(item);
                     }
@@ -495,7 +502,7 @@ pub(crate) fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option
                 unique.into_iter().map(Some).collect()
             }
             None if aggregate.each.contains(name) => Vec::new(),
-            value => vec![value.cloned()],
+            value => vec![value.cloned().map(Value::canonical)],
         };
         keys = (keys.into_iter())
             .flat_map(|key| {
@@ -523,75 +530,72 @@ pub(crate) type Tallied = (Vec<Option<Value>>, Vec<Tally>);
 #[derive(Default)]
 pub(crate) struct Tally {
     pub count: u64,
-    int: i64,
+    int: i128,
     float: f64,
     extreme: Option<Value>,
 }
 
 impl Tally {
-    fn add(&mut self, measure: &Measure, attributes: &Attributes) -> Result<()> {
+    pub(crate) fn many(count: usize) -> Vec<Tally> {
+        (0..count).map(|_| Tally::default()).collect()
+    }
+
+    fn add(&mut self, measure: &Measure, attributes: &Attributes) {
         match measure.attribute() {
-            None => {
-                self.count += 1;
-                Ok(())
-            }
+            None => self.count += 1,
             Some(name) => self.add_value(measure, attributes.get(name)),
         }
     }
 
     pub(crate) fn merge(&mut self, other: Tally, measure: &Measure) {
         self.count += other.count;
-        self.int = self.int.saturating_add(other.int);
+        self.int += other.int;
         self.float += other.float;
-        let wins = |new: &Value, old: &Value| match measure {
-            Measure::Min(_) => new.order(old).is_lt(),
-            _ => new.order(old).is_gt(),
-        };
-        if let Some(value) = other.extreme
-            && self.extreme.as_ref().is_none_or(|old| wins(&value, old))
-        {
-            self.extreme = Some(value);
+        if let Some(value) = other.extreme {
+            self.consider(measure, value);
         }
     }
 
-    pub(crate) fn add_value(&mut self, measure: &Measure, value: Option<&Value>) -> Result<()> {
-        let name = measure.attribute().map_or("", String::as_str);
+    fn consider(&mut self, measure: &Measure, value: Value) {
+        if matches!(value, Value::Number(n) if n.is_nan()) {
+            return;
+        }
+        let wins = |old: &Value| match measure {
+            Measure::Min(_) => value.order(old).is_lt(),
+            _ => value.order(old).is_gt(),
+        };
+        if self.extreme.as_ref().is_none_or(wins) {
+            self.extreme = Some(value.canonical());
+        }
+    }
+
+    pub(crate) fn add_value(&mut self, measure: &Measure, value: Option<&Value>) {
         let Some(value) = value else {
-            return Ok(());
+            return;
         };
         self.count += 1;
         match (measure, value) {
             (Measure::Sum(_) | Measure::Avg(_), Value::Int(n)) => {
-                self.int = (self.int.checked_add(*n))
-                    .ok_or_else(|| invalid(format!("the sum of `{name}` is too large")))?;
+                self.int += *n as i128;
                 self.float += *n as f64;
             }
             (Measure::Sum(_) | Measure::Avg(_), Value::Number(n)) => self.float += n,
-            (Measure::Min(_), value)
-                if self.extreme.as_ref().is_none_or(|e| value.order(e).is_lt()) =>
-            {
-                self.extreme = Some(value.clone());
-            }
-            (Measure::Max(_), value)
-                if self.extreme.as_ref().is_none_or(|e| value.order(e).is_gt()) =>
-            {
-                self.extreme = Some(value.clone());
-            }
+            (Measure::Min(_) | Measure::Max(_), value) => self.consider(measure, value.clone()),
             _ => {}
         }
-        Ok(())
     }
 
-    fn value(self, measure: &Measure, schema: &Schema) -> Option<Value> {
-        Some(match measure {
+    fn value(self, measure: &Measure, schema: &Schema) -> Result<Option<Value>> {
+        Ok(Some(match measure {
             Measure::Count(_) => Value::Int(self.count as i64),
-            Measure::Sum(name) if schema.attributes.get(name) == Some(&Kind::Int) => {
-                Value::Int(self.int)
-            }
+            Measure::Sum(name) if schema.attributes.get(name) == Some(&Kind::Int) => Value::Int(
+                i64::try_from(self.int)
+                    .map_err(|_| invalid(format!("the sum of `{name}` is too large")))?,
+            ),
             Measure::Sum(_) => Value::Number(self.float),
-            Measure::Avg(_) if self.count == 0 => return None,
+            Measure::Avg(_) if self.count == 0 => return Ok(None),
             Measure::Avg(_) => Value::Number(self.float / self.count as f64),
-            Measure::Min(_) | Measure::Max(_) => self.extreme?,
-        })
+            Measure::Min(_) | Measure::Max(_) => return Ok(self.extreme),
+        }))
     }
 }

@@ -13,6 +13,7 @@ use crate::{Id, Result};
 pub(crate) struct Resolved {
     pub live: u64,
     pub ids: Vec<Span>,
+    pub rows: Vec<usize>,
     pub columns: BTreeMap<String, Column>,
 }
 
@@ -56,9 +57,17 @@ impl Resolved {
             };
             resolved.insert(name.clone(), column);
         }
+        let rows = (resolved.values().next())
+            .map(|column| {
+                (column.pages.iter())
+                    .map(|page| page.stats.rows as usize)
+                    .collect()
+            })
+            .unwrap_or_default();
         let resolved = Arc::new(Resolved {
             live: columns.live,
             ids,
+            rows,
             columns: resolved,
         });
         storage.cache().insert(key, Arc::clone(&resolved), weight);

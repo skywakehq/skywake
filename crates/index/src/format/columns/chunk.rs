@@ -234,21 +234,17 @@ fn runs_of(codes: &[u32], runs: usize) -> Data {
 }
 
 fn ints(values: &[Option<Value>]) -> Option<Vec<i64>> {
-    let present = values.iter().flatten().map(|value| match value {
+    let int = |value: &Value| match value {
         Value::Int(n) | Value::Datetime(n) => Some(*n),
         _ => None,
-    });
-    let present: Vec<i64> = present.collect::<Option<_>>()?;
-    let filler = present.first().copied().unwrap_or(0);
-    let mut next = present.into_iter();
-    Some(
-        (values.iter())
-            .map(|value| match value {
-                Some(_) => next.next().unwrap_or(filler),
-                None => filler,
-            })
-            .collect(),
-    )
+    };
+    let filler = match values.iter().flatten().next() {
+        Some(value) => int(value)?,
+        None => 0,
+    };
+    (values.iter())
+        .map(|value| value.as_ref().map_or(Some(filler), int))
+        .collect()
 }
 
 fn frame(ints: &[i64]) -> Data {

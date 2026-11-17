@@ -77,10 +77,7 @@ impl Store {
                 let raw = skywake_core::open_store(&location)?;
                 let name = match options.kind.as_str() {
                     "local" => "local".to_string(),
-                    _ => format!(
-                        "slow ({} ms, {} in flight, p99 {}x, {} MB/s)",
-                        options.latency_ms, options.in_flight, options.tail, options.mb_per_s
-                    ),
+                    _ => slow_name(options),
                 };
                 (raw, Place::Folder(dir), name, location)
             }
@@ -97,17 +94,10 @@ impl Store {
             }
             other => bail!("unknown store `{other}`: use local, slow or s3://bucket/folder"),
         };
-        let (inner, settings): (Arc<dyn ObjectStore>, _) = match options.kind.as_str() {
+        let log = Arc::new(Log::default());
+        let (store, settings): (Arc<dyn ObjectStore>, _) = match options.kind.as_str() {
             "slow" => (
-                Arc::new(
-                    Slow::new(
-                        raw,
-                        Duration::from_millis(options.latency_ms),
-                        options.in_flight,
-                    )
-                    .with_tail(options.tail)
-                    .with_bandwidth(options.mb_per_s),
-                ),
+                slow(raw, options, log.clone()),
                 json!({
                     "kind": "slow",
                     "latency_ms": options.latency_ms,
@@ -116,15 +106,17 @@ impl Store {
                     "mb_per_s": options.mb_per_s,
                 }),
             ),
-            "local" => (raw, json!({ "kind": "local", "latency_ms": 0 })),
+            "local" => (
+                Arc::new(Counted::new(raw, log.clone())),
+                json!({ "kind": "local", "latency_ms": 0 }),
+            ),
             _ => (
-                raw,
+                Arc::new(Counted::new(raw, log.clone())),
                 json!({ "kind": "s3", "location": name, "endpoint": endpoint(), "latency_ms": 0 }),
             ),
         };
-        let log = Arc::new(Log::default());
         Ok(Self {
-            store: Arc::new(Counted::new(inner, log.clone())),
+            store,
             log,
             name,
             location,
@@ -143,6 +135,32 @@ impl Store {
             }
         }
     }
+}
+
+pub(crate) fn slow(
+    raw: Arc<dyn ObjectStore>,
+    options: &Options,
+    log: Arc<Log>,
+) -> Arc<dyn ObjectStore> {
+    let latency = Slow::new(raw, Duration::from_millis(options.latency_ms), 0)
+        .with_tail(options.tail)
+        .with_bandwidth(options.mb_per_s);
+    let counted = Counted::new(Arc::new(latency), log);
+    Arc::new(Slow::queued(Arc::new(counted), options.in_flight))
+}
+
+fn slow_name(options: &Options) -> String {
+    let mut parts = vec![
+        format!("{} ms", options.latency_ms),
+        format!("{} in flight", options.in_flight),
+    ];
+    if options.tail > 1.0 {
+        parts.push(format!("p99 {}x", options.tail));
+    }
+    if options.mb_per_s > 0.0 {
+        parts.push(format!("{} MB/s a request", options.mb_per_s));
+    }
+    format!("slow ({})", parts.join(", "))
 }
 
 fn endpoint() -> String {

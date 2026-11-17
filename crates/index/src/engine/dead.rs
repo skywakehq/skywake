@@ -2,11 +2,10 @@ use std::collections::{BTreeMap, HashSet};
 
 use super::resolve::Resolved;
 use crate::format::Version;
+use crate::format::columns::select::Bits;
 use crate::format::rows;
 use crate::store::Storage;
 use crate::{Error, Id, Result};
-
-pub(crate) type Bits = Vec<u64>;
 
 #[derive(Default)]
 pub(crate) struct Dead {
