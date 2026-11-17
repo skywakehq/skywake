@@ -26,7 +26,7 @@ use crate::filter::Directory;
 use crate::filter::attrs::Attrs;
 use crate::format::cluster::{ClusterRef, Codes};
 use crate::format::directory;
-use crate::format::legacy::V10;
+use crate::format::legacy::{V10, V11};
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -174,6 +174,9 @@ impl Storage {
                 Hint::Segment(hash) => self.get::<Segment>(hash).await.map(drop),
                 Hint::Directory(hash) => self.get::<Directory>(hash).await.map(drop),
                 Hint::Clusters(hash) => self.get::<directory::Directory>(hash).await.map(drop),
+                Hint::Postings(hash, bytes) => text::postings::read::open(self, hash, bytes)
+                    .await
+                    .map(drop),
             };
         });
         futures::future::join_all(fetches).await;
@@ -191,9 +194,11 @@ impl Storage {
     }
 
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
-        Ok(match version.columns {
-            Some(_) => self.chunks.objects.put(version).await?,
-            None => self.chunks.objects.put(&V10::from(version)).await?,
+        let objects = &self.chunks.objects;
+        Ok(match (version.has_postings(), &version.columns) {
+            (true, _) => objects.put(version).await?,
+            (false, Some(_)) => objects.put(&V11::from(version)).await?,
+            (false, None) => objects.put(&V10::from(version)).await?,
         })
     }
 
@@ -476,7 +481,12 @@ pub(crate) fn chunk_path(hash: Hash) -> Path {
 pub(crate) fn hints(version: &Version) -> Vec<Hint> {
     let mut hints = Vec::new();
     if let Some(text) = &version.text {
-        hints.extend(text.parts.iter().map(|p| Hint::Text(p.hot, p.hot_bytes)));
+        for p in &text.parts {
+            hints.push(Hint::Text(p.hot, p.hot_bytes));
+            if let Some(postings) = &p.postings {
+                hints.push(Hint::Postings(postings.directory, postings.directory_bytes));
+            }
+        }
     }
     if version.tail.len() <= HINTED_SEGMENTS {
         hints.extend(version.tail.iter().map(|s| Hint::Segment(s.hash)));

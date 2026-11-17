@@ -319,7 +319,7 @@ async fn a_version_of_format_7_opens_and_queries_the_same() {
         tail: version.tail.clone(),
         ann: version.ann.as_ref().map(AnnV7::from),
         next_seq: version.next_seq,
-        text: version.text.clone(),
+        text: version.text.as_ref().map(From::from),
     };
     let hash = Objects::new(store.clone()).put(&old).await.unwrap();
     head::create(store.as_ref(), "old", hash, &[])

@@ -242,6 +242,8 @@ impl Reachable {
             self.blobs.insert(part.hot);
             self.blobs.extend(part.blobs.iter().copied());
             self.blobs.extend(part.dead);
+            self.blobs
+                .extend(part.postings.iter().flat_map(|p| p.blobs.iter().copied()));
         }
         if let Some(columns) = &version.columns {
             self.columns(objects, columns).await?;

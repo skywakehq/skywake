@@ -65,12 +65,20 @@ pub struct Args {
         help = "For the slow store: the most requests in flight"
     )]
     in_flight: usize,
+    #[arg(
+        long,
+        help = "Build Skywake's own postings beside the Tantivy parts and search them"
+    )]
+    postings: bool,
     #[arg(long, help = "The results folder; by default benchmarks/results/<run>")]
     out: Option<PathBuf>,
 }
 
 pub async fn run(args: Args) -> Result<()> {
-    let label = args.rows.map_or("all".to_string(), |rows| rows.to_string());
+    let mut label = args.rows.map_or("all".to_string(), |rows| rows.to_string());
+    if args.postings {
+        label.push_str("-postings");
+    }
     let folder =
         (args.store.clone()).unwrap_or_else(|| args.dir.join(format!("stores/index-{label}")));
     std::fs::create_dir_all(&folder)?;
@@ -81,6 +89,7 @@ pub async fn run(args: Args) -> Result<()> {
             "dataset": args.dir.file_name().map(|n| n.to_string_lossy()),
             "rows": label,
             "batch": args.batch,
+            "postings": args.postings,
             "k1": args.k1,
             "b": args.b,
             "k": 10,
@@ -260,7 +269,12 @@ async fn load(args: &Args, raw: Arc<dyn ObjectStore>) -> Result<(usize, f64, f64
         b: args.b,
         ..TextOptions::default()
     };
-    let index = Index::create(raw, Schema::new().text("body", options)).await?;
+    let unbounded = skywake_index::Options {
+        unbuilt_bytes: u64::MAX,
+        postings: args.postings,
+        ..Default::default()
+    };
+    let index = Index::create_with(raw, Schema::new().text("body", options), unbounded).await?;
     let path = args.dir.join("collection.tsv");
     let file = File::open(&path).with_context(|| path.display().to_string())?;
     let rows = args.rows.unwrap_or(usize::MAX);

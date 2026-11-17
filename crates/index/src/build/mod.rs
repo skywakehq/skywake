@@ -26,15 +26,27 @@ use crate::{Column, Element, Error, Kind, Result};
 
 const READ_AHEAD: usize = 16;
 
+pub(crate) struct Settings {
+    pub budget: usize,
+    pub cluster_rows: usize,
+    pub spill: bool,
+    pub columns: Option<usize>,
+    pub postings: bool,
+}
+
 pub(crate) async fn build(
     storage: &Storage,
     branch: &str,
-    budget: usize,
-    cluster_rows: usize,
-    spill: bool,
+    settings: Settings,
     full: bool,
-    columns: Option<usize>,
 ) -> Result<bool> {
+    let Settings {
+        budget,
+        cluster_rows,
+        spill,
+        columns,
+        postings,
+    } = settings;
     let version = storage.current(branch).await?;
     let covers = version.covers() + version.tail.len();
     let vectors = !version.schema.vectors.is_empty();
@@ -43,7 +55,10 @@ pub(crate) async fn build(
         .is_some_and(|ann| !ann.parts.keys().eq(&version.schema.filter_index));
     let columns_missing =
         columns.is_some() && version.columns.is_none() && (version.ann.is_some() || !vectors);
-    let nothing_new = version.tail.is_empty() && built_before && !parts_missing && !columns_missing;
+    let postings_missing = postings
+        && (version.text.iter().flat_map(|text| &text.parts)).any(|p| p.postings.is_none());
+    let rebuilt = parts_missing || columns_missing || postings_missing;
+    let nothing_new = version.tail.is_empty() && built_before && !rebuilt;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
     }
@@ -101,7 +116,8 @@ pub(crate) async fn build(
         }
         _ => None,
     };
-    let text = crate::text::build::build(storage, &version, budget, full, &mut written).await?;
+    let text = crate::text::build::build(storage, &version, budget, full, postings, &mut written);
+    let text = text.await?;
     let built = (version.built)
         .append(storage, &version.tail, &mut written)
         .await?;

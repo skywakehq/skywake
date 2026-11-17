@@ -605,6 +605,97 @@ engine's own `server_ms` for a grouped count is 3 to 4 ms after a gap against 1.
 wakes parked threads runs several times slower, and the more work, the bigger the gap. These numbers cannot
 say what a server does; the AWS run (on Linux, with no efficiency cores) is the measurement that counts.
 
+Phase 5, the text engine: `index-bench msmarco` on all 8.8M MS MARCO passages, k1 0.9 and b 0.4, top 10, on a
+laptop. Warm is 1,000 dev queries in-process on a local store; cold opens a fresh index per query on the slow
+store (60 ms a request, 64 in flight). Posting files are written when `Options.postings` is on (off by default,
+`SKYWAKE_INDEX_POSTINGS=on` in the API) (`phase4-text-msmarco`, `phase5-text-msmarco-off`, `phase5-text-msmarco`):
+
+| MS MARCO, 8.8M             | tpuf v3 | Phase 4 | Postings off | Postings on      |
+| -------------------------- | ------: | ------: | -----------: | ---------------: |
+| warm p50, ms               |         |     2.4 |          2.4 |              0.6 |
+| warm p90, ms               |      18 |     9.7 |          9.7 |              2.0 |
+| warm p99, ms               |         |    25.7 |         24.1 |              4.2 |
+| cold p90, ms               |     306 |     287 |          295 |              273 |
+| cold waves, mean / most    |         |   4 / 4 |        4 / 4 |         3.88 / 4 |
+| cold GETs                  |         |    38.2 |         38.2 |             15.2 |
+| cold bytes                 |         | 23.0 MB |      23.0 MB |          16.1 MB |
+| MRR@10, dev small          |         |  0.1835 |       0.1834 |           0.1836 |
+| nDCG@10, dev small         |         |  0.2281 |       0.2281 |           0.2282 |
+| MRR@10 / nDCG@10, DL19     |         | 0.6940 / 0.5064 | same  |             same |
+| build                      |         |  67.2 s |       67.8 s |   77.8 s (+16%)  |
+| index                      |         | 6,069 MB |    6,069 MB | 7,097 MB (+17%)  |
+
+With postings off nothing moves (`compare.py`: 0 numbers worse). Quality differs in the fourth decimal between
+runs of the same code, because documents with equal scores come back in the order Tantivy numbered them. The
+tpuf numbers are end to end on 10M; ours here are in-process, so they are not yet comparable (phase 4's harness
+and the AWS run are).
+
+What was built (`crates/index/src/text/postings/`): one posting file per text part, read from the finished
+Tantivy segment so documents, frequencies and length norms are the ones Tantivy scores. A term's span holds its
+document frequency, a block index with each block's largest frequency and shortest length, blocks of 128
+postings (packed gaps, packed frequencies, one norm byte), and its 32 highest-impact postings with their ids.
+Spans of up to 128 documents sit in hash buckets; longer ones are found by term hash in a directory that the
+head hints. Every stored piece carries a checksum. Ranking is block-max MAXSCORE with a threshold primed from
+the stored best postings, over document ranges on up to 8 threads with a shared threshold; dead, replaced and
+filtered documents are one bitmap. Scores use Tantivy's own `Bm25Weight`, so they match to rounding. Tantivy
+still expands fuzzy words and prefixes, evaluates filters and phrases into the bitmap, and returns stored
+attributes and highlights; a query with none of those opens no Tantivy part. Versions with postings are format
+12; format 11 still reads and is still written when only columns are on.
+
+Checked by: the scorer against brute force (the exact top k, ties included, on 1, 2 and 7 threads); a
+differential test against the Tantivy path over random writes, deletes, builds, filters, k1 and b, two fields,
+boosts, repeated words, fuzzy, prefixes, string ids, garbage collection and a cold reopen; damaged spans.
+
+Review after phase 5: three independent reviews of the diff. Fixed: a scan that could loop forever on a
+damaged span, format 11 changing shape without a new number, turning postings on doing nothing for an index
+with no new writes, short spans all held in memory during a build (now spilled in sorted runs), ids fetched one
+hit at a time, blobs recorded only after all uploads, unchecked range reads, hits under the floor, scores that
+depended on thread timing in the last digit (now summed in f64), threads without a global cap, and span
+parsing on the async runtime.
+
+Phase 5 gaps closed on the same branch (postings on, all 8.8M passages, same harness; `phase5-text-msmarco`
+is `d9250e5`):
+
+| MS MARCO, 8.8M             | tpuf v3 | Phase 4  | d9250e5          | Gaps closed     |
+| -------------------------- | ------: | -------: | ---------------: | --------------: |
+| warm p50, ms               |         |      2.4 |              0.6 |             0.5 |
+| warm p90, ms               |      18 |      9.7 |              2.0 |             1.9 |
+| warm p99, ms               |         |     25.7 |              4.2 |             4.1 |
+| cold p90, ms               |     306 |      287 |              273 |             229 |
+| cold waves, mean / most    |         |    4 / 4 |         3.88 / 4 |           3 / 3 |
+| cold GETs                  |         |     38.2 |             15.2 |            15.6 |
+| cold bytes                 |         |  23.0 MB |          16.1 MB |         21.4 MB |
+| MRR@10 / nDCG@10, dev      |         | 0.1835 / 0.2281 | 0.1836 / 0.2282 | 0.1837 / 0.2283 |
+| build                      |         |   67.2 s |   77.8 s (+16%)  |  67.1 s (0%)    |
+| index                      |         | 6,069 MB | 7,097 MB (+17%)  | 6,646 MB (+9.5%) |
+
+- Cold in 3 waves: documents go to Tantivy in groups (4,096 documents or 128 KB), so a part's documents keep
+  their write order and numeric ids form runs. The posting directory, read in wave 2, holds those runs, so a
+  hit's id needs no fetch. String and UUID ids still read id blocks in a fourth wave for hits outside each
+  term's 32 best postings.
+- Cold bytes: not met as asked. Choosing the blocks of a long span that can beat the threshold needs the span's
+  block index before its blocks, which is a fourth wave; 3 waves won. Norms are now packed per block
+  (259 MB of norms on disk) and short spans no longer repeat their postings as a best list. Cold bytes rose
+  from 16.1 to 21.4 MB because the Tantivy hot blob is hinted again (next item); it is still under phase 4.
+- Hints: parts with postings hint both the posting directory and the Tantivy hot blob, so filtered, `include`,
+  fuzzy and highlighted queries open no Tantivy part inside the query.
+- Build and index: posting files are drafted on 8 threads, one term range each, in a deterministic layout.
+  Tantivy's `key` fast field now holds each document's write order (it compresses to almost nothing) instead
+  of an 8-byte id hash, which saves about 70 MB; ids reach the id map from the writer. Both are now within 10%.
+- SIMD and pool: unpacking copies a block into a stack buffer first, 1.8x faster in a micro-benchmark; a
+  width-specialized version and a rayon pool measured no better, so neither is kept. No hand-written SIMD.
+- Two ids with the same 64-bit key in one part now fail the build with an `Invalid` error instead of one id
+  silently answering for both.
+
+Review: two independent reviews. Fixed: old posting directories decoding as garbage (directories now start
+with a layout mark and older ones read as corrupt; only `d9250e5` wrote them), grouping without a byte cap
+removing Tantivy's back-pressure, per-worker spill runs small enough to exhaust open files at the merge, and
+blob layout depending on thread timing.
+
+Still open for phase 6: reading only the needed blocks of long spans (needs a wave budget for it), the fourth
+wave for non-numeric ids, the cold bytes of the Tantivy hot blob, and the postings-off gate rerun with grouped
+writes (grouping also changes the postings-off build).
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.

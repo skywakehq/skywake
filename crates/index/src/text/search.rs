@@ -18,7 +18,9 @@ use tantivy_fst::Automaton;
 
 use super::fields::{Fields, analyzer, key, prefix_analyzer, tokens};
 use super::highlight::highlight;
-use super::part::{self, Opened, blocking};
+use super::part::{self, IdMap, Opened, PartRef, blocking};
+use super::posted::{Posted, blocked, dead_words, directory};
+use super::postings::Directory;
 use super::tail::{TailText, analyzed, holds};
 use super::{Match, TextHit, TextOptions, TextQuery, engine};
 use crate::format::Version;
@@ -36,13 +38,13 @@ pub(crate) async fn search(
     query: &TextQuery,
 ) -> Result<Vec<TextHit>> {
     let parts = version.text.as_ref().map_or(&[][..], |text| &text.parts);
-    let (tail, opened) = futures::try_join!(
+    let opening = (parts.iter())
+        .filter(|_| !lean(parts, query))
+        .map(|p| part::open(storage, p.hot, p.hot_bytes));
+    let (tail, opened, directories) = futures::try_join!(
         Tail::load(storage, version),
-        try_join_all(
-            parts
-                .iter()
-                .map(|p| part::open(storage, p.hot, p.hot_bytes))
-        )
+        try_join_all(opening),
+        try_join_all(parts.iter().map(|p| directory(storage, p)))
     )?;
     let mut plan = Plan::new(&version.schema, part::widest(&opened), query)?;
     if (plan.clauses.is_empty() && plan.prefixes.is_empty()) || query.top_k == 0 {
@@ -62,39 +64,73 @@ pub(crate) async fn search(
     let live = tail.live(&newest);
     let tail_side = TailSide::new(&plan, &tail, &texts, &live, query)?;
 
+    let clauses: Vec<(&str, &str)> = (plan.clauses.iter())
+        .map(|(f, _, word, _)| (plan.text[*f].0.as_str(), word.as_str()))
+        .collect();
+    let shadow = &shadow;
+    let maps = (0..parts.len()).map(|p| id_map(&opened, &directories, p));
+    let hidden = try_join_all(maps.map(|ids| async move {
+        match ids {
+            Some(ids) => part::find(storage, ids, shadow).await,
+            None => Ok(BTreeMap::new()),
+        }
+    }));
+    let posted = (directories.iter().cloned()).map(|found| Posted::load(storage, found, &clauses));
     let mut reads: Vec<BoxFuture<'_, Result<()>>> = Vec::new();
-    for opened in &opened {
-        reads.extend(warm(opened, &plan, query));
+    for (opened, part) in opened.iter().zip(parts) {
+        reads.extend(warm(opened, &plan, query, part.postings.is_none()));
     }
     let dead = try_join_all(parts.iter().map(|p| part::dead(storage, p)));
-    let hidden =
-        try_join_all((opened.iter()).map(|opened| part::find(storage, &opened.ids, &shadow)));
     let mut wanted = Vec::new();
     if let Some(filter) = &query.filter {
         id_keys(filter, &mut wanted);
     }
     let by_id =
         try_join_all((opened.iter()).map(|opened| part::find(storage, &opened.ids, &wanted)));
-    let ((), dead, hidden, by_id) = futures::try_join!(
+    let words = try_join_all(parts.iter().map(|p| dead_words(storage, p)));
+    let ((), dead, hidden, by_id, posted, words) = futures::try_join!(
         try_join_all(reads).map(|done| done.map(drop)),
         dead,
         hidden,
-        by_id
+        by_id,
+        try_join_all(posted),
+        words
     )?;
+    let posted = Arc::new(posted);
 
     let scored = {
         let plan = plan.clone();
         let opened = opened.clone();
+        let posted = posted.clone();
         let filter = query.filter.clone();
         let top_k = query.top_k;
         blocking(move || -> Result<Top> {
-            let stats = statistics(&plan, &opened, &tail_side.stats)?;
+            let scored = (opened.iter().zip(posted.iter())).filter(|(_, posted)| posted.is_none());
+            let scored: Vec<&Opened> = scored.map(|(opened, _)| &**opened).collect();
+            let stats = statistics(&plan, &scored, &tail_side.stats, &posted)?;
+            let weights = weights(&plan, &stats);
             let mut top = Top::new(top_k);
-            tail_side.score(&plan, &stats, &mut top);
-            for (p, opened) in opened.iter().enumerate() {
-                let hidden: HashSet<u32> = hidden[p].values().copied().collect();
+            tail_side.score(&plan, &weights, &mut top);
+            for p in 0..posted.len() {
                 let dead = dead[p].as_deref().map(Vec::as_slice);
-                let filtered = filter_bits(&plan, opened, filter.as_ref(), &by_id[p])?;
+                let opened = opened.get(p);
+                let filtered = match opened {
+                    Some(opened) => filter_bits(&plan, opened, filter.as_ref(), &by_id[p])?,
+                    None => None,
+                };
+                let hidden = hidden[p].values().copied();
+                if let Some(posted) = &posted[p] {
+                    let docs = posted.directory.docs;
+                    let dead = words[p].as_deref().map(Vec::as_slice);
+                    let blocked = blocked(docs, dead, hidden, filtered.as_deref());
+                    let hits = posted.search(&weights, blocked.as_deref(), top_k, top.threshold());
+                    for hit in hits {
+                        top.offer(hit.score, Source::Part(p, hit.doc));
+                    }
+                    continue;
+                }
+                let opened = opened.ok_or_else(|| engine("a text part was not opened"))?;
+                let hidden: HashSet<u32> = hidden.collect();
                 let allowed = |doc: u32| {
                     !dead.is_some_and(|bits| part::is_set(bits, doc))
                         && !hidden.contains(&doc)
@@ -123,18 +159,35 @@ pub(crate) async fn search(
     };
 
     let found = scored.sorted();
+    let (ranked, opened) = (&found, &opened);
+    let named = try_join_all(posted.iter().enumerate().map(|(p, posted)| async move {
+        let docs = ranked.iter().filter_map(|(_, source)| match *source {
+            Source::Part(part, doc) if part == p && opened.get(p).is_none() => Some(doc),
+            _ => None,
+        });
+        let docs: Vec<u32> = docs.collect();
+        match posted {
+            Some(posted) if !docs.is_empty() => posted.ids(storage, &docs).await,
+            _ => Ok(HashMap::new()),
+        }
+    }))
+    .await?;
     let docs = try_join_all(found.iter().map(|(_, source)| async {
         match *source {
             Source::Tail(segment, row) => {
                 let segment = &tail.segments[segment].1;
                 Ok((segment.ids[row].clone(), segment.attributes[row].clone()))
             }
-            Source::Part(p, doc) => {
-                let address = DocAddress::new(0, doc);
-                let stored: TantivyDocument =
-                    (opened[p].searcher.doc_async(address).await).map_err(engine)?;
-                part::stored(&stored, &plan.fields)
-            }
+            Source::Part(p, doc) => match (opened.get(p), named[p].get(&doc)) {
+                (Some(opened), _) => {
+                    let address = DocAddress::new(0, doc);
+                    let stored: TantivyDocument =
+                        (opened.searcher.doc_async(address).await).map_err(engine)?;
+                    part::stored(&stored, &plan.fields)
+                }
+                (None, Some(id)) => Ok((id.clone(), Attributes::new())),
+                (None, None) => Err(engine("a text part was not opened")),
+            },
         }
     }))
     .await?;
@@ -143,6 +196,27 @@ pub(crate) async fn search(
         .collect();
     hits.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.id.cmp(&b.id)));
     Ok(hits)
+}
+
+fn lean(parts: &[PartRef], query: &TextQuery) -> bool {
+    parts.iter().all(|part| part.postings.is_some())
+        && query.fuzzy == 0
+        && !query.last_as_prefix
+        && query.filter.is_none()
+        && query.matches.is_empty()
+        && query.include.is_empty()
+        && query.highlight.is_empty()
+}
+
+fn id_map<'a>(
+    opened: &'a [Arc<Opened>],
+    directories: &'a [Option<Arc<Directory>>],
+    part: usize,
+) -> Option<&'a IdMap> {
+    match &directories[part] {
+        Some(directory) => Some(&directory.ids),
+        None => opened.get(part).map(|opened| &opened.ids),
+    }
 }
 
 const MAX_EDITS: u8 = 2;
@@ -561,7 +635,12 @@ impl Bm25StatisticsProvider for Stats {
     }
 }
 
-fn statistics(plan: &Plan, opened: &[Arc<Opened>], tail: &Counts) -> Result<Stats> {
+fn statistics(
+    plan: &Plan,
+    opened: &[&Opened],
+    tail: &Counts,
+    posted: &[Option<Posted>],
+) -> Result<Stats> {
     let mut stats = Stats {
         docs: tail.docs,
         tokens: HashMap::new(),
@@ -575,6 +654,23 @@ fn statistics(plan: &Plan, opened: &[Arc<Opened>], tail: &Counts) -> Result<Stat
         stats.df.insert(term, tail_df);
         let tail_tokens = tail.tokens.get(f).copied().unwrap_or(0);
         stats.tokens.insert(*field, tail_tokens);
+    }
+    for posted in posted.iter().flatten() {
+        stats.docs += posted.directory.docs as u64;
+        let mut fields = HashSet::new();
+        let mut terms = HashSet::new();
+        for ((f, field, token, _), span) in plan.clauses.iter().zip(&posted.spans) {
+            if fields.insert(*field) {
+                let tokens = posted.directory.tokens(&plan.text[*f].0);
+                *stats.tokens.entry(*field).or_default() += tokens;
+            }
+            let term = Term::from_field_text(*field, token);
+            if let Some(span) = span
+                && terms.insert(term.clone())
+            {
+                *stats.df.entry(term).or_default() += span.head.df as u64;
+            }
+        }
     }
     for opened in opened {
         let has = |field: Field| (field.field_id() as usize) < fields_of(opened);
@@ -644,19 +740,11 @@ impl TailSide {
         Ok(side)
     }
 
-    fn score(&self, plan: &Plan, stats: &Stats, top: &mut Top) {
-        let weights: Vec<Bm25Weight> = (plan.clauses.iter())
-            .map(|(_, field, token, boost)| {
-                let term = Term::from_field_text(*field, token);
-                Bm25Weight::for_terms(stats, &[term])
-                    .map(|weight| weight.boost_by(*boost))
-                    .expect("statistics in memory")
-            })
-            .collect();
+    fn score(&self, plan: &Plan, weights: &[Bm25Weight], top: &mut Top) {
         for (segment, row, text) in &self.rows {
             let mut score = 0.0;
             let mut matched = false;
-            for ((f, _, token, _), weight) in plan.clauses.iter().zip(&weights) {
+            for ((f, _, token, _), weight) in plan.clauses.iter().zip(weights) {
                 let (Some(tokens), Some(n)) = (text.tokens(*row, *f), text.term(token)) else {
                     continue;
                 };
@@ -673,6 +761,17 @@ impl TailSide {
             }
         }
     }
+}
+
+fn weights(plan: &Plan, stats: &Stats) -> Vec<Bm25Weight> {
+    (plan.clauses.iter())
+        .map(|(_, field, token, boost)| {
+            let term = Term::from_field_text(*field, token);
+            Bm25Weight::for_terms(stats, &[term])
+                .map(|weight| weight.boost_by(*boost))
+                .expect("statistics in memory")
+        })
+        .collect()
 }
 
 fn tail_matches(text: &TailText, row: usize, condition: &Condition) -> bool {
@@ -700,6 +799,7 @@ fn warm<'a>(
     opened: &'a Opened,
     plan: &'a Plan,
     query: &'a TextQuery,
+    scored: bool,
 ) -> Vec<BoxFuture<'a, Result<()>>> {
     let mut reads: Vec<BoxFuture<'a, Result<()>>> = Vec::new();
     let Ok(reader) = single(opened) else {
@@ -709,8 +809,8 @@ fn warm<'a>(
     let mut ranges: Vec<Range> = Vec::new();
     let mut norms: HashSet<Field> = HashSet::new();
     let fields = plan.fields.within(fields_of(opened));
-    let clauses =
-        (plan.clauses.iter()).filter(|(f, ..)| fields.text.contains_key(&plan.text[*f].0));
+    let clauses = (plan.clauses.iter())
+        .filter(|(f, ..)| scored && fields.text.contains_key(&plan.text[*f].0));
     for (_, field, token, _) in clauses {
         terms.insert((Term::from_field_text(*field, token), false));
         norms.insert(*field);

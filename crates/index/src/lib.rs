@@ -65,6 +65,7 @@ pub struct Options {
     pub spill: bool,
     pub columns: bool,
     pub page_rows: usize,
+    pub postings: bool,
 }
 
 impl Default for Options {
@@ -81,6 +82,7 @@ impl Default for Options {
             spill: true,
             columns: false,
             page_rows: 8192,
+            postings: false,
         }
     }
 }
@@ -361,19 +363,14 @@ impl Index {
 
     async fn build_inner(&self, full: bool) -> Result<bool> {
         let options = &self.options;
-        let (budget, rows) = (options.build_bytes, options.cluster_rows);
-        let spill = options.spill;
-        let columns = options.columns.then_some(options.page_rows.max(1));
-        build::build(
-            &self.storage,
-            &self.branch,
-            budget,
-            rows,
-            spill,
-            full,
-            columns,
-        )
-        .await
+        let settings = build::Settings {
+            budget: options.build_bytes,
+            cluster_rows: options.cluster_rows,
+            spill: options.spill,
+            columns: options.columns.then_some(options.page_rows.max(1)),
+            postings: options.postings,
+        };
+        build::build(&self.storage, &self.branch, settings, full).await
     }
 
     pub async fn stats(&self) -> Result<Stats> {

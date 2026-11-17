@@ -9,13 +9,15 @@ use object_store::{ObjectStore, ObjectStoreExt};
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 use tantivy::directory::MmapDirectory;
-use tantivy::indexer::NoMergePolicy;
+use tantivy::indexer::{NoMergePolicy, UserOperation};
 use tantivy::schema::Value as _;
 use tantivy::{Index as Tantivy, IndexWriter, ReloadPolicy, Searcher, TantivyDocument};
 
 use super::dir::{self, BlobDir, Files};
 use super::engine;
 use super::fields::{Fields, key, register};
+use super::postings::PostingsRef;
+use super::postings::build::{Draft, Known, draft};
 use crate::store::{Storage, Written, blob_path};
 use crate::{Attributes, Error, Id, Kind, Result, Value, uuid_text};
 
@@ -32,6 +34,7 @@ pub(crate) struct PartRef {
     pub dead: Option<Hash>,
     pub dead_docs: u32,
     pub bytes: u64,
+    pub postings: Option<PostingsRef>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -157,10 +160,18 @@ pub(crate) struct PartWriter {
     writer: IndexWriter,
     fields: Arc<Fields>,
     docs: u32,
+    known: Option<Known>,
+    keys: Vec<u64>,
+    group: Vec<UserOperation>,
+    grouped: usize,
 }
 
+const GROUP: usize = 4096;
+
+const GROUP_BYTES: usize = 128 << 10;
+
 impl PartWriter {
-    pub(crate) fn new(fields: Arc<Fields>, memory: usize) -> Result<Self> {
+    pub(crate) fn new(fields: Arc<Fields>, memory: usize, postings: bool) -> Result<Self> {
         let folder = tempfile::tempdir().map_err(engine)?;
         let dir = MmapDirectory::open(folder.path()).map_err(engine)?;
         let index =
@@ -180,14 +191,24 @@ impl PartWriter {
             writer,
             fields,
             docs: 0,
+            known: postings.then(Known::default),
+            keys: Vec::new(),
+            group: Vec::with_capacity(GROUP),
+            grouped: 0,
         })
     }
 
     pub(crate) fn add(&mut self, id: &Id, attributes: &Attributes) -> Result<()> {
         let fields = &self.fields;
         let mut doc = TantivyDocument::default();
-        doc.add_bytes(fields.doc, &postcard::to_stdvec(&(id, attributes))?);
-        doc.add_u64(fields.key, key(id));
+        let stored = postcard::to_stdvec(&(id, attributes))?;
+        self.grouped += stored.len();
+        doc.add_bytes(fields.doc, &stored);
+        doc.add_u64(fields.key, self.docs as u64);
+        self.keys.push(key(id));
+        if let Some(known) = &mut self.known {
+            known.add(id)?;
+        }
         for (name, value) in attributes {
             if let Some(&field) = fields.text.get(name) {
                 match value {
@@ -219,8 +240,20 @@ impl PartWriter {
                 _ => {}
             }
         }
-        self.writer.add_document(doc).map_err(engine)?;
+        self.group.push(UserOperation::Add(doc));
         self.docs += 1;
+        match self.group.len() >= GROUP || self.grouped >= GROUP_BYTES {
+            true => self.send(),
+            false => Ok(()),
+        }
+    }
+
+    fn send(&mut self) -> Result<()> {
+        if !self.group.is_empty() {
+            let group = std::mem::replace(&mut self.group, Vec::with_capacity(GROUP));
+            self.grouped = 0;
+            self.writer.run(group).map_err(engine)?;
+        }
         Ok(())
     }
 
@@ -228,7 +261,8 @@ impl PartWriter {
         self.docs
     }
 
-    pub(crate) fn finish(self) -> Result<Built> {
+    pub(crate) fn finish(mut self) -> Result<Built> {
+        self.send()?;
         let mut writer = self.writer;
         writer.commit().map_err(engine)?;
         let segments = self.index.searchable_segment_ids().map_err(engine)?;
@@ -242,28 +276,54 @@ impl PartWriter {
             .map_err(engine)?;
         writer.garbage_collect_files().wait().map_err(engine)?;
         drop(writer);
-        let ids = id_entries(&self.index, self.docs)?;
+        let order = order(&self.index, self.docs)?;
+        let ids = entries(&self.keys, &order)?;
+        let postings = match self.known {
+            Some(known) => {
+                let by_doc = known.by_doc(&order)?;
+                Some(draft(&self.index, &self.fields.text, &by_doc)?)
+            }
+            None => None,
+        };
         Ok(Built {
             folder: self.folder,
             ids,
             docs: self.docs,
+            postings,
         })
     }
 }
 
-fn id_entries(index: &Tantivy, docs: u32) -> Result<Vec<u8>> {
+fn order(index: &Tantivy, docs: u32) -> Result<Vec<u32>> {
     let reader = index.reader().map_err(engine)?;
     let searcher = reader.searcher();
-    let mut pairs = Vec::with_capacity(docs as usize);
+    let mut order = Vec::with_capacity(docs as usize);
     for segment in searcher.segment_readers() {
         let column = segment.fast_fields().u64("key").map_err(engine)?;
         for doc in 0..segment.max_doc() {
-            if let Some(key) = column.first(doc) {
-                pairs.push((key, doc));
-            }
+            let at = (column.first(doc)).and_then(|at| u32::try_from(at).ok());
+            order.push(
+                at.ok_or_else(|| Error::Corrupt(format!("text document {doc} has no order")))?,
+            );
         }
     }
+    Ok(order)
+}
+
+pub(crate) fn entries(keys: &[u64], order: &[u32]) -> Result<Vec<u8>> {
+    let mut pairs = Vec::with_capacity(order.len());
+    for (doc, &at) in order.iter().enumerate() {
+        let key = (keys.get(at as usize))
+            .ok_or_else(|| Error::Corrupt(format!("text document {doc} has no key")))?;
+        pairs.push((*key, doc as u32));
+    }
     pairs.sort_unstable();
+    if let Some(pair) = pairs.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+        return Err(Error::Invalid(format!(
+            "two ids in one text part share the key {:#x}",
+            pair[0].0
+        )));
+    }
     let mut bytes = Vec::with_capacity(pairs.len() * ID_ENTRY);
     for (key, doc) in pairs {
         bytes.extend_from_slice(&key.to_le_bytes());
@@ -276,11 +336,19 @@ pub(crate) struct Built {
     folder: tempfile::TempDir,
     ids: Vec<u8>,
     docs: u32,
+    postings: Option<Draft>,
 }
 
 impl Built {
     pub(crate) async fn store(self, storage: &Storage, written: &mut Written) -> Result<PartRef> {
-        store_part(storage, self.folder.path(), self.ids, self.docs, written).await
+        let (mut part, ids) =
+            store_part(storage, self.folder.path(), self.ids, self.docs, written).await?;
+        if let Some(draft) = self.postings {
+            let postings = draft.store(storage, ids, written).await?;
+            part.bytes += postings.bytes;
+            part.postings = Some(postings);
+        }
+        Ok(part)
     }
 }
 
@@ -290,7 +358,7 @@ async fn store_part(
     ids: Vec<u8>,
     docs: u32,
     written: &mut Written,
-) -> Result<PartRef> {
+) -> Result<(PartRef, IdMap)> {
     let mut files = Vec::new();
     let mut atomic = Vec::new();
     let mut blobs = Vec::new();
@@ -360,7 +428,7 @@ async fn store_part(
     let hot_bytes = encoded.len() as u64;
     let hot_hash = storage.put_blob(encoded).await?;
     written.blobs(blobs.iter().copied().chain([hot_hash]));
-    Ok(PartRef {
+    let part = PartRef {
         hot: hot_hash,
         hot_bytes,
         blobs,
@@ -368,7 +436,9 @@ async fn store_part(
         dead: None,
         dead_docs: 0,
         bytes: bytes + hot_bytes,
-    })
+        postings: None,
+    };
+    Ok((part, hot.ids))
 }
 
 pub(crate) async fn find(
