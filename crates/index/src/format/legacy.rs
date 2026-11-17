@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
 use super::pages::Pages;
@@ -260,6 +260,7 @@ impl From<V2> for Version {
             ann: ann(old.ann),
             next_seq: old.next_seq,
             text: None,
+            columns: None,
         }
     }
 }
@@ -297,6 +298,7 @@ impl From<V3> for Version {
             ann: ann(old.ann),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
         }
     }
 }
@@ -324,6 +326,7 @@ impl From<V4> for Version {
             ann: ann(old.ann),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
         }
     }
 }
@@ -351,6 +354,7 @@ impl From<V5> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
         }
     }
 }
@@ -396,6 +400,7 @@ impl From<V6> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
         }
     }
 }
@@ -440,6 +445,7 @@ impl From<V7> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
         }
     }
 }
@@ -553,6 +559,52 @@ impl From<V9> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
+            columns: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V10 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<Ann>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+}
+
+pub(crate) const V10_FORMAT: u32 = 10;
+
+impl From<V10> for Version {
+    fn from(old: V10) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann,
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: None,
+        }
+    }
+}
+
+impl From<&Version> for V10 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V10_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.clone(),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
         }
     }
 }
@@ -565,6 +617,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V10_FORMAT => postcard::from_bytes::<V10>(raw)?.into(),
         9 => postcard::from_bytes::<V9>(raw)?.into(),
         8 => postcard::from_bytes::<V8>(raw)?.into(),
         7 => postcard::from_bytes::<V7>(raw)?.into(),

@@ -62,6 +62,7 @@ pub struct Options {
     /// temporary folder, unencrypted, instead of reading every segment from
     /// the bucket again for each part. Off for an index with its own key.
     pub spill: bool,
+    pub columns: bool,
 }
 
 impl Default for Options {
@@ -76,6 +77,7 @@ impl Default for Options {
             disk: None,
             shared: None,
             spill: true,
+            columns: false,
         }
     }
 }
@@ -336,8 +338,17 @@ impl Index {
     async fn build_inner(&self, full: bool) -> Result<bool> {
         let options = &self.options;
         let (budget, rows) = (options.build_bytes, options.cluster_rows);
-        let spill = options.spill;
-        build::build(&self.storage, &self.branch, budget, rows, spill, full).await
+        let (spill, columns) = (options.spill, options.columns);
+        build::build(
+            &self.storage,
+            &self.branch,
+            budget,
+            rows,
+            spill,
+            full,
+            columns,
+        )
+        .await
     }
 
     pub async fn stats(&self) -> Result<Stats> {

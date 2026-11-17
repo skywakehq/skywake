@@ -1,6 +1,7 @@
 //! What the index stores: the Version and the blobs it names.
 
 pub(crate) mod cluster;
+pub(crate) mod columns;
 pub(crate) mod directory;
 pub(crate) mod legacy;
 pub(crate) mod pages;
@@ -17,9 +18,10 @@ use crate::filter::FilterPart;
 use crate::text::part::TextIndex;
 use crate::vector::calibrate::Calibration;
 use crate::{Attributes, Id, Result, Schema, invalid};
+use columns::Columns;
 use pages::Pages;
 
-pub(crate) const FORMAT: u32 = 10;
+pub(crate) const FORMAT: u32 = 11;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 
@@ -33,7 +35,9 @@ pub(crate) struct Version {
     pub ann: Option<Ann>,
     pub next_seq: u64,
     pub text: Option<TextIndex>,
+    pub columns: Option<Columns>,
 }
+
 impl Version {
     pub(crate) fn new(schema: Schema) -> Self {
         Self {
@@ -45,6 +49,7 @@ impl Version {
             ann: None,
             next_seq: 0,
             text: None,
+            columns: None,
         }
     }
 
@@ -62,7 +67,8 @@ impl Version {
             .map(|column| column.table.hashes.len())
             .sum();
         let parts = self.text.as_ref().map_or(0, |text| 256 * text.parts.len());
-        1024 + 64 * self.tail.len() + 32 * (self.built.hashes.len() + pages) + parts
+        let columns = self.columns.as_ref().map_or(0, Columns::weight);
+        1024 + 64 * self.tail.len() + 32 * (self.built.hashes.len() + pages) + parts + columns
     }
 }
 

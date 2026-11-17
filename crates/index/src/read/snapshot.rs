@@ -212,6 +212,9 @@ impl Snapshot {
                 .map(|p| text::part::open(storage, p.hot, p.hot_bytes)),
         )
         .await?;
+        if let Some(columns) = &version.columns {
+            crate::format::columns::warm(storage, columns).await?;
+        }
         let Some(ann) = &version.ann else {
             return Ok(());
         };

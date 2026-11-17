@@ -16,6 +16,7 @@ use full::full_build;
 use grow::grow;
 
 use crate::filter;
+use crate::format;
 use crate::format::cluster::{self, Cluster, ClusterRef, Coder};
 use crate::format::{Ann, Segment, SegmentRef, Version};
 use crate::store::{PARALLELISM, Storage, Written};
@@ -32,6 +33,7 @@ pub(crate) async fn build(
     cluster_rows: usize,
     spill: bool,
     full: bool,
+    columns: bool,
 ) -> Result<bool> {
     let version = storage.current(branch).await?;
     let covers = version.covers() + version.tail.len();
@@ -39,7 +41,8 @@ pub(crate) async fn build(
     let built_before = version.ann.is_some() || version.text.is_some() || !vectors;
     let parts_missing = (version.ann.as_ref())
         .is_some_and(|ann| !ann.parts.keys().eq(&version.schema.filter_index));
-    let nothing_new = version.tail.is_empty() && built_before && !parts_missing;
+    let columns_missing = columns && version.ann.is_some() && version.columns.is_none();
+    let nothing_new = version.tail.is_empty() && built_before && !parts_missing && !columns_missing;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
     }
@@ -77,6 +80,16 @@ pub(crate) async fn build(
         ann.parts =
             filter::build(storage, schema, ann, base.as_ref(), budget, &mut written).await?;
     }
+    let columns = match (&ann, columns) {
+        (Some(ann), true) => {
+            let old = (base.as_ref().zip(version.columns.as_ref()))
+                .filter(|_| incremental)
+                .map(|(ann, columns)| format::columns::build::Base { ann, columns });
+            let schema = &version.schema;
+            Some(format::columns::build::build(storage, schema, ann, old, &mut written).await?)
+        }
+        _ => None,
+    };
     let text = crate::text::build::build(storage, &version, budget, full, &mut written).await?;
     let built = (version.built)
         .append(storage, &version.tail, &mut written)
@@ -94,6 +107,7 @@ pub(crate) async fn build(
                 tail: current.tail[skip..].to_vec(),
                 ann: ann.clone(),
                 text: text.clone(),
+                columns: columns.clone(),
                 ..current.clone()
             })
         })

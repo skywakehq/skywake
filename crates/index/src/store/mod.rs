@@ -26,6 +26,7 @@ use crate::filter::Directory;
 use crate::filter::attrs::Attrs;
 use crate::format::cluster::{ClusterRef, Codes};
 use crate::format::directory;
+use crate::format::legacy::V10;
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -190,7 +191,10 @@ impl Storage {
     }
 
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
-        Ok(self.chunks.objects.put(version).await?)
+        Ok(match version.columns {
+            Some(_) => self.chunks.objects.put(version).await?,
+            None => self.chunks.objects.put(&V10::from(version)).await?,
+        })
     }
 
     pub(crate) async fn get<T>(&self, hash: Hash) -> Result<Arc<T>>

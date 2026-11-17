@@ -18,6 +18,7 @@ pub use skywake_core::Collected;
 use serde::de::DeserializeOwned;
 
 use crate::format::cluster::ClusterRef;
+use crate::format::columns::{Columns, PageRef, Span};
 use crate::format::directory::Directory;
 use crate::format::pages::Pages;
 use crate::format::{SegmentRef, Version, decode_version};
@@ -242,6 +243,9 @@ impl Reachable {
             self.blobs.extend(part.blobs.iter().copied());
             self.blobs.extend(part.dead);
         }
+        if let Some(columns) = &version.columns {
+            self.columns(objects, columns).await?;
+        }
         let Some(ann) = &version.ann else {
             return Ok(());
         };
@@ -261,6 +265,27 @@ impl Reachable {
             for directory in self.chunks::<Directory>(objects, column.directory).await? {
                 self.blobs.extend(directory.pages);
                 self.blobs.extend(directory.slots.hashes);
+            }
+        }
+        Ok(())
+    }
+
+    async fn columns(&mut self, objects: &Objects, columns: &Columns) -> Result<()> {
+        let small = columns
+            .columns
+            .values()
+            .flat_map(|c| [c.dictionary, c.totals]);
+        self.blobs.extend(small);
+        for page in self
+            .chunks::<Vec<Span>>(objects, columns.ids.iter().copied())
+            .await?
+        {
+            self.blobs.extend(page.iter().map(|span| span.blob));
+        }
+        for column in columns.columns.values() {
+            let directory = column.directory.iter().copied();
+            for page in self.chunks::<Vec<PageRef>>(objects, directory).await? {
+                self.blobs.extend(page.iter().map(|page| page.span.blob));
             }
         }
         Ok(())
