@@ -23,11 +23,13 @@ pub(super) struct Plan {
     pub cache_bytes: usize,
     pub qps: Option<f64>,
     pub seconds: u64,
+    pub columns: bool,
 }
 
 pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
     let options = Options {
         unbuilt_bytes: u64::MAX,
+        columns: plan.columns,
         ..Options::default()
     };
     let index = Index::create_with(store.store.clone(), schema(plan.dims), options).await?;
@@ -79,6 +81,7 @@ pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
 pub(super) async fn measure(store: &Store, plan: &Plan) -> Result<Vec<Pass>> {
     let options = Options {
         cache_bytes: plan.cache_bytes,
+        columns: plan.columns,
         ..Options::default()
     };
     let index = Index::open_with(store.store.clone(), skywake_index::MAIN, options).await?;

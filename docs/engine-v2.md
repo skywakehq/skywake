@@ -453,6 +453,21 @@ empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
 | grouped count (1,000), hot  |     521 |   422 |         |         |         |         |         |         |
 | order by, filtered, hot     |      22 |    87 |         |         |         |         |         |         |
 
+At 10M rows (load 400 s, build 252 s, index 8.1 GB; `phase0-attrs-10m`, hot rows that overlapped other
+work rerun idle in `phase0-attrs-10m-rerun`), p90 in ms:
+
+| Query                        | hot+head |   cold |
+| ---------------------------- | -------: | -----: |
+| count                        |    2,717 | 17,348 |
+| count, category = c          |      128 | 13,618 |
+| count, category and range    |      137 | 14,726 |
+| grouped count (1,000)        |    4,040 | 17,061 |
+| grouped count, range         |      667 | 15,210 |
+| order by                     |    5,235 | 19,695 |
+| order by, category = c       |      164 | 14,848 |
+
+Every cold query at 10M reads 884 MB in 5,011 GETs over ~165 waves.
+
 Phase 1 changes storage only: column pages are written when `Options.columns` is on (off by default) and no
 query reads them yet, so its gate is build time and bytes, not query latency.
 

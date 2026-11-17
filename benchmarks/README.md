@@ -153,7 +153,8 @@ rows: `popularity` (a Pareto number), `category` (100 values), `group` (1,000 va
 vector column (`--dims`, 64 by default, since an index needs one today). Each query family draws fresh
 constants per query. Every family runs `hot` (the head held, all in memory), `hot+head` (the head read per
 query, as `Index::query` does) and `cold` (a fresh index per query); `--qps` runs the hot passes open loop.
-Counts and grouped totals are checked against the row count.
+Counts and grouped totals are checked against the row count. `--columns` builds the index with engine v2
+column pages, so a run shows what they cost to build and store.
 
 ```bash
 target/release/index-bench attrs --rows 10000000 --store slow

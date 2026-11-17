@@ -56,6 +56,8 @@ pub struct Args {
     batch: usize,
     #[arg(long, default_value_t = 8, help = "Upserts in flight while loading")]
     writers: usize,
+    #[arg(long, help = "Build column pages (engine v2 storage)")]
+    columns: bool,
     #[command(flatten)]
     store: Options,
     #[arg(long, help = "The results folder; by default benchmarks/results/<run>")]
@@ -84,6 +86,7 @@ pub async fn run(args: Args) -> Result<()> {
         cache_bytes: args.cache_gb << 30,
         qps: args.qps,
         seconds: args.seconds,
+        columns: args.columns,
     };
     let store = Store::open(&args.store)?;
     let mut run = Run::new(
@@ -100,6 +103,7 @@ pub async fn run(args: Args) -> Result<()> {
             "cache_gb": args.cache_gb,
             "batch": args.batch,
             "writers": args.writers,
+            "columns": args.columns,
             "store": store.settings,
         }),
     );
