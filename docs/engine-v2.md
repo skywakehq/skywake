@@ -449,11 +449,23 @@ same on any cloud and that an agent can drive as easily as a person.
 6. **Helm chart hardening.** External Secrets support, a PodDisruptionBudget, network policies, resource
    presets sized `small`/`medium`/`large`, an upgrade hook that migrates before rolling, and `helm test` running
    `deploy/test/smoke.sh`.
-7. **Docs.** A self-hosting section with one page per target, a sizing guide, the upgrade policy, and
+7. **The local stack, `skywake local`.** Today running Skywake locally means cloning the repo and building every
+   image (`scripts/start.sh`). Instead, the installed CLI runs it with no checkout:
+   - `skywake local up` pulls the published images into `~/.skywake/local`: Postgres, the bucket, the API and the
+     console. It picks free ports, makes an organization and a key, and points the CLI, the SDKs and the MCP server
+     at it, so `new Skywake()` works with no settings.
+   - `--lite` runs with no Docker: the API with a local folder as the store and an embedded Postgres, one
+     process, for laptops and CI.
+   - `--sample` loads a demo index and disk.
+   - `status`, `logs`, `stop` (keeps the data), `reset` (asks first), and `doctor` as in item 3.
+   - The same `--yes --json` mode for agents. It prints the MCP config to paste into an agent.
+   - `scripts/start.sh` and `scripts/dev.sh` stay as they are for working on Skywake itself.
+8. **Docs.** A self-hosting section with one page per target, a sizing guide, the upgrade policy, and
    backup and restore. Commands come from the CLI's own `--help` and the published schema, so they can't drift.
 
 **Exit:** from an empty account to a working index and a passing `doctor` in under 10 minutes on AWS, GCP,
-Azure, and kind with MinIO, using one command and no hand edits. kind runs in CI on every change; the real clouds
+Azure, and kind with MinIO, using one command and no hand edits. `skywake local up` gets a fresh laptop to a
+working index in under 2 minutes, and `--lite` in under 30 seconds, on macOS and Linux. kind runs in CI on every change; the real clouds
 run weekly, **each with the user's go-ahead**.
 
 ### Order and regression gates
