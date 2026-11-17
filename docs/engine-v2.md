@@ -759,6 +759,34 @@ turbopuffer v3 (hot 20 ms, cold 1,255 ms) both exit targets are met: hot ≤ 5 m
 
 Not done: the AWS end-to-end cold run (needs a go-ahead) and an API end-to-end vector run.
 
+### Phase 8: adaptive layout
+
+Exit test at 1M rows, no vectors, columns on, slow store: the same index measured as built
+(`phase8-attrs-1m-plain`) and after one rebuild that follows a round of the workload's own queries
+(`phase8-attrs-1m-adapt`, `--adapt`). No schema change. p90 in ms:
+
+| Query                                   | Hot before | Hot after | Cold before | Cold after | Cold read        |
+| --------------------------------------- | ---------: | --------: | ----------: | ---------: | ---------------: |
+| count, category and popularity > p      |        3.6 |       0.4 |         237 |        215 | 25.8 → 9.5 MB    |
+| count by group, popularity > p          |        3.4 |       1.1 |         235 |        215 | 25.7 → 7.6 MB    |
+| order by popularity, top 10             |        0.1 |       0.2 |         220 |        216 | 9.2 → 7.5 MB     |
+| order by popularity, top 10, category   |        2.9 |       1.1 |         254 |        252 | same             |
+
+Unfiltered counts and grouped counts are within noise (count by group hot 0.5 → 0.8 ms). The rebuild took 11.8 s.
+
+- Shape log: every query, order by and aggregate records the attributes it ranges over or orders by (names
+  only, never values). Counts sit under a read lock with atomic increments, at most 256 names, halved when one
+  passes 2^20.
+- Clustering key: a full rebuild of an index without vectors sorts rows on the busiest number, int, datetime or
+  string attribute (at least 16 queries). It uses the build's external sort, so memory stays within the build
+  budget. Keys are order-preserving u64s for numbers, ints and datetimes. With no log, as after a restart, the
+  rebuild keeps the key whose pages are already in order, so a layout is never lost.
+- Effect: pages become disjoint on the key, so range filters skip most of them by min and max.
+
+Not done: automatic composite projections, the per-page partial-result cache, dictionaries past 64K values,
+and clustering for indexes with vectors (their rows are laid out by cluster). The log lives in memory per
+process and is shared by the branches of one store.
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.

@@ -58,6 +58,11 @@ pub struct Args {
     writers: usize,
     #[arg(long, help = "Build column pages (engine v2 storage)")]
     columns: bool,
+    #[arg(
+        long,
+        help = "Ask each family's hot queries once, then rebuild, before measuring"
+    )]
+    adapt: bool,
     #[command(flatten)]
     store: Options,
     #[arg(long, help = "The results folder; by default benchmarks/results/<run>")]
@@ -87,6 +92,7 @@ pub async fn run(args: Args) -> Result<()> {
         qps: args.qps,
         seconds: args.seconds,
         columns: args.columns,
+        adapt: args.adapt,
     };
     let store = Store::open(&args.store)?;
     let mut run = Run::new(
@@ -98,6 +104,7 @@ pub async fn run(args: Args) -> Result<()> {
             "temperatures": args.temperatures,
             "hot_queries": args.hot,
             "cold_queries": args.cold,
+            "adapt": args.adapt,
             "qps": args.qps,
             "seconds": args.seconds,
             "cache_gb": args.cache_gb,

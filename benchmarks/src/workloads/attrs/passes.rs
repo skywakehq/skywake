@@ -24,6 +24,7 @@ pub(super) struct Plan {
     pub qps: Option<f64>,
     pub seconds: u64,
     pub columns: bool,
+    pub adapt: bool,
 }
 
 pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
@@ -63,6 +64,10 @@ pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
     index.build().await?;
     let build = started.elapsed();
     let build_requests = store.log.take();
+    if plan.adapt {
+        adapt(&index, plan).await?;
+        store.log.take();
+    }
     let stats = index.stats().await?;
     store.log.take();
     step.done(&progress::bytes(stats.bytes));
@@ -79,6 +84,23 @@ pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
         peak_rss_build: peak_rss(),
         peak_rss_end: 0,
     })
+}
+
+async fn adapt(index: &Index, plan: &Plan) -> Result<()> {
+    let step = progress::start("adapt", "");
+    let snapshot = index.snapshot().await?;
+    for &family in &plan.families {
+        for n in 0..plan.hot as u64 {
+            ask(&snapshot, &family.ask(n)).await?;
+        }
+    }
+    let started = Instant::now();
+    index.rebuild().await?;
+    step.done(&format!(
+        "rebuilt in {:.1} s",
+        started.elapsed().as_secs_f64()
+    ));
+    Ok(())
 }
 
 pub(super) async fn measure(store: &Store, plan: &Plan) -> Result<Vec<Pass>> {

@@ -4,9 +4,11 @@ use futures::{StreamExt, TryStreamExt, stream};
 
 use super::Columns;
 use super::writer::{Old, Values, Writer, covers};
+use crate::build::full::runs::{Runs, Sorter};
 use crate::format::pages::Paged;
 use crate::format::rows::{self, RowPage};
 use crate::format::{SegmentRef, Version};
+use crate::layout::{self, Keyed};
 use crate::read::tail::Tail;
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::{Attributes, Id, Result, Schema};
@@ -16,7 +18,7 @@ const SAMPLE_ROWS: usize = 65_536;
 pub(crate) async fn build(
     storage: &Storage,
     version: &Version,
-    page_rows: usize,
+    (page_rows, budget, spill): (usize, usize, bool),
     full: bool,
     written: &mut Written,
 ) -> Result<Columns> {
@@ -25,7 +27,7 @@ pub(crate) async fn build(
         .filter(|base| small_tail(base, version) && !fragmented(base, page_rows));
     match base {
         Some(base) => grow(storage, version, base, page_rows, written).await,
-        None => rebuild(storage, version, page_rows, written).await,
+        None => rebuild(storage, version, (page_rows, budget, spill), written).await,
     }
 }
 
@@ -41,7 +43,7 @@ fn fragmented(base: &Columns, page_rows: usize) -> bool {
 async fn rebuild(
     storage: &Storage,
     version: &Version,
-    page_rows: usize,
+    (page_rows, budget, spill): (usize, usize, bool),
     written: &mut Written,
 ) -> Result<Columns> {
     let schema = &version.schema;
@@ -65,25 +67,52 @@ async fn rebuild(
     drop(read);
     let live = latest.values().filter(|(_, live)| *live).count();
     let n = rows::pages_for(live);
-    let mut map = vec![RowPage::default(); n];
-    let mut writer = Writer::new(storage, schema, Some(&sample.values), None);
-    let mut batch = Batch::default();
+    let mut out = Out {
+        writer: Writer::new(storage, schema, Some(&sample.values), None),
+        map: vec![RowPage::default(); n],
+        batch: Batch::default(),
+        page_rows,
+    };
+    let key = layout::key(storage, schema, version.columns.as_ref()).await?;
+    let runs = Runs::new(storage, spill)?;
+    let row_bytes =
+        refs.iter().map(|r| r.bytes).sum::<u64>() / refs.iter().map(|r| r.rows).sum::<u64>().max(1);
+    let limit = budget / 4 / (row_bytes as usize).max(1);
+    let mut sorter = key.as_ref().map(|_| Sorter::new(&runs, limit));
     let mut read = crate::build::segments(storage, &refs);
-    while let Some((first, segment)) = read.try_next().await? {
-        for (seq, id, row) in segment.writes(first) {
-            let Some(row) = row else { continue };
-            if latest.get(id) != Some(&(seq, true)) {
-                continue;
-            }
-            let page = writer.pages() as u32;
-            map[rows::page_of(id, n)].push(id.clone(), seq, &[page]);
-            batch.push(schema, id, &segment.attributes[row]);
-            if batch.ids.len() == page_rows {
-                batch.flush(&mut writer, written).await?;
+    while let Some((first, mut segment)) = read.try_next().await? {
+        let kept: Vec<(u64, Id, usize)> = (segment.writes(first))
+            .filter_map(|(seq, id, row)| Some((seq, id, row?)))
+            .filter(|(seq, id, _)| latest.get(*id) == Some(&(*seq, true)))
+            .map(|(seq, id, row)| (seq, id.clone(), row))
+            .collect();
+        for (seq, id, row) in kept {
+            match (&key, &mut sorter) {
+                (Some(key), Some(sorter)) => {
+                    let attributes = std::mem::take(&mut segment.attributes[row]);
+                    sorter.push(Keyed::new(key, seq, id, attributes)).await?
+                }
+                _ => {
+                    out.place(schema, &id, seq, &segment.attributes[row], written)
+                        .await?
+                }
             }
         }
     }
     drop(read);
+    if let Some(sorter) = sorter {
+        let mut sorted = sorter.finish().await?;
+        while let Some(row) = sorted.next().await? {
+            out.place(schema, &row.id, row.seq, &row.attributes, written)
+                .await?;
+        }
+    }
+    let Out {
+        mut writer,
+        map,
+        mut batch,
+        ..
+    } = out;
     batch.flush(&mut writer, written).await?;
     let map: Vec<RowPage> = map.into_iter().map(|page| page.sorted(1)).collect();
     let (hashes, sizes) = rows::store(storage, &map, written).await?;
@@ -91,6 +120,33 @@ async fn rebuild(
     writer
         .finish(hashes, rows_bytes, live as u64, written)
         .await
+}
+
+struct Out<'a> {
+    writer: Writer<'a>,
+    map: Vec<RowPage>,
+    batch: Batch,
+    page_rows: usize,
+}
+
+impl Out<'_> {
+    async fn place(
+        &mut self,
+        schema: &Schema,
+        id: &Id,
+        seq: u64,
+        attributes: &Attributes,
+        written: &mut Written,
+    ) -> Result<()> {
+        let page = self.writer.pages() as u32;
+        let n = self.map.len();
+        self.map[rows::page_of(id, n)].push(id.clone(), seq, &[page]);
+        self.batch.push(schema, id, attributes);
+        if self.batch.ids.len() == self.page_rows {
+            self.batch.flush(&mut self.writer, written).await?;
+        }
+        Ok(())
+    }
 }
 
 async fn grow(

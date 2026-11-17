@@ -10,6 +10,7 @@ mod export;
 mod filter;
 mod format;
 mod history;
+mod layout;
 mod model;
 mod read;
 mod shards;

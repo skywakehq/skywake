@@ -191,6 +191,7 @@ impl Snapshot {
 
     pub async fn query(&self, query: &Query) -> Result<Vec<Hit>> {
         let typed = self.typed_query(query)?;
+        self.storage.shapes().filter(query.filter.as_ref());
         let (per, include) = (query.per.as_ref(), &query.include);
         per::limited(per, include, query.top_k, query.offset, |top_k, include| {
             let query = Query {
@@ -307,6 +308,9 @@ impl Snapshot {
         }
         check_names(schema, &order.include)?;
         let filter = order.filter.as_ref().map(|f| f.typed(schema)).transpose()?;
+        self.storage
+            .shapes()
+            .order(&order.by, order.filter.as_ref());
         let engine =
             crate::engine::order::order(&self.storage, &self.version, order, filter.as_ref());
         if let Some(rows) = engine.await? {
@@ -397,6 +401,7 @@ impl Snapshot {
         let filter = (aggregate.filter.as_ref())
             .map(|f| f.typed(schema))
             .transpose()?;
+        self.storage.shapes().filter(aggregate.filter.as_ref());
         let engine = crate::engine::aggregate::aggregate(
             &self.storage,
             &self.version,

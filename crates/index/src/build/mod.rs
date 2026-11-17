@@ -2,7 +2,7 @@
 
 mod builder;
 pub(crate) mod directory;
-mod full;
+pub(crate) mod full;
 mod grow;
 
 use std::collections::BTreeMap;
@@ -103,8 +103,13 @@ pub(crate) async fn build(
     let columns = match (&ann, columns) {
         (Some(_), Some(_)) if filled.is_some() => filled,
         (None, Some(page_rows)) => {
-            let build =
-                format::columns::plain::build(storage, &version, page_rows, full, &mut written);
+            let build = format::columns::plain::build(
+                storage,
+                &version,
+                (page_rows, budget, spill),
+                full,
+                &mut written,
+            );
             Some(build.await?)
         }
         (Some(ann), Some(_)) => {

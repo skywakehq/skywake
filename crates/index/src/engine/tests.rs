@@ -253,6 +253,80 @@ async fn case(seed: u64) {
             "seed {seed}: {aggregate:?}\n got {got:?}\nwant {want:?}"
         );
     }
+    with.rebuild().await.unwrap();
+    for _ in 0..25 {
+        let order = ordering(&mut draw);
+        let got = with.order(&order).await.unwrap();
+        let want = without.order(&order).await.unwrap();
+        assert!(
+            same_rows(&got, &want),
+            "seed {seed}, sorted: {order:?}\n got {got:?}\nwant {want:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_rebuild_sorts_pages_on_the_busiest_range() {
+    let schema = Schema::new()
+        .attribute("at", Kind::Datetime)
+        .attribute("n", Kind::Int)
+        .text("body", crate::TextOptions::default());
+    let options = Options {
+        columns: true,
+        page_rows: 64,
+        ..Options::default()
+    };
+    let index = Index::create_with(Gate::new(), schema, options)
+        .await
+        .unwrap();
+    let mut draw = Draw(7);
+    let docs: Vec<Doc> = (0..2000u64)
+        .map(|id| {
+            let at = Value::Datetime(draw.below(1_000_000) as i64);
+            Doc::new(id).attribute("at", at).attribute("n", id as i64)
+        })
+        .collect();
+    index.upsert(docs).await.unwrap();
+    index.build().await.unwrap();
+    let range = Filter::And(vec![
+        Filter::Gte("at".into(), Value::Datetime(100_000)),
+        Filter::Lt("at".into(), Value::Datetime(110_000)),
+    ]);
+    let count = Aggregate {
+        filter: Some(range),
+        measures: BTreeMap::from([("n".to_string(), Measure::Count(None))]),
+        ..Aggregate::default()
+    };
+    let before = index.aggregate(&count).await.unwrap();
+    for _ in 0..32 {
+        index.aggregate(&count).await.unwrap();
+    }
+    index.rebuild().await.unwrap();
+    assert!(same(&index.aggregate(&count).await.unwrap(), &before));
+    let version = index.storage.current(&index.branch).await.unwrap();
+    let columns = version.columns.as_ref().unwrap();
+    let pages = crate::format::columns::pages(&index.storage, &columns.columns["at"])
+        .await
+        .unwrap();
+    let bounds: Vec<_> = pages
+        .iter()
+        .map(|p| (p.stats.min.clone(), p.stats.max.clone()))
+        .collect();
+    assert!(bounds.len() > 1);
+    assert!(bounds.windows(2).all(|w| {
+        w[0].1
+            .as_ref()
+            .unwrap()
+            .order(w[1].0.as_ref().unwrap())
+            .is_le()
+    }));
+    index.storage.shapes().forget();
+    index.rebuild().await.unwrap();
+    let version = index.storage.current(&index.branch).await.unwrap();
+    let kept = crate::layout::key(&index.storage, &version.schema, version.columns.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(kept.as_deref(), Some("at"));
 }
 
 #[tokio::test(flavor = "multi_thread")]

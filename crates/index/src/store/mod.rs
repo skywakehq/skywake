@@ -5,6 +5,7 @@ pub(crate) mod head;
 pub(crate) mod hedge;
 pub(crate) mod reads;
 
+use crate::layout::Shapes;
 use cache::Cache;
 use head::{Head, Hint};
 use reads::From;
@@ -50,6 +51,7 @@ pub(crate) struct Storage {
     blobs: Blobs,
     cache: Arc<Cache>,
     disk: Option<Disk>,
+    shapes: Shapes,
 }
 
 struct Disk {
@@ -146,11 +148,16 @@ impl Storage {
             },
             store,
             cache: Arc::new(Cache::new(cache_bytes)),
+            shapes: Shapes::default(),
             disk: disk.map(|cache| Disk {
                 cache,
                 fills: Arc::new(Semaphore::new(FILLS)),
             }),
         }
+    }
+
+    pub(crate) fn shapes(&self) -> &Shapes {
+        &self.shapes
     }
 
     pub(crate) fn cache(&self) -> &Arc<Cache> {

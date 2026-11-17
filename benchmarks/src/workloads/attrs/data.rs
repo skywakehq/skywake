@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use skywake_index::{Aggregate, Doc, Filter, Kind, Measure, Metric, Order, Schema};
+use skywake_index::{Aggregate, Doc, Filter, Kind, Measure, Metric, Order, Schema, TextOptions};
 
 use crate::datasets::random::{GOLDEN, Random, mix};
 
@@ -17,6 +17,8 @@ const SHAPE: f64 = 0.9;
 const EPOCH: i64 = 1_700_000_000;
 const SPAN: u64 = 365 * 24 * 3600;
 
+const TITLE: &str = "title";
+
 pub(crate) fn schema(dims: usize) -> Schema {
     let schema = Schema::new()
         .attribute(POPULARITY, Kind::Number)
@@ -24,7 +26,7 @@ pub(crate) fn schema(dims: usize) -> Schema {
         .attribute(GROUP, Kind::String)
         .attribute(CREATED, Kind::Int);
     match dims {
-        0 => schema,
+        0 => schema.text(TITLE, TextOptions::default()),
         dims => schema
             .vector(VECTOR, dims, Metric::Cosine)
             .filter_index(CATEGORY)
