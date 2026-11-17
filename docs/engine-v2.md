@@ -471,6 +471,21 @@ Every cold query at 10M reads 884 MB in 5,011 GETs over ~165 waves.
 Phase 1 changes storage only: column pages are written when `Options.columns` is on (off by default) and no
 query reads them yet, so its gate is build time and bytes, not query latency.
 
+Phase 1 gate at 1M rows on the slow store, against phase 0 (`phase1-attrs-1m-columns-off`, `-on`, `-bytes`):
+
+| Setup             | Phase 0 | Columns off | Columns on |
+| ----------------- | ------: | ----------: | ---------: |
+| build             |  13.3 s |      13.1 s |     15.4 s |
+| build GETs        |   1,306 |       1,306 |      1,806 |
+| index             |  802 MB |      802 MB |   822 MB (+2.5%) |
+| peak memory       |  1.5 GB |      1.6 GB |     1.7 GB |
+
+With columns off, nothing regresses (queries and setup within noise; a first run showed +38% peak memory,
+which back-to-back reruns put at 1.5 vs 1.6 GB). With columns on, build time is +16%, over the 10% gate:
+the columns build fetches every cluster's attributes a second time (500 GETs) after the vector build wrote
+them. Accepted for phase 1 because columns stay off by default; the fix, building column pages inside
+`build/full` and `build/grow` from rows already in memory, lands before columns are turned on in phase 2.
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.
