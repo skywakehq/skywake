@@ -95,7 +95,6 @@ impl Order {
         match (x, y) {
             (Some(x), Some(y)) => turn(x.order(y)),
             (x, y) if self.missing_lowest => turn(x.is_some().cmp(&y.is_some())),
-            // Missing comes last either way, so it is not turned around.
             (x, y) => x.is_none().cmp(&y.is_none()),
         }
     }

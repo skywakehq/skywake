@@ -226,6 +226,21 @@ pub(crate) fn and(bits: &mut Bits, other: &[u64]) {
     }
 }
 
+pub(crate) fn rows_of(bits: &[u64], rows: usize) -> impl Iterator<Item = usize> + '_ {
+    bits.iter().enumerate().flat_map(move |(w, &word)| {
+        let mut word = word;
+        std::iter::from_fn(move || {
+            if word == 0 {
+                return None;
+            }
+            let bit = word.trailing_zeros() as usize;
+            word &= word - 1;
+            Some(w * 64 + bit)
+        })
+        .take_while(move |&row| row < rows)
+    })
+}
+
 pub(crate) fn uses_ids(filter: &Filter) -> bool {
     match filter {
         Filter::Ids(_) | Filter::IdRange(..) => true,

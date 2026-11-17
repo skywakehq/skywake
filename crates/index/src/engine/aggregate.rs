@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::dead::Dead;
-use super::filter::{Page, Proof, and, ones, prove, uses_ids};
+use super::filter::{Page, Proof, ones, prove, rows_of, uses_ids};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::chunk::Layout;
@@ -67,10 +67,7 @@ pub(crate) async fn aggregate(
                 Some(filter) => loaded.select(filter),
                 None => ones(loaded.rows),
             };
-            if let Some(dead) = dead.pages.get(&loaded.page) {
-                let alive: Bits = dead.iter().map(|word| !word).collect();
-                and(&mut selected, &alive);
-            }
+            dead.mask(loaded.page, &mut selected);
             groups.scan(&loaded, &selected)?;
         }
     }
@@ -284,7 +281,7 @@ impl<'a> Groups<'a> {
                 }),
             })
             .collect();
-        let rows = selected_rows(selected, page.rows);
+        let rows = rows_of(selected, page.rows);
         let coded = self.dense.as_ref().and_then(|dense| match dense.column {
             None => Some(None),
             Some((name, _)) => page.chunks[name].codes().map(|codes| Some((name, codes))),
@@ -392,19 +389,4 @@ fn is_leaf(filter: &Filter) -> bool {
         filter,
         Filter::And(_) | Filter::Or(_) | Filter::Not(_) | Filter::Ids(_) | Filter::IdRange(..)
     )
-}
-
-fn selected_rows(bits: &Bits, rows: usize) -> impl Iterator<Item = usize> + '_ {
-    bits.iter().enumerate().flat_map(move |(w, &word)| {
-        let mut word = word;
-        std::iter::from_fn(move || {
-            if word == 0 {
-                return None;
-            }
-            let bit = word.trailing_zeros() as usize;
-            word &= word - 1;
-            Some(w * 64 + bit)
-        })
-        .take_while(move |&row| row < rows)
-    })
 }

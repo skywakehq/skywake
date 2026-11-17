@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use super::resolve::Resolved;
 use crate::format::Version;
-use crate::format::columns::select::Bits;
+use crate::format::columns::{self, select::Bits};
 use crate::format::rows;
 use crate::store::Storage;
 use crate::{Error, Id, Result};
@@ -38,8 +38,12 @@ impl Dead {
                 by_page.entry(page).or_default().insert(id);
             }
         }
-        for (page, gone) in by_page {
-            let ids = resolved.ids(storage, page).await?;
+        let spans: Vec<_> = by_page
+            .keys()
+            .map(|&page| resolved.ids[page].clone())
+            .collect();
+        let pages = columns::ids_many(storage, &spans).await?;
+        for ((page, gone), ids) in by_page.into_iter().zip(pages) {
             let mut bits = vec![0u64; ids.len().div_ceil(64)];
             let mut hits = 0;
             for (row, id) in ids.iter().enumerate() {
@@ -57,5 +61,13 @@ impl Dead {
             dead.pages.insert(page, bits);
         }
         Ok(dead)
+    }
+
+    pub(crate) fn mask(&self, page: usize, selected: &mut Bits) {
+        if let Some(dead) = self.pages.get(&page) {
+            for (word, gone) in selected.iter_mut().zip(dead) {
+                *word &= !gone;
+            }
+        }
     }
 }

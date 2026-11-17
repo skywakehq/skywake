@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use skywake_core::Hash;
 
+use crate::Result;
 use crate::format::columns::chunk::Layout;
 use crate::format::columns::dictionary::Dictionary;
 use crate::format::columns::stats::Totals;
 use crate::format::columns::{self, Columns, PageRef, Span};
 use crate::store::Storage;
-use crate::{Id, Result};
 
 pub(crate) struct Resolved {
     pub live: u64,
@@ -76,9 +76,5 @@ impl Resolved {
 
     pub(crate) fn pages(&self) -> usize {
         self.ids.len()
-    }
-
-    pub(crate) async fn ids(&self, storage: &Storage, page: usize) -> Result<Arc<Vec<Id>>> {
-        columns::ids(storage, &self.ids[page]).await
     }
 }

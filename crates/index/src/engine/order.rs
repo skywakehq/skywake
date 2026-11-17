@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use super::dead::Dead;
-use super::filter::{Page, Proof, and, ones, prove};
+use super::filter::{Page, Proof, ones, prove, rows_of};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::writer::covers;
@@ -25,15 +25,20 @@ pub(crate) async fn order(
     };
     let keys: Vec<(&str, bool)> = order.keys().collect();
     let attributes = order.attributes();
-    let mut names: Vec<&str> = attributes.iter().map(String::as_str).collect();
-    names.extend(order.include.iter().map(String::as_str));
+    let mut loaded: Vec<&str> = attributes.iter().map(String::as_str).collect();
     if let Some(filter) = filter {
-        filter.names(&mut names);
+        filter.names(&mut loaded);
     }
+    loaded.sort_unstable();
+    loaded.dedup();
     let usable = keys[0].0 != "id"
         && covers(columns, &version.schema)
         && !columns.columns.is_empty()
-        && names.iter().all(|name| columns.columns.contains_key(*name));
+        && (loaded
+            .iter()
+            .copied()
+            .chain(order.include.iter().map(String::as_str)))
+        .all(|name| columns.columns.contains_key(name));
     if !usable {
         return Ok(None);
     }
@@ -71,12 +76,6 @@ pub(crate) async fn order(
         .collect();
     pages.sort_by(|(_, a), (_, b)| order.key_order(descending, a.as_ref(), b.as_ref()));
 
-    let mut loaded: Vec<&str> = attributes.iter().map(String::as_str).collect();
-    if let Some(filter) = filter {
-        filter.names(&mut loaded);
-    }
-    loaded.sort_unstable();
-    loaded.dedup();
     let (mut next, mut batch) = (0, FIRST_BATCH);
     while next < pages.len() {
         let open = |at: &(usize, Option<Value>)| best.could_take(descending, at.1.as_ref());
@@ -93,10 +92,7 @@ pub(crate) async fn order(
                 Some(filter) => page.select(filter),
                 None => ones(page.rows),
             };
-            if let Some(dead) = dead.pages.get(&page.page) {
-                let alive: Vec<u64> = dead.iter().map(|word| !word).collect();
-                and(&mut selected, &alive);
-            }
+            dead.mask(page.page, &mut selected);
             scan(&mut best, &page, &selected, &attributes, descending, by);
         }
         best.trim();
@@ -122,12 +118,10 @@ fn is_nan(value: Option<&Value>) -> bool {
 
 fn bound(order: &Order, descending: bool, column: &Column, page: usize) -> Option<Value> {
     let stats = &column.pages[page].stats;
-    let present = (stats.rows > stats.missing)
-        .then(|| match descending {
-            true => stats.max.clone(),
-            false => stats.min.clone(),
-        })
-        .flatten();
+    let present = match descending {
+        true => stats.max.clone(),
+        false => stats.min.clone(),
+    };
     match (present, stats.missing > 0) {
         (Some(value), true) => match order.key_order(descending, Some(&value), None) {
             Ordering::Greater => None,
@@ -169,21 +163,6 @@ fn scan(
     }
 }
 
-fn rows_of(bits: &[u64], rows: usize) -> impl Iterator<Item = usize> + '_ {
-    bits.iter().enumerate().flat_map(move |(w, &word)| {
-        let mut word = word;
-        std::iter::from_fn(move || {
-            if word == 0 {
-                return None;
-            }
-            let bit = word.trailing_zeros() as usize;
-            word &= word - 1;
-            Some(w * 64 + bit)
-        })
-        .take_while(move |&row| row < rows)
-    })
-}
-
 async fn materialize(
     storage: &Storage,
     resolved: &Resolved,
@@ -213,14 +192,10 @@ async fn materialize(
                     let all = &tail.segment(row).attributes[row.row];
                     pick(&order.include, |name| all.get(name).cloned())
                 }
-                At::Page(_, _) if names.is_empty() => Attributes::new(),
-                At::Page(page, row) => {
-                    let page = by_page[&page];
-                    pick(&order.include, |name| {
-                        let column = &resolved.columns[name];
-                        page.chunks[name].value(row, column.layout, &column.dictionary)
-                    })
-                }
+                At::Page(page, row) => pick(&order.include, |name| {
+                    let column = &resolved.columns[name];
+                    by_page[&page].chunks[name].value(row, column.layout, &column.dictionary)
+                }),
             };
             Row {
                 id: candidate.id,
