@@ -1,9 +1,9 @@
-//! `index-bench`: the search index's benchmarks: `gen` a synthetic dataset, `run` the vector benchmark, `msmarco` BM25.
+//! `index-bench`: the search index's benchmarks: `gen` a synthetic dataset, `run` the vector benchmark, `msmarco` BM25, `attrs` counts and order by.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use skywake_benchmarks::datasets::synth;
-use skywake_benchmarks::workloads::{text, vectors};
+use skywake_benchmarks::workloads::{attrs, text, vectors};
 
 #[derive(Parser)]
 struct Cli {
@@ -19,6 +19,8 @@ enum Command {
     Run(vectors::Args),
     #[command(about = "BM25 on MS MARCO passages: quality, and cold and warm latency")]
     Msmarco(text::Args),
+    #[command(about = "Counts, grouped counts and order by on synthetic attributes")]
+    Attrs(attrs::Args),
 }
 
 #[tokio::main]
@@ -27,5 +29,6 @@ async fn main() -> Result<()> {
         Command::Gen(args) => synth::generate(&args),
         Command::Run(args) => vectors::run(args).await,
         Command::Msmarco(args) => text::run(args).await,
+        Command::Attrs(args) => attrs::run(args).await,
     }
 }

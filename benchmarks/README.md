@@ -148,9 +148,21 @@ Every row gets a `tag` attribute (a hash of its id, 0–999), and filtered passe
 rows through. `msmarco` does the same for BM25: MRR@10 and NDCG@10 on the judged queries, then warm and cold
 latency.
 
+`attrs` measures counts, grouped counts and order by, the workloads of turbopuffer's v3 benchmark, on generated
+rows: `popularity` (a Pareto number), `category` (100 values), `group` (1,000 values), `created`, and a random
+vector column (`--dims`, 64 by default, since an index needs one today). Each query family draws fresh
+constants per query. Every family runs `hot` (the head held, all in memory), `hot+head` (the head read per
+query, as `Index::query` does) and `cold` (a fresh index per query); `--qps` runs the hot passes open loop.
+Counts and grouped totals are checked against the row count.
+
+```bash
+target/release/index-bench attrs --rows 10000000 --store slow
+```
+
 `--store local` is a temp folder; `slow` adds 60 ms before every request with at most 64 in flight, to act
 like object storage; `s3://bucket/folder` uses the `AWS_*` settings and refuses a non-local endpoint unless
-`--allow-remote`.
+`--allow-remote`. `--tail 4` makes the slow store's wait vary, with a p99 four times its median, and
+`--mb-per-s 80` charges each request for its bytes, so hedged and smaller reads show up.
 
 Loading runs `--writers` (8) upserts at once, which the index groups into commits. While it runs, `run` writes
 one line per step to stderr: when each step starts and ends, how far a load has got with its rate and time

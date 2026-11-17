@@ -38,6 +38,18 @@ pub(crate) struct Options {
         help = "For slow: the most requests in flight"
     )]
     pub in_flight: usize,
+    #[arg(
+        long,
+        default_value_t = 1.0,
+        help = "For slow: the p99 wait as a multiple of the median; 1 for a fixed wait"
+    )]
+    pub tail: f64,
+    #[arg(
+        long,
+        default_value_t = 0.0,
+        help = "For slow: MB/s each request reads at; 0 for no limit"
+    )]
+    pub mb_per_s: f64,
     #[arg(long, help = "Allow an s3:// store whose endpoint is not local")]
     pub allow_remote: bool,
 }
@@ -66,8 +78,8 @@ impl Store {
                 let name = match options.kind.as_str() {
                     "local" => "local".to_string(),
                     _ => format!(
-                        "slow ({} ms, {} in flight)",
-                        options.latency_ms, options.in_flight
+                        "slow ({} ms, {} in flight, p99 {}x, {} MB/s)",
+                        options.latency_ms, options.in_flight, options.tail, options.mb_per_s
                     ),
                 };
                 (raw, Place::Folder(dir), name, location)
@@ -87,15 +99,21 @@ impl Store {
         };
         let (inner, settings): (Arc<dyn ObjectStore>, _) = match options.kind.as_str() {
             "slow" => (
-                Arc::new(Slow::new(
-                    raw,
-                    Duration::from_millis(options.latency_ms),
-                    options.in_flight,
-                )),
+                Arc::new(
+                    Slow::new(
+                        raw,
+                        Duration::from_millis(options.latency_ms),
+                        options.in_flight,
+                    )
+                    .with_tail(options.tail)
+                    .with_bandwidth(options.mb_per_s),
+                ),
                 json!({
                     "kind": "slow",
                     "latency_ms": options.latency_ms,
                     "in_flight": options.in_flight,
+                    "tail": options.tail,
+                    "mb_per_s": options.mb_per_s,
                 }),
             ),
             "local" => (raw, json!({ "kind": "local", "latency_ms": 0 })),
