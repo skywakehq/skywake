@@ -44,11 +44,13 @@ impl Stats {
                 _ => None,
             })
             .collect();
+        let nan = (values.iter().flatten()).any(|v| matches!(v, Value::Number(n) if n.is_nan()));
+        let bounded = |pick: Option<&Value>| pick.filter(|_| !nan).cloned();
         Self {
             rows: values.len() as u32,
             missing,
-            min: present().min_by(|a, b| a.order(b)).cloned(),
-            max: present().max_by(|a, b| a.order(b)).cloned(),
+            min: bounded(present().min_by(|a, b| a.order(b))),
+            max: bounded(present().max_by(|a, b| a.order(b))),
             histogram,
             sum: (!numbers.is_empty()).then(|| numbers.iter().sum()),
         }

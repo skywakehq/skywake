@@ -139,7 +139,7 @@ pub enum Measure {
 }
 
 impl Measure {
-    fn attribute(&self) -> Option<&String> {
+    pub(crate) fn attribute(&self) -> Option<&String> {
         match self {
             Measure::Count(name) => name.as_ref(),
             Measure::Sum(name) | Measure::Avg(name) | Measure::Min(name) | Measure::Max(name) => {
@@ -383,31 +383,21 @@ impl Snapshot {
         let filter = (aggregate.filter.as_ref())
             .map(|f| f.typed(schema))
             .transpose()?;
-        let mut groups: HashMap<Vec<u8>, Tallied> = HashMap::new();
+        let engine = crate::engine::aggregate::aggregate(
+            &self.storage,
+            &self.version,
+            aggregate,
+            filter.as_ref(),
+        );
+        let mut groups = match engine.await? {
+            Some(groups) => groups,
+            None => self.tally(aggregate, filter.as_ref()).await?,
+        };
         let fresh = || {
-            aggregate
-                .measures
-                .values()
+            (aggregate.measures.values())
                 .map(|_| Tally::default())
                 .collect()
         };
-        let mut failed = None;
-        live::each(&self.storage, &self.version, filter.as_ref(), |_, all| {
-            for key in keys_of(aggregate, &all) {
-                let encoded = postcard::to_stdvec(&key).unwrap_or_default();
-                let (_, tallies) = groups.entry(encoded).or_insert_with(|| (key, fresh()));
-                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
-                    if let Err(e) = tally.add(measure, &all) {
-                        failed.get_or_insert(e);
-                    }
-                }
-            }
-        })
-        .await?;
-        if let Some(e) = failed {
-            return Err(e);
-        }
-        let mut groups: Vec<Tallied> = groups.into_values().collect();
         groups.sort_by(|a, b| {
             let pairs = a.0.iter().zip(&b.0);
             let order = pairs.map(|(x, y)| match (x, y) {
@@ -436,6 +426,36 @@ impl Snapshot {
             .collect())
     }
 
+    pub(crate) async fn tally(
+        &self,
+        aggregate: &Aggregate,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<Tallied>> {
+        let mut groups: HashMap<Vec<u8>, Tallied> = HashMap::new();
+        let fresh = || {
+            (aggregate.measures.values())
+                .map(|_| Tally::default())
+                .collect()
+        };
+        let mut failed = None;
+        live::each(&self.storage, &self.version, filter, |_, all| {
+            for key in keys_of(aggregate, &all) {
+                let encoded = postcard::to_stdvec(&key).unwrap_or_default();
+                let (_, tallies) = groups.entry(encoded).or_insert_with(|| (key, fresh()));
+                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
+                    if let Err(e) = tally.add(measure, &all) {
+                        failed.get_or_insert(e);
+                    }
+                }
+            }
+        })
+        .await?;
+        match failed {
+            Some(e) => Err(e),
+            None => Ok(groups.into_values().collect()),
+        }
+    }
+
     pub async fn get_many(&self, ids: &[Id]) -> Result<Vec<Doc>> {
         let kind = self.schema().id;
         let ids: Vec<Id> = (ids.iter().map(|id| kind.check(id.clone()))).collect::<Result<_>>()?;
@@ -460,7 +480,7 @@ impl Snapshot {
     }
 }
 
-fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
+pub(crate) fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
     let mut keys: Vec<Vec<Option<Value>>> = vec![Vec::new()];
     for name in &aggregate.group_by {
         let value = all.get(name);
@@ -498,11 +518,11 @@ fn check_names(schema: &Schema, names: &[String]) -> Result<()> {
         .try_for_each(|name| schema.kind(name).map(drop))
 }
 
-type Tallied = (Vec<Option<Value>>, Vec<Tally>);
+pub(crate) type Tallied = (Vec<Option<Value>>, Vec<Tally>);
 
 #[derive(Default)]
-struct Tally {
-    count: u64,
+pub(crate) struct Tally {
+    pub count: u64,
     int: i64,
     float: f64,
     extreme: Option<Value>,
@@ -510,11 +530,33 @@ struct Tally {
 
 impl Tally {
     fn add(&mut self, measure: &Measure, attributes: &Attributes) -> Result<()> {
-        let Some(name) = measure.attribute() else {
-            self.count += 1;
-            return Ok(());
+        match measure.attribute() {
+            None => {
+                self.count += 1;
+                Ok(())
+            }
+            Some(name) => self.add_value(measure, attributes.get(name)),
+        }
+    }
+
+    pub(crate) fn merge(&mut self, other: Tally, measure: &Measure) {
+        self.count += other.count;
+        self.int = self.int.saturating_add(other.int);
+        self.float += other.float;
+        let wins = |new: &Value, old: &Value| match measure {
+            Measure::Min(_) => new.order(old).is_lt(),
+            _ => new.order(old).is_gt(),
         };
-        let Some(value) = attributes.get(name) else {
+        if let Some(value) = other.extreme
+            && self.extreme.as_ref().is_none_or(|old| wins(&value, old))
+        {
+            self.extreme = Some(value);
+        }
+    }
+
+    pub(crate) fn add_value(&mut self, measure: &Measure, value: Option<&Value>) -> Result<()> {
+        let name = measure.attribute().map_or("", String::as_str);
+        let Some(value) = value else {
             return Ok(());
         };
         self.count += 1;

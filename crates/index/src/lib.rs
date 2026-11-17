@@ -4,6 +4,7 @@
 #[doc(hidden)]
 pub mod bench;
 mod build;
+mod engine;
 mod error;
 mod export;
 mod filter;
