@@ -737,6 +737,28 @@ cold; opening an index waits for column metadata even for vector-only queries; u
 Not done: the AWS end-to-end cold run and the S3 Express tier (both need a go-ahead); vector cold waves
 (phase 7); text's fourth wave for string ids and reading only needed blocks of long spans.
 
+### Phase 7: vector
+
+Gate on cohere-1m (1M × 768, cosine) on the slow store against `caf71c5` (`phase7-base-cohere-1m` →
+`phase7-cohere-1m`), 200 warm / 50 cold queries, default probes, ms:
+
+| Query        | Cold p90 | Cold p99 | Waves (max) | Bytes/q        | Hot p99   | Recall        |
+| ------------ | -------: | -------: | ----------: | -------------: | --------: | ------------: |
+| all rows     | 425 → 274 | 490 → 326 | 7 → 4      | 17.5 → 13.9 MB | 3.7 → 1.3 | 0.972 → 0.970 |
+| 10% of rows  | 406 → 287 | 463 → 289 | 7 → 4      | 25.0 → 21.7 MB | 3.1 → 2.8 | 0.978 → 0.964 |
+| 1% of rows   | 456 → 266 | 458 → 269 | 7 → 4      | 38.0 → 3.5 MB  | 2.2 → 0.9 | 0.978 → 0.996 |
+
+Build 55.6 → 41.9 s; load, index size and peak memory unchanged. Nothing more than 10% worse. Against
+turbopuffer v3 (hot 20 ms, cold 1,255 ms) both exit targets are met: hot ≤ 5 ms, cold ≤ 300 ms p90, recall ≥ 0.95.
+
+- Estimates: RaBitQ scores each code from a per-query byte table (one lookup per byte) instead of popcounts
+  over 8 bit planes.
+- Rerank: with 256 dims or more, only the nearest `max(4k, 40)` estimated candidates are read and scored
+  exactly; smaller vectors still rerank every candidate, which keeps their recall.
+- Filters: a filter matching under 2% of rows (was 0.3%) scans its rows directly instead of probing clusters.
+
+Not done: the AWS end-to-end cold run (needs a go-ahead) and an API end-to-end vector run.
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.
