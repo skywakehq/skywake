@@ -82,8 +82,11 @@ async fn rebuild(
     drop(read);
     batch.flush(&mut writer, written).await?;
     let map: Vec<RowPage> = map.into_iter().map(|page| page.sorted(1)).collect();
-    let (hashes, _) = rows::store(storage, &map, written).await?;
-    writer.finish(hashes, live as u64, written).await
+    let (hashes, sizes) = rows::store(storage, &map, written).await?;
+    let rows_bytes = sizes.iter().sum();
+    writer
+        .finish(hashes, rows_bytes, live as u64, written)
+        .await
 }
 
 async fn grow(
@@ -167,13 +170,17 @@ async fn grow(
     let (at, changed): (Vec<usize>, Vec<RowPage>) = (map.into_iter())
         .map(|(at, page)| (at, page.sorted(1)))
         .unzip();
-    let (stored, _) = rows::store(storage, &changed, written).await?;
+    let replaced = (touched.values())
+        .map(|page| postcard::to_stdvec(&**page).map(|bytes| bytes.len() as u64))
+        .sum::<std::result::Result<u64, _>>()?;
+    let (stored, sizes) = rows::store(storage, &changed, written).await?;
+    let rows_bytes = base.rows_bytes - replaced + sizes.iter().sum::<u64>();
     let mut hashes = base.rows.clone();
     for (at, hash) in at.into_iter().zip(stored) {
         hashes[at] = hash;
     }
     let live = base.live - removed + added.len() as u64;
-    writer.finish(hashes, live, written).await
+    writer.finish(hashes, rows_bytes, live, written).await
 }
 
 #[derive(Default)]

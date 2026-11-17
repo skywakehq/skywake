@@ -203,6 +203,7 @@ async fn turning_columns_on_backfills_and_off_writes_format_10() {
         .unwrap();
     assert_eq!(postcard::take_from_bytes::<u32>(&raw).unwrap().0, 10);
     assert!(plain.version().await.unwrap().columns.is_none());
+    let bytes_before = plain.stats().await.unwrap().bytes;
 
     let options = Options {
         columns: true,
@@ -214,6 +215,11 @@ async fn turning_columns_on_backfills_and_off_writes_format_10() {
     with.build().await.unwrap();
     let version = with.storage.current(crate::MAIN).await.unwrap();
     agree(&with, &version).await;
+    let columns = version.columns.as_ref().unwrap();
+    assert!(columns.bytes > 0);
+    let reopened = Index::open(gate.clone(), crate::MAIN).await.unwrap();
+    let after = reopened.stats().await.unwrap().bytes;
+    assert_eq!(after, bytes_before + columns.bytes);
 
     let head = with.storage.head(crate::MAIN).await.unwrap();
     let raw = skywake_core::Objects::new(gate.clone())

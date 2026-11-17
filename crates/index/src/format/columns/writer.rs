@@ -60,6 +60,10 @@ pub(crate) struct Writer<'a> {
     out: Pieces,
 }
 
+fn length(span: &Span) -> u64 {
+    span.end - span.start
+}
+
 impl<'a> Writer<'a> {
     pub(crate) fn new(
         storage: &'a Storage,
@@ -131,6 +135,7 @@ impl<'a> Writer<'a> {
     pub(crate) async fn finish(
         self,
         rows: Vec<Hash>,
+        rows_bytes: u64,
         live: u64,
         written: &mut Written,
     ) -> Result<Columns> {
@@ -140,16 +145,22 @@ impl<'a> Writer<'a> {
         let ids: Vec<Span> = (self.ids.into_iter())
             .map(|p| p.into_span(&blobs))
             .collect();
+        let mut bytes = rows_bytes + ids.iter().map(length).sum::<u64>();
         let mut refs = BTreeMap::new();
         for building in self.columns {
             let name = building.name.clone();
-            refs.insert(name, building.store(storage, &blobs, written).await?);
+            let (column, size) = building.store(storage, &blobs, written).await?;
+            bytes += size;
+            refs.insert(name, column);
         }
+        let (directory, size) = put_directory(storage, &ids, written).await?;
         Ok(Columns {
             pages,
             live,
+            bytes: bytes + size,
             rows,
-            ids: put_directory(storage, &ids, written).await?,
+            rows_bytes,
+            ids: directory,
             columns: refs,
         })
     }
@@ -168,7 +179,7 @@ impl Building {
         storage: &Storage,
         blobs: &[Hash],
         written: &mut Written,
-    ) -> Result<ColumnRef> {
+    ) -> Result<(ColumnRef, u64)> {
         let mut totals = Totals::default();
         let pages: Vec<PageRef> = (self.pages.into_iter())
             .map(|(pending, stats)| {
@@ -179,15 +190,18 @@ impl Building {
                 }
             })
             .collect();
+        let chunks: u64 = pages.iter().map(|page| length(&page.span)).sum();
         let dictionary = self.coder.finish();
-        let dictionary = put(storage, &dictionary, written).await?;
-        let totals = put(storage, &totals, written).await?;
-        Ok(ColumnRef {
+        let (dictionary, a) = put(storage, &dictionary, written).await?;
+        let (totals, b) = put(storage, &totals, written).await?;
+        let (directory, c) = put_directory(storage, &pages, written).await?;
+        let column = ColumnRef {
             layout: self.layout,
             dictionary,
             totals,
-            directory: put_directory(storage, &pages, written).await?,
-        })
+            directory,
+        };
+        Ok((column, chunks + a + b + c))
     }
 }
 
@@ -285,25 +299,28 @@ async fn put<T: serde::Serialize>(
     storage: &Storage,
     value: &T,
     written: &mut Written,
-) -> Result<Hash> {
-    let hash = storage.put(postcard::to_stdvec(value)?).await?;
+) -> Result<(Hash, u64)> {
+    let encoded = postcard::to_stdvec(value)?;
+    let size = encoded.len() as u64;
+    let hash = storage.put(encoded).await?;
     written.chunks([hash]);
-    Ok(hash)
+    Ok((hash, size))
 }
 
 async fn put_directory<T: serde::Serialize + Sync>(
     storage: &Storage,
     entries: &[T],
     written: &mut Written,
-) -> Result<Vec<Hash>> {
+) -> Result<(Vec<Hash>, u64)> {
     let encoded = (entries.chunks(DIRECTORY_PAGE))
         .map(postcard::to_stdvec)
         .collect::<Result<Vec<_>, _>>()?;
+    let size = encoded.iter().map(|page| page.len() as u64).sum();
     let hashes: Vec<Hash> = stream::iter(encoded)
         .map(|page| storage.put(page))
         .buffered(PARALLELISM)
         .try_collect()
         .await?;
     written.chunks(hashes.iter().copied());
-    Ok(hashes)
+    Ok((hashes, size))
 }

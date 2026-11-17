@@ -37,6 +37,7 @@ pub(crate) async fn stats(storage: &Storage, version: &Version) -> Result<Stats>
     let (text_live, text_replaced, text_bytes) =
         crate::text::counts(storage, version, newest.keys().copied()).await?;
     stats.bytes += text_bytes;
+    stats.bytes += version.columns.as_ref().map_or(0, |columns| columns.bytes);
     let Some(ann) = &version.ann else {
         stats.indexed_rows = text_live - text_replaced;
         stats.rows += stats.indexed_rows;

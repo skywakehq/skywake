@@ -30,7 +30,9 @@ pub(crate) const DIRECTORY_PAGE: usize = 64;
 pub(crate) struct Columns {
     pub pages: u64,
     pub live: u64,
+    pub bytes: u64,
     pub rows: Vec<Hash>,
+    pub rows_bytes: u64,
     pub ids: Vec<Hash>,
     pub columns: BTreeMap<String, ColumnRef>,
 }
