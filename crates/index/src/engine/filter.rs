@@ -6,7 +6,9 @@ use std::sync::Arc;
 use super::resolve::Resolved;
 use crate::format::columns::chunk::Chunk;
 use crate::format::columns::select::Bits;
-use crate::{Filter, Id, Value};
+use crate::format::columns::{self, Span};
+use crate::store::Storage;
+use crate::{Filter, Id, Result, Value};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Proof {
@@ -114,7 +116,45 @@ pub(crate) struct Page<'a> {
     pub ids: Option<Arc<Vec<Id>>>,
 }
 
-impl Page<'_> {
+impl<'a> Page<'a> {
+    pub(crate) async fn load(
+        storage: &Storage,
+        resolved: &'a Resolved,
+        pages: &[usize],
+        names: &[&str],
+        ids: bool,
+    ) -> Result<Vec<Page<'a>>> {
+        let spans: Vec<Span> = (pages.iter())
+            .flat_map(|&page| {
+                (names.iter()).map(move |name| resolved.columns[*name].pages[page].span.clone())
+            })
+            .collect();
+        let id_spans: Vec<Span> = match ids {
+            true => pages
+                .iter()
+                .map(|&page| resolved.ids[page].clone())
+                .collect(),
+            false => Vec::new(),
+        };
+        let (chunks, ids) = futures::try_join!(
+            columns::chunks(storage, &spans),
+            columns::ids_many(storage, &id_spans),
+        )?;
+        let mut chunks = chunks.into_iter();
+        let mut ids = ids.into_iter();
+        Ok((pages.iter())
+            .map(|&page| Page {
+                resolved,
+                page,
+                rows: resolved.rows[page],
+                chunks: (names.iter().map(|name| name.to_string()))
+                    .zip(chunks.by_ref())
+                    .collect(),
+                ids: ids.next(),
+            })
+            .collect())
+    }
+
     pub(crate) fn select(&self, filter: &Filter) -> Bits {
         match prove(filter, self.resolved, self.page) {
             Proof::None => return vec![0; self.rows.div_ceil(64)],

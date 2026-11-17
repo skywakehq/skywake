@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::testing::{Gate, clustered};
 use crate::{
-    Aggregate, Doc, Filter, Group, Id, Index, Kind, Measure, Metric, Options, Schema, Value,
+    Aggregate, Doc, Filter, Group, Id, Index, Kind, Measure, Metric, Options, Order, Row, Schema,
+    Value,
 };
 
 struct Draw(u64);
@@ -151,6 +152,35 @@ fn equal(u: &Value, v: &Value) -> bool {
     }
 }
 
+fn ordering(draw: &mut Draw) -> Order {
+    const KEYS: [&str; 6] = ["n", "score", "city", "level", "at", "ok"];
+    let pick = |d: &mut Draw| KEYS[d.below(KEYS.len() as u64) as usize].to_string();
+    let mut order = Order::new(&pick(draw), 1 + draw.below(30) as usize);
+    order.descending = draw.below(2) == 0;
+    order.missing_lowest = draw.below(3) == 0;
+    order.offset = draw.below(4) as usize;
+    if draw.below(2) == 0 {
+        let then = match draw.below(3) {
+            0 => "id".to_string(),
+            _ => pick(draw),
+        };
+        order.then.push((then, draw.below(2) == 0));
+    }
+    if draw.below(2) == 0 {
+        order.filter = Some(filter(draw, 2));
+    }
+    order.include = (["city", "score", "tags", "level"].into_iter())
+        .filter(|_| draw.below(2) == 0)
+        .map(str::to_string)
+        .collect();
+    order
+}
+
+fn same_rows(a: &[Row], b: &[Row]) -> bool {
+    a.len() == b.len()
+        && (a.iter().zip(b)).all(|(a, b)| a.id == b.id && same_map(&a.attributes, &b.attributes))
+}
+
 fn same_map(a: &BTreeMap<String, Value>, b: &BTreeMap<String, Value>) -> bool {
     a.len() == b.len()
         && a.iter()
@@ -201,6 +231,15 @@ async fn case(seed: u64) {
         }
     }
     for _ in 0..25 {
+        let order = ordering(&mut draw);
+        let got = with.order(&order).await.unwrap();
+        let want = without.order(&order).await.unwrap();
+        assert!(
+            same_rows(&got, &want),
+            "seed {seed}: {order:?}\n got {got:?}\nwant {want:?}"
+        );
+    }
+    for _ in 0..25 {
         let aggregate = aggregate(&mut draw);
         let got = with.aggregate(&aggregate).await;
         let want = without.aggregate(&aggregate).await;
@@ -217,7 +256,7 @@ async fn case(seed: u64) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn aggregates_on_columns_match_the_row_path() {
+async fn columns_answer_like_the_row_path() {
     let cases: u64 = (std::env::var("ORACLE_CASES").ok())
         .and_then(|cases| cases.parse().ok())
         .unwrap_or(30);

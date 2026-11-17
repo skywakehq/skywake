@@ -74,22 +74,30 @@ impl Order {
     pub(crate) fn compare(&self, a: (&Id, &Attributes), b: (&Id, &Attributes)) -> Ordering {
         for (by, descending) in self.keys() {
             let order = match by {
+                "id" if descending => b.0.cmp(a.0),
                 "id" => a.0.cmp(b.0),
-                _ => match (a.1.get(by), b.1.get(by)) {
-                    (Some(x), Some(y)) => x.order(y),
-                    (x, y) if self.missing_lowest => x.is_some().cmp(&y.is_some()),
-                    // Missing comes last either way, so it is not turned around.
-                    (Some(_), None) => return Ordering::Less,
-                    (None, Some(_)) => return Ordering::Greater,
-                    (None, None) => Ordering::Equal,
-                },
+                _ => self.key_order(descending, a.1.get(by), b.1.get(by)),
             };
-            let order = if descending { order.reverse() } else { order };
             if order != Ordering::Equal {
                 return order;
             }
         }
         a.0.cmp(b.0)
+    }
+
+    pub(crate) fn key_order(
+        &self,
+        descending: bool,
+        x: Option<&Value>,
+        y: Option<&Value>,
+    ) -> Ordering {
+        let turn = |order: Ordering| if descending { order.reverse() } else { order };
+        match (x, y) {
+            (Some(x), Some(y)) => turn(x.order(y)),
+            (x, y) if self.missing_lowest => turn(x.is_some().cmp(&y.is_some())),
+            // Missing comes last either way, so it is not turned around.
+            (x, y) => x.is_none().cmp(&y.is_none()),
+        }
     }
 }
 
@@ -298,6 +306,11 @@ impl Snapshot {
         }
         check_names(schema, &order.include)?;
         let filter = order.filter.as_ref().map(|f| f.typed(schema)).transpose()?;
+        let engine =
+            crate::engine::order::order(&self.storage, &self.version, order, filter.as_ref());
+        if let Some(rows) = engine.await? {
+            return Ok(rows);
+        }
         let wanted = order.offset + order.top_k;
         type Kept = (Id, Attributes, Attributes);
         let compare = |a: &Kept, b: &Kept| order.compare((&a.0, &a.1), (&b.0, &b.1));

@@ -112,6 +112,43 @@ impl Chunk {
         })
     }
 
+    pub(crate) fn value(
+        &self,
+        row: usize,
+        layout: Layout,
+        dictionary: &Dictionary,
+    ) -> Option<Value> {
+        if self.is_missing(row) {
+            return None;
+        }
+        let coded = |code: u32| dictionary.values[code as usize].clone();
+        Some(match &self.data {
+            Data::Empty => return None,
+            Data::Constant(code) => coded(*code),
+            Data::Runs { codes, ends } => {
+                coded(codes[ends.partition_point(|&end| end as usize <= row)])
+            }
+            Data::Frequent {
+                common,
+                rows: at,
+                codes,
+            } => coded(
+                at.binary_search(&(row as u32))
+                    .map_or(*common, |i| codes[i]),
+            ),
+            Data::Codes(packed) => coded(packed.get(row) as u32),
+            Data::Ints { base, packed } => {
+                let n = base.wrapping_add(packed.get(row) as i64);
+                match layout {
+                    Layout::Datetimes => Value::Datetime(n),
+                    _ => Value::Int(n),
+                }
+            }
+            Data::Floats(floats) => Value::Number(floats[row]),
+            Data::Values(values) => values[row].clone(),
+        })
+    }
+
     pub(crate) fn values(&self, layout: Layout, dictionary: &Dictionary) -> Vec<Option<Value>> {
         let rows = self.rows as usize;
         let all: Vec<Value> = match (&self.data, self.codes()) {

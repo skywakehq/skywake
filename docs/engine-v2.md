@@ -451,7 +451,7 @@ empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
 | filtered count, hot         |      22 |    88 |      68 |         |         |         |         |         |
 | filtered count, cold        |     128 | 1,526 |     218 |         |         |         |         |         |
 | grouped count (1,000), hot  |     521 |   422 |      66 |         |         |         |         |         |
-| order by, filtered, hot     |      22 |    87 |      87 |         |         |         |         |         |
+| order by, filtered, hot     |      22 |    87 |      87 |      75 |         |         |         |         |
 
 At 10M rows (load 400 s, build 252 s, index 8.1 GB; `phase0-attrs-10m`, hot rows that overlapped other
 work rerun idle in `phase0-attrs-10m-rerun`), p90 in ms:
@@ -508,6 +508,25 @@ random writes, deletes, filters and groupings.
 Not done in phase 2 and carried forward: retraction sidecars (dead rows are found per query from the tail),
 SIMD kernels, parallel page scans, column cost in incremental builds, and the 10M run. Locators for secondary
 vector columns move to phase 7.
+
+Review after phase 2 (`d8a0904`): three independent reviews of phases 0 to 2. Fixed: Int sums that saturated
+instead of failing, `-0.0` and `0.0` as two groups, Min and Max with NaN depending on visit order, group order
+for list keys, vectorless pages fragmenting over many small builds, and benchmark measurement bugs (the first
+hot query read the head, waves ignored queueing behind the in-flight limit, build time included `stats()`).
+Left for phase 8: column blobs keep a rewritten page's bytes until rebuilt, and dictionaries never shrink.
+
+Phase 3 gate at 1M rows on the slow store with columns on, against phase 2 (`phase3-attrs-1m`), p90 in ms:
+
+| Query                        | hot, phase 2 | hot | hot+head, phase 2 | hot+head | cold, phase 2 | cold |
+| ---------------------------- | -----------: | --: | ----------------: | -------: | ------------: | ---: |
+| order by                     |          477 | 1.4 |               528 |       69 |         2,014 |  405 |
+| order by, category = c       |           11 | 4.1 |                87 |       75 |         1,506 |  642 |
+
+Order by visits pages best bound first using the page min or max, keeps a top-k threshold that skips pages
+and rows that cannot win, reads only the sort keys of selected rows, and reads `include`d columns for the
+final k rows only. Nothing else moved more than 10%. Ordering by a number column holding NaN used to panic on
+the row path; NaN now sorts above every number. Not done in phase 3: composite projections and the planner
+(3.6). The filtered cold order by still reads 79 MB in 9 waves; projections are what would cut it.
 
 ## 9. Decisions for approval
 

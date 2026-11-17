@@ -1,14 +1,12 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use super::dead::Dead;
 use super::filter::{Page, Proof, and, ones, prove, uses_ids};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
-use crate::format::columns::chunk::{Chunk, Layout};
+use crate::format::columns::chunk::Layout;
 use crate::format::columns::select::Bits;
 use crate::format::columns::writer::covers;
-use crate::format::columns::{self, Span};
 use crate::read::snapshot::{Aggregate, Measure, Tallied, Tally, keys_of};
 use crate::read::tail::Tail;
 use crate::store::Storage;
@@ -63,7 +61,8 @@ pub(crate) async fn aggregate(
         scans.push(page);
     }
     for batch in scans.chunks(BATCH) {
-        for loaded in load(storage, &resolved, batch, filter, &names).await? {
+        let ids = filter.is_some_and(uses_ids);
+        for loaded in Page::load(storage, &resolved, batch, &names, ids).await? {
             let mut selected = match filter {
                 Some(filter) => loaded.select(filter),
                 None => ones(loaded.rows),
@@ -97,47 +96,6 @@ fn names<'a>(aggregate: &'a Aggregate, filter: Option<&'a Filter>) -> Vec<&'a st
     names.sort_unstable();
     names.dedup();
     names
-}
-
-async fn load<'a>(
-    storage: &Storage,
-    resolved: &'a Resolved,
-    pages: &[usize],
-    filter: Option<&Filter>,
-    names: &[&str],
-) -> Result<Vec<Page<'a>>> {
-    let spans: Vec<Span> = (pages.iter())
-        .flat_map(|&page| {
-            let columns = &resolved.columns;
-            names
-                .iter()
-                .map(move |name| columns[*name].pages[page].span.clone())
-        })
-        .collect();
-    let chunks: Vec<Arc<Chunk>> = columns::chunks(storage, &spans).await?;
-    let ids = match filter.is_some_and(uses_ids) {
-        true => {
-            let spans: Vec<Span> = pages
-                .iter()
-                .map(|&page| resolved.ids[page].clone())
-                .collect();
-            Some(columns::ids_many(storage, &spans).await?)
-        }
-        false => None,
-    };
-    let mut chunks = chunks.into_iter();
-    let mut ids = ids.map(Vec::into_iter);
-    Ok((pages.iter())
-        .map(|&page| Page {
-            resolved,
-            page,
-            rows: resolved.rows[page],
-            chunks: (names.iter().map(|name| name.to_string()))
-                .zip(chunks.by_ref())
-                .collect(),
-            ids: ids.as_mut().and_then(Iterator::next),
-        })
-        .collect())
 }
 
 struct Groups<'a> {

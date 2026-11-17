@@ -27,7 +27,7 @@ impl Word {
         Some(match value {
             Value::Bool(b) => Word::Bool(*b),
             Value::Int(n) => Word::Int(*n),
-            Value::Number(n) if !n.is_nan() => Word::Number((n + 0.0).to_bits()),
+            Value::Number(n) if !n.is_nan() => Word::Number(n.to_bits()),
             Value::String(s) => Word::String(s.clone()),
             Value::Uuid(u) => Word::Uuid(*u),
             Value::Datetime(t) => Word::Datetime(*t),
@@ -58,7 +58,7 @@ impl Coder {
             return None;
         }
         let code = self.dictionary.values.len() as u32;
-        self.dictionary.values.push(value.clone().canonical());
+        self.dictionary.values.push(value.clone());
         self.codes.insert(word, code);
         Some(code)
     }
@@ -99,10 +99,10 @@ mod tests {
     }
 
     #[test]
-    fn negative_zero_is_zero_and_nan_has_no_code() {
+    fn zeros_keep_their_sign_and_nan_has_no_code() {
         let mut coder = Coder::new(Dictionary::default());
         let zero = coder.code(&Value::Number(0.0));
-        assert_eq!(coder.code(&Value::Number(-0.0)), zero);
+        assert_ne!(coder.code(&Value::Number(-0.0)), zero);
         assert_eq!(coder.code(&Value::Number(f64::NAN)), None);
     }
 }
