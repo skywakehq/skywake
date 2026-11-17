@@ -102,6 +102,7 @@ async fn column_pages_hold_what_the_clusters_hold() {
     index.build().await.unwrap();
     let version = index.version().await.unwrap();
     agree(&index, &version).await;
+    oracle(&index, &version).await;
     let columns = version.columns.as_ref().unwrap();
     let chosen = layouts(&columns.columns);
     assert_eq!(chosen["city"], Layout::Dictionary);
@@ -258,7 +259,7 @@ fn plain_docs(ids: impl Iterator<Item = u64>, salt: u64) -> Vec<Doc> {
     .collect()
 }
 
-async fn agree_plain(index: &Index, version: &Version) {
+async fn oracle(index: &Index, version: &Version) {
     let storage = &index.storage;
     let columns = version.columns.as_ref().expect("the build wrote columns");
     let mut expected: BTreeMap<crate::Id, crate::Attributes> = BTreeMap::new();
@@ -292,6 +293,9 @@ async fn agree_plain(index: &Index, version: &Version) {
     }
     assert!(seen.keys().eq(expected.keys()));
     assert_eq!(columns.live, expected.len() as u64);
+    if columns.rows.is_empty() {
+        return;
+    }
     let map: Vec<Arc<crate::format::rows::RowPage>> =
         storage.get_all(columns.rows.clone()).await.unwrap();
     let mut mapped = 0;
@@ -323,7 +327,7 @@ async fn indexes_without_vectors_get_pages_and_a_row_map() {
     }
     index.build().await.unwrap();
     let before = index.version().await.unwrap();
-    agree_plain(&index, &before).await;
+    oracle(&index, &before).await;
     assert_eq!(before.columns.as_ref().unwrap().pages, 3);
 
     index
@@ -333,7 +337,7 @@ async fn indexes_without_vectors_get_pages_and_a_row_map() {
     index.delete(vec![5u64.into(), 6u64.into()]).await.unwrap();
     index.build().await.unwrap();
     let after = index.version().await.unwrap();
-    agree_plain(&index, &after).await;
+    oracle(&index, &after).await;
 
     let (old, new) = (
         before.columns.as_ref().unwrap(),
@@ -366,5 +370,76 @@ async fn indexes_without_vectors_get_pages_and_a_row_map() {
         .await
         .unwrap();
     let fresh = Index::open(gate.clone(), crate::MAIN).await.unwrap();
-    agree_plain(&fresh, &fresh.version().await.unwrap()).await;
+    oracle(&fresh, &fresh.version().await.unwrap()).await;
+}
+
+struct Draw(u64);
+
+impl Draw {
+    fn below(&mut self, n: u64) -> u64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        (z ^ (z >> 31)) % n
+    }
+}
+
+async fn random_case(seed: u64) {
+    let mut draw = Draw(seed);
+    let with_vectors = draw.below(2) == 0;
+    let options = Options {
+        cluster_rows: 20 + draw.below(60) as usize,
+        page_rows: 16 + draw.below(100) as usize,
+        columns: true,
+        ..Options::default()
+    };
+    let schema = match with_vectors {
+        true => schema(),
+        false => plain_schema(),
+    };
+    let gate = Gate::new();
+    let index = Index::create_with(gate.clone(), schema, options)
+        .await
+        .unwrap();
+    let vectors = clustered(64, 8, seed);
+    for salt in 0..6 {
+        let start = draw.below(400);
+        let ids = start..start + 1 + draw.below(150);
+        let mut batch = plain_docs(ids, salt);
+        for doc in &mut batch {
+            let id = match &doc.id {
+                crate::Id::Num(n) => *n,
+                other => panic!("{other:?}"),
+            };
+            if with_vectors {
+                doc.attributes.remove("body");
+                let vector = vectors[(id % vectors.len() as u64) as usize].clone();
+                doc.vectors.insert("v".into(), vector);
+            }
+        }
+        index.upsert(batch).await.unwrap();
+        if draw.below(3) == 0 {
+            let start = draw.below(400);
+            let gone = (start..start + draw.below(40))
+                .map(crate::Id::from)
+                .collect();
+            index.delete(gone).await.unwrap();
+        }
+        match draw.below(4) {
+            0 => index.rebuild().await.unwrap(),
+            _ => index.build().await.unwrap(),
+        }
+        oracle(&index, &index.version().await.unwrap()).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn random_indexes_keep_columns_equal_to_their_documents() {
+    let cases: u64 = (std::env::var("ORACLE_CASES").ok())
+        .and_then(|cases| cases.parse().ok())
+        .unwrap_or(40);
+    for seed in 0..cases {
+        random_case(seed).await;
+    }
 }

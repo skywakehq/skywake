@@ -11,12 +11,12 @@ use crate::read::tail::Tail;
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::{Attributes, Id, Result, Schema};
 
-pub(crate) const PAGE_ROWS: usize = 8192;
 const SAMPLE_ROWS: usize = 65_536;
 
 pub(crate) async fn build(
     storage: &Storage,
     version: &Version,
+    page_rows: usize,
     full: bool,
     written: &mut Written,
 ) -> Result<Columns> {
@@ -24,8 +24,8 @@ pub(crate) async fn build(
         .filter(|base| !full && !base.rows.is_empty() && covers(base, &version.schema))
         .filter(|base| small_tail(base, version));
     match base {
-        Some(base) => grow(storage, version, base, written).await,
-        None => rebuild(storage, version, written).await,
+        Some(base) => grow(storage, version, base, page_rows, written).await,
+        None => rebuild(storage, version, page_rows, written).await,
     }
 }
 
@@ -34,7 +34,12 @@ fn small_tail(base: &Columns, version: &Version) -> bool {
     base.live > 0 && tail * 2 <= base.live
 }
 
-async fn rebuild(storage: &Storage, version: &Version, written: &mut Written) -> Result<Columns> {
+async fn rebuild(
+    storage: &Storage,
+    version: &Version,
+    page_rows: usize,
+    written: &mut Written,
+) -> Result<Columns> {
     let schema = &version.schema;
     let built: Paged<SegmentRef> = version.built.open(storage).await?;
     let refs: Vec<SegmentRef> = (built.iter().cloned())
@@ -69,7 +74,7 @@ async fn rebuild(storage: &Storage, version: &Version, written: &mut Written) ->
             let page = writer.pages() as u32;
             map[rows::page_of(id, n)].push(id.clone(), seq, &[page]);
             batch.push(schema, id, &segment.attributes[row]);
-            if batch.ids.len() == PAGE_ROWS {
+            if batch.ids.len() == page_rows {
                 batch.flush(&mut writer, written).await?;
             }
         }
@@ -85,6 +90,7 @@ async fn grow(
     storage: &Storage,
     version: &Version,
     base: &Columns,
+    page_rows: usize,
     written: &mut Written,
 ) -> Result<Columns> {
     let schema = &version.schema;
@@ -152,7 +158,7 @@ async fn grow(
             .expect("the row map page of every tail id was read")
             .push(id.clone(), row.seq, &[page]);
         batch.push(schema, id, &tail.segment(row).attributes[row.row]);
-        if batch.ids.len() == PAGE_ROWS {
+        if batch.ids.len() == page_rows {
             batch.flush(&mut writer, written).await?;
         }
     }

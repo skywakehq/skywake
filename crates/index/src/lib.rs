@@ -63,6 +63,7 @@ pub struct Options {
     /// the bucket again for each part. Off for an index with its own key.
     pub spill: bool,
     pub columns: bool,
+    pub page_rows: usize,
 }
 
 impl Default for Options {
@@ -78,6 +79,7 @@ impl Default for Options {
             shared: None,
             spill: true,
             columns: false,
+            page_rows: 8192,
         }
     }
 }
@@ -338,7 +340,8 @@ impl Index {
     async fn build_inner(&self, full: bool) -> Result<bool> {
         let options = &self.options;
         let (budget, rows) = (options.build_bytes, options.cluster_rows);
-        let (spill, columns) = (options.spill, options.columns);
+        let spill = options.spill;
+        let columns = options.columns.then_some(options.page_rows);
         build::build(
             &self.storage,
             &self.branch,

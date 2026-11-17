@@ -3,6 +3,8 @@ pub(crate) mod chunk;
 pub(crate) mod dictionary;
 pub(crate) mod packed;
 pub(crate) mod plain;
+#[cfg(test)]
+mod select;
 pub(crate) mod stats;
 #[cfg(test)]
 mod tests;

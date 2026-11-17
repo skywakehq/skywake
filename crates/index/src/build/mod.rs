@@ -33,7 +33,7 @@ pub(crate) async fn build(
     cluster_rows: usize,
     spill: bool,
     full: bool,
-    columns: bool,
+    columns: Option<usize>,
 ) -> Result<bool> {
     let version = storage.current(branch).await?;
     let covers = version.covers() + version.tail.len();
@@ -42,7 +42,7 @@ pub(crate) async fn build(
     let parts_missing = (version.ann.as_ref())
         .is_some_and(|ann| !ann.parts.keys().eq(&version.schema.filter_index));
     let columns_missing =
-        columns && version.columns.is_none() && (version.ann.is_some() || !vectors);
+        columns.is_some() && version.columns.is_none() && (version.ann.is_some() || !vectors);
     let nothing_new = version.tail.is_empty() && built_before && !parts_missing && !columns_missing;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
@@ -82,10 +82,12 @@ pub(crate) async fn build(
             filter::build(storage, schema, ann, base.as_ref(), budget, &mut written).await?;
     }
     let columns = match (&ann, columns) {
-        (None, true) => {
-            Some(format::columns::plain::build(storage, &version, full, &mut written).await?)
+        (None, Some(page_rows)) => {
+            let build =
+                format::columns::plain::build(storage, &version, page_rows, full, &mut written);
+            Some(build.await?)
         }
-        (Some(ann), true) => {
+        (Some(ann), Some(_)) => {
             let old = (base.as_ref().zip(version.columns.as_ref()))
                 .filter(|_| incremental)
                 .map(|(ann, columns)| format::columns::build::Base { ann, columns });

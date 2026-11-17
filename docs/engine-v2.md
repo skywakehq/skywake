@@ -440,8 +440,21 @@ A phase lands only when no number regresses by more than 10% (p90 latency, bytes
 
 Filled in phase by phase: today, then each phase, slow store and (where approved) AWS end to end.
 
-| Workload | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
-| -------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
+p90 in ms. "Today" is commit `7c1692d` on the slow store (60 ms a request, 64 in flight), `attrs` workload,
+1M rows with 64-d vectors; hot rows include the head read (`hot+head`), cold rows open a fresh index with
+empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
+
+| Workload                    | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
+| --------------------------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
+| count, hot                  |      22 |   294 |         |         |         |         |         |         |
+| count, cold                 |      29 | 1,778 |         |         |         |         |         |         |
+| filtered count, hot         |      22 |    88 |         |         |         |         |         |         |
+| filtered count, cold        |     128 | 1,526 |         |         |         |         |         |         |
+| grouped count (1,000), hot  |     521 |   422 |         |         |         |         |         |         |
+| order by, filtered, hot     |      22 |    87 |         |         |         |         |         |         |
+
+Phase 1 changes storage only: column pages are written when `Options.columns` is on (off by default) and no
+query reads them yet, so its gate is build time and bytes, not query latency.
 
 ## 9. Decisions for approval
 
