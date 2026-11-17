@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::ops::RangeBounds;
 use std::sync::Arc;
 
+use futures::{Stream, StreamExt, stream};
+
 use super::resolve::Resolved;
 use crate::format::columns::chunk::Chunk;
 use crate::format::columns::select::Bits;
@@ -43,6 +45,38 @@ pub(crate) fn prove(filter: &Filter, resolved: &Resolved, page: usize) -> Proof 
         Filter::Ids(_) | Filter::IdRange(..) => Proof::Some,
         leaf => prove_leaf(leaf, resolved, page),
     }
+}
+
+pub(crate) fn share(filter: &Filter, resolved: &Resolved, page: usize) -> f64 {
+    match prove(filter, resolved, page) {
+        Proof::None => return 0.0,
+        Proof::All => return 1.0,
+        Proof::Some => {}
+    }
+    match filter {
+        Filter::And(all) => all.iter().map(|f| share(f, resolved, page)).product(),
+        Filter::Or(any) => (any.iter().map(|f| share(f, resolved, page)).sum::<f64>()).min(1.0),
+        Filter::Not(_) | Filter::Ids(_) | Filter::IdRange(..) => 1.0,
+        leaf => leaf_share(leaf, resolved, page),
+    }
+}
+
+fn leaf_share(leaf: &Filter, resolved: &Resolved, page: usize) -> f64 {
+    let mut names = Vec::new();
+    leaf.names(&mut names);
+    let Some(column) = names.first().and_then(|name| resolved.columns.get(*name)) else {
+        return 1.0;
+    };
+    let stats = &column.pages[page].stats;
+    let Some(histogram) = &stats.histogram else {
+        return 1.0;
+    };
+    let values = &column.dictionary.values;
+    let passing: u32 = (histogram.iter())
+        .filter(|(code, _)| leaf.test(Some(&values[*code as usize])))
+        .map(|(_, n)| n)
+        .sum();
+    passing as f64 / stats.rows.max(1) as f64
 }
 
 fn prove_leaf(leaf: &Filter, resolved: &Resolved, page: usize) -> Proof {
@@ -155,6 +189,21 @@ impl<'a> Page<'a> {
             .collect())
     }
 
+    pub(crate) fn stream<'b>(
+        storage: &'b Storage,
+        resolved: &'a Resolved,
+        pages: &'b [usize],
+        names: &'b [&'b str],
+        ids: bool,
+    ) -> impl Stream<Item = Result<Vec<Page<'a>>>> + 'b
+    where
+        'a: 'b,
+    {
+        stream::iter(pages.chunks(LOAD))
+            .map(move |batch| Page::load(storage, resolved, batch, names, ids))
+            .buffered(LOADS)
+    }
+
     pub(crate) fn select(&self, filter: &Filter) -> Bits {
         match prove(filter, self.resolved, self.page) {
             Proof::None => return vec![0; self.rows.div_ceil(64)],
@@ -210,6 +259,10 @@ impl<'a> Page<'a> {
         bits
     }
 }
+
+const LOAD: usize = 256;
+
+const LOADS: usize = 4;
 
 pub(crate) fn ones(rows: usize) -> Bits {
     let mut bits = vec![u64::MAX; rows.div_ceil(64)];

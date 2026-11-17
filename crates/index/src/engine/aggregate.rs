@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use futures::TryStreamExt;
+
 use super::dead::Dead;
 use super::filter::{Page, Proof, ones, prove, rows_of, uses_ids};
 use super::resolve::{Column, Resolved};
@@ -60,9 +62,10 @@ pub(crate) async fn aggregate(
         }
         scans.push(page);
     }
-    for batch in scans.chunks(BATCH) {
-        let ids = filter.is_some_and(uses_ids);
-        for loaded in Page::load(storage, &resolved, batch, &names, ids).await? {
+    let ids = filter.is_some_and(uses_ids);
+    let mut loads = Page::stream(storage, &resolved, &scans, &names, ids);
+    while let Some(batch) = loads.try_next().await? {
+        for loaded in batch {
             let mut selected = match filter {
                 Some(filter) => loaded.select(filter),
                 None => ones(loaded.rows),
@@ -79,8 +82,6 @@ pub(crate) async fn aggregate(
     }
     Ok(Some(groups.finish()?))
 }
-
-const BATCH: usize = 256;
 
 fn names<'a>(aggregate: &'a Aggregate, filter: Option<&'a Filter>) -> Vec<&'a str> {
     let measured = aggregate.measures.values().filter_map(Measure::attribute);

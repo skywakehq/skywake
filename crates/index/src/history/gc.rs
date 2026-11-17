@@ -276,7 +276,8 @@ impl Reachable {
         let small = columns
             .columns
             .values()
-            .flat_map(|c| [c.dictionary, c.totals]);
+            .flat_map(|c| [Some(c.dictionary), Some(c.totals), c.leaders])
+            .flatten();
         self.blobs.extend(small);
         self.blobs.extend(columns.rows.iter().copied());
         for page in self

@@ -6,6 +6,7 @@ use skywake_core::Hash;
 
 use super::chunk::{Chunk, Layout};
 use super::dictionary::{Coder, Dictionary, Word};
+use super::leaders::{Gather, Leaders, ranks};
 use super::stats::{Stats, Totals};
 use super::{ColumnRef, Columns, DIRECTORY_PAGE, PageRef, Span, directory};
 use crate::format::cluster::checksum;
@@ -21,25 +22,35 @@ pub(crate) type Values = BTreeMap<String, Vec<Option<Value>>>;
 pub(crate) struct Old {
     pub ids: Vec<Span>,
     pub columns: BTreeMap<String, (Layout, Arc<Dictionary>, Vec<PageRef>)>,
+    pub leaders: BTreeMap<String, Arc<Leaders>>,
 }
 
 impl Old {
     pub(crate) async fn load(storage: &Storage, columns: &Columns) -> Result<Self> {
         let loads = columns.columns.iter().map(|(name, column)| async move {
-            let (dictionary, pages) = futures::try_join!(
+            let (dictionary, pages, leaders) = futures::try_join!(
                 super::dictionary(storage, column),
                 super::pages(storage, column),
+                super::leaders(storage, column),
             )?;
-            Ok::<_, crate::Error>((name.clone(), (column.layout, dictionary, pages)))
+            Ok::<_, crate::Error>((name.clone(), column.layout, dictionary, pages, leaders))
         });
         let (ids, loaded) = futures::try_join!(
             directory(storage, &columns.ids),
             future::try_join_all(loads),
         )?;
-        Ok(Self {
+        let mut old = Self {
             ids,
-            columns: loaded.into_iter().collect(),
-        })
+            columns: BTreeMap::new(),
+            leaders: BTreeMap::new(),
+        };
+        for (name, layout, dictionary, pages, leaders) in loaded {
+            if let Some(leaders) = leaders {
+                old.leaders.insert(name.clone(), leaders);
+            }
+            old.columns.insert(name, (layout, dictionary, pages));
+        }
+        Ok(old)
     }
 
     pub(crate) async fn page(&self, storage: &Storage, at: usize) -> Result<(Vec<Id>, Values)> {
@@ -95,6 +106,7 @@ impl<'a> Writer<'a> {
                     layout,
                     coder: Coder::new(dictionary),
                     pages: Vec::new(),
+                    leaders: ranks(kind).then(Gather::new),
                 }
             })
             .collect();
@@ -113,10 +125,14 @@ impl<'a> Writer<'a> {
 
     pub(crate) fn keep(&mut self, at: usize) {
         let old = self.old.expect("a kept page has an old version");
+        let page = self.ids.len();
         self.ids.push(Pending::Done(old.ids[at].clone()));
         for building in &mut self.columns {
             let kept = old.columns[&building.name].2[at].clone();
             building.pages.push((Pending::Done(kept.span), kept.stats));
+            if let Some(gather) = &mut building.leaders {
+                gather.keep(old.leaders.get(&building.name).map(Arc::as_ref), at, page);
+            }
         }
     }
 
@@ -126,6 +142,7 @@ impl<'a> Writer<'a> {
         values: &Values,
         written: &mut Written,
     ) -> Result<()> {
+        let page = self.ids.len();
         let encoded = postcard::to_stdvec(ids)?;
         let pending = self.out.add(encoded, self.storage, written).await?;
         self.ids.push(pending);
@@ -134,6 +151,9 @@ impl<'a> Writer<'a> {
             let values = values.get(&building.name).unwrap_or(&blank);
             let chunk = Chunk::encode(values, building.layout, &mut building.coder);
             let stats = Stats::of(&chunk, values);
+            if let Some(gather) = &mut building.leaders {
+                gather.page(page, values);
+            }
             let encoded = postcard::to_stdvec(&chunk)?;
             let pending = self.out.add(encoded, self.storage, written).await?;
             building.pages.push((pending, stats));
@@ -198,6 +218,7 @@ struct Building {
     layout: Layout,
     coder: Coder,
     pages: Vec<(Pending, Stats)>,
+    leaders: Option<Gather>,
 }
 
 impl Building {
@@ -218,20 +239,32 @@ impl Building {
             .collect();
         let chunks: u64 = pages.iter().map(|page| length(&page.span)).sum();
         let dictionary = self.coder.finish();
-        let ((dictionary, a), (totals, b), (directory, c)) = futures::try_join!(
+        let leaders = self.leaders.and_then(Gather::finish);
+        let put_leaders = async {
+            match &leaders {
+                Some(leaders) => put(storage, leaders)
+                    .await
+                    .map(|(hash, bytes)| (Some(hash), bytes)),
+                None => Ok((None, 0)),
+            }
+        };
+        let ((dictionary, a), (totals, b), (directory, c), (leaders, d)) = futures::try_join!(
             put(storage, &dictionary),
             put(storage, &totals),
             put_directory(storage, &pages),
+            put_leaders,
         )?;
         let mut hashes = vec![dictionary, totals];
         hashes.extend(directory.iter().copied());
+        hashes.extend(leaders);
         let column = ColumnRef {
             layout: self.layout,
             dictionary,
             totals,
             directory,
+            leaders,
         };
-        Ok((self.name, column, chunks + a + b + c, hashes))
+        Ok((self.name, column, chunks + a + b + c + d, hashes))
     }
 }
 

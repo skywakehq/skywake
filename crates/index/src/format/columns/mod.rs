@@ -1,6 +1,7 @@
 pub(crate) mod build;
 pub(crate) mod chunk;
 pub(crate) mod dictionary;
+pub(crate) mod leaders;
 pub(crate) mod packed;
 pub(crate) mod plain;
 pub(crate) mod select;
@@ -21,6 +22,7 @@ use crate::store::{PARALLELISM, Storage, part};
 use crate::{Error, Id, Result};
 use chunk::{Chunk, Layout};
 use dictionary::Dictionary;
+use leaders::Leaders;
 use stats::{Stats, Totals};
 
 pub(crate) const DIRECTORY_PAGE: usize = 64;
@@ -42,6 +44,7 @@ pub(crate) struct ColumnRef {
     pub dictionary: Hash,
     pub totals: Hash,
     pub directory: Vec<Hash>,
+    pub leaders: Option<Hash>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -63,6 +66,10 @@ impl Columns {
         let directories: usize = self.columns.values().map(|c| c.directory.len()).sum();
         256 + 32 * (self.rows.len() + self.ids.len() + directories) + 128 * self.columns.len()
     }
+
+    pub(crate) fn has_leaders(&self) -> bool {
+        self.columns.values().any(|column| column.leaders.is_some())
+    }
 }
 
 pub(crate) async fn directory<T>(storage: &Storage, hashes: &[Hash]) -> Result<Vec<T>>
@@ -83,6 +90,13 @@ pub(crate) async fn dictionary(storage: &Storage, column: &ColumnRef) -> Result<
 
 pub(crate) async fn totals(storage: &Storage, column: &ColumnRef) -> Result<Arc<Totals>> {
     storage.get(column.totals).await
+}
+
+pub(crate) async fn leaders(storage: &Storage, column: &ColumnRef) -> Result<Option<Arc<Leaders>>> {
+    match column.leaders {
+        Some(hash) => Ok(Some(storage.get(hash).await?)),
+        None => Ok(None),
+    }
 }
 
 pub(crate) async fn chunk(storage: &Storage, span: &Span) -> Result<Arc<Chunk>> {
@@ -133,6 +147,14 @@ pub(crate) async fn ids_many(storage: &Storage, spans: &[Span]) -> Result<Vec<Ar
     read_many(storage, spans).await
 }
 
+pub(crate) fn cached(storage: &Storage, span: &Span) -> bool {
+    storage.cache().get::<Chunk>(key(span)).is_some()
+}
+
+fn key(span: &Span) -> Hash {
+    part(span.blob, &format!("column {}..{}", span.start, span.end))
+}
+
 const GAP: u64 = 256 << 10;
 const MERGED: u64 = 8 << 20;
 
@@ -140,7 +162,6 @@ async fn read_many<T>(storage: &Storage, spans: &[Span]) -> Result<Vec<Arc<T>>>
 where
     T: for<'de> Deserialize<'de> + Send + Sync + 'static,
 {
-    let key = |span: &Span| part(span.blob, &format!("column {}..{}", span.start, span.end));
     let mut found: Vec<Option<Arc<T>>> =
         spans.iter().map(|s| storage.cache().get(key(s))).collect();
     let mut by_blob: HashMap<Hash, Vec<usize>> = HashMap::new();

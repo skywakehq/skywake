@@ -38,6 +38,7 @@ pub use model::{
 pub use read::snapshot::{Aggregate, Group, Measure, Order, Rank, Ranked, Row, Snapshot};
 pub use read::stats::Stats;
 pub use shards::{MAX_SHARDS, Shards, ShardsExport, ShardsSnapshot, shard_folder};
+use store::hedge::Hedged;
 pub use store::reads::{Reads, counted};
 use store::{Storage, Written, head};
 pub use text::{
@@ -146,7 +147,7 @@ impl Index {
     fn at(store: Arc<dyn ObjectStore>, branch: &str, options: Options) -> Self {
         Self {
             storage: Arc::new(Storage::new(
-                store,
+                Arc::new(Hedged::new(store)),
                 options.cache_bytes,
                 options.disk.clone(),
                 options.shared.clone(),

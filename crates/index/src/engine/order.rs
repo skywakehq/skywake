@@ -2,17 +2,20 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use super::dead::Dead;
-use super::filter::{Page, Proof, ones, prove, rows_of};
+use super::filter::{Page, ones, rows_of, share};
 use super::resolve::{Column, Resolved};
+use futures::TryStreamExt;
+
 use crate::format::Version;
+use crate::format::columns::cached;
 use crate::format::columns::writer::covers;
 use crate::read::snapshot::{Order, Row};
 use crate::read::tail::{self, Tail};
 use crate::store::Storage;
 use crate::{Attributes, Filter, Id, Result, Value};
 
-const FIRST_BATCH: usize = 8;
-const LAST_BATCH: usize = 256;
+const FIRST_BATCH: f64 = 8.0;
+const LAST_BATCH: f64 = 256.0;
 
 pub(crate) async fn order(
     storage: &Storage,
@@ -69,40 +72,108 @@ pub(crate) async fn order(
 
     let (by, descending) = keys[0];
     let column = &resolved.columns[by];
-    let mut pages: Vec<(usize, Option<Value>)> = (0..resolved.pages())
+    let leading = filter
+        .is_none()
+        .then(|| leading(order, column, &dead, descending, wanted));
+    if let Some(picked) = leading.flatten() {
+        let pages: Vec<usize> = picked.keys().copied().collect();
+        let mut names = loaded.clone();
+        names.extend(order.include.iter().map(String::as_str));
+        names.sort_unstable();
+        names.dedup();
+        for page in Page::load(storage, &resolved, &pages, &names, true).await? {
+            let mut selected = vec![0u64; page.rows.div_ceil(64)];
+            for &row in &picked[&page.page] {
+                selected[row / 64] |= 1 << (row % 64);
+            }
+            scan(&mut best, &page, &selected, &attributes, descending, by);
+        }
+        let rows = materialize(storage, &resolved, &tail, order, best.finish()).await?;
+        return Ok(Some(rows.into_iter().skip(order.offset).collect()));
+    }
+    let mut pages: Vec<(usize, Option<Value>, f64)> = (0..resolved.pages())
         .filter(|&page| resolved.rows[page] > 0)
-        .filter(|&page| filter.is_none_or(|f| prove(f, &resolved, page) != Proof::None))
-        .map(|page| (page, bound(order, descending, column, page)))
+        .map(|page| {
+            let share = filter.map_or(1.0, |f| share(f, &resolved, page));
+            (page, bound(order, descending, column, page), share)
+        })
+        .filter(|(_, _, share)| *share > 0.0)
         .collect();
-    pages.sort_by(|(_, a), (_, b)| order.key_order(descending, a.as_ref(), b.as_ref()));
+    pages.sort_by(|(_, a, _), (_, b, _)| order.key_order(descending, a.as_ref(), b.as_ref()));
 
+    let cold =
+        (pages.first()).is_some_and(|(page, ..)| !cached(storage, &column.pages[*page].span));
+    if !cold {
+        pages.iter_mut().for_each(|(.., share)| *share = 1.0);
+    }
     let (mut next, mut batch) = (0, FIRST_BATCH);
     while next < pages.len() {
-        let open = |at: &(usize, Option<Value>)| best.could_take(descending, at.1.as_ref());
-        let end = (next..pages.len().min(next + batch))
-            .take_while(|&i| open(&pages[i]))
-            .last()
-            .map_or(next, |i| i + 1);
+        let mut end = next;
+        let mut taken = 0.0;
+        while end < pages.len()
+            && taken < batch
+            && best.could_take(descending, pages[end].1.as_ref())
+        {
+            taken += pages[end].2;
+            end += 1;
+        }
         if end == next {
             break;
         }
-        let chosen: Vec<usize> = pages[next..end].iter().map(|(page, _)| *page).collect();
-        for page in Page::load(storage, &resolved, &chosen, &loaded, true).await? {
-            let mut selected = match filter {
-                Some(filter) => page.select(filter),
-                None => ones(page.rows),
-            };
-            dead.mask(page.page, &mut selected);
-            scan(&mut best, &page, &selected, &attributes, descending, by);
+        let chosen: Vec<usize> = pages[next..end].iter().map(|(page, ..)| *page).collect();
+        let mut loads = Page::stream(storage, &resolved, &chosen, &loaded, true);
+        while let Some(batch) = loads.try_next().await? {
+            for page in batch {
+                let mut selected = match filter {
+                    Some(filter) => page.select(filter),
+                    None => ones(page.rows),
+                };
+                dead.mask(page.page, &mut selected);
+                scan(&mut best, &page, &selected, &attributes, descending, by);
+            }
         }
         best.trim();
         next = end;
-        batch = (batch * 2).min(LAST_BATCH);
+        batch = (batch * 2.0).min(LAST_BATCH);
     }
 
     let chosen = best.finish();
     let rows = materialize(storage, &resolved, &tail, order, chosen).await?;
     Ok(Some(rows.into_iter().skip(order.offset).collect()))
+}
+
+fn leading(
+    order: &Order,
+    column: &Column,
+    dead: &Dead,
+    descending: bool,
+    wanted: usize,
+) -> Option<BTreeMap<usize, Vec<usize>>> {
+    let ranked = column.leaders.as_ref()?.side(descending);
+    let first = &ranked.rows.first()?.value;
+    let missing_last = order.key_order(descending, Some(first), None) == Ordering::Less;
+    if column.totals.missing > 0 && !missing_last {
+        return None;
+    }
+    if wanted == 0 {
+        return None;
+    }
+    let mut picked: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut live = 0;
+    let mut last: Option<&Value> = None;
+    for leader in &ranked.rows {
+        let tied = last.is_some_and(|value| value.order(&leader.value) == Ordering::Equal);
+        if live >= wanted && !tied {
+            break;
+        }
+        let (page, row) = (leader.page as usize, leader.row as usize);
+        if !dead.holds(page, row) {
+            picked.entry(page).or_default().push(row);
+            live += 1;
+            last = Some(&leader.value);
+        }
+    }
+    (live >= wanted).then_some(picked)
 }
 
 fn has_nan(column: &Column) -> bool {

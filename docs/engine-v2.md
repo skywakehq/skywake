@@ -497,12 +497,12 @@ empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
 
 | Workload                    | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
 | --------------------------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
-| count, hot                  |      22 |   294 |      63 |         |         |         |         |         |
-| count, cold                 |      29 | 1,778 |     233 |         |         |         |         |         |
-| filtered count, hot         |      22 |    88 |      68 |         |         |         |         |         |
-| filtered count, cold        |     128 | 1,526 |     218 |         |         |         |         |         |
-| grouped count (1,000), hot  |     521 |   422 |      66 |         |         |         |         |         |
-| order by, filtered, hot     |      22 |    87 |      87 |      75 |         |         |         |         |
+| count, hot                  |      22 |   294 |      63 |         |         |         |      62 |         |
+| count, cold                 |      29 | 1,778 |     233 |         |         |         |     143 |         |
+| filtered count, hot         |      22 |    88 |      68 |         |         |         |      67 |         |
+| filtered count, cold        |     128 | 1,526 |     218 |         |         |         |     146 |         |
+| grouped count (1,000), hot  |     521 |   422 |      66 |         |         |         |      65 |         |
+| order by, filtered, hot     |      22 |    87 |      87 |      75 |         |         |      77 |         |
 
 At 10M rows (load 400 s, build 252 s, index 8.1 GB; `phase0-attrs-10m`, hot rows that overlapped other
 work rerun idle in `phase0-attrs-10m-rerun`), p90 in ms:
@@ -695,6 +695,47 @@ blob layout depending on thread timing.
 Still open for phase 6: reading only the needed blocks of long spans (needs a wave budget for it), the fourth
 wave for non-numeric ids, the cold bytes of the Tantivy hot blob, and the postings-off gate rerun with grouped
 writes (grouping also changes the postings-off build).
+
+### Phase 6: cold path
+
+Gate at 1M rows on the slow store against the same harness at `44258aa` (`phase6-base-attrs-1m` →
+`phase6-attrs-1m`), columns on, p90 in ms:
+
+| Cold query                       | Before | After | Waves | Read            |
+| -------------------------------- | -----: | ----: | ----: | --------------: |
+| count                            |    208 |   143 | 3 → 2 | same            |
+| count, category = c              |    208 |   146 | 3 → 2 | same            |
+| count, category and range        |    360 |   237 | 5 → 3 | same            |
+| grouped count (1,000)            |    209 |   143 | 3 → 2 | same            |
+| grouped count, range             |    363 |   233 | 5 → 3 | same            |
+| order by, top 10                 |    407 |   205 | 6 → 3 | 3.1 → 2.2 MB    |
+| order by, top 10, category = c   |    636 |   253 | 9 → 3 | 79 → 71 MB      |
+
+Hot rows within noise; peak memory 2.5 → 1.6 GB. Columns off (`phase6-base-attrs-1m-off` →
+`phase6-attrs-1m-off`): same requests and bytes, every p90 within 8%. MS MARCO, fresh builds, postings on and
+off (`phase6-base-msmarco-*` → `phase6-msmarco-*`): same GETs, bytes, MRR and index size; cold p90 229 → 232
+(on) and 294 → 293 ms (off); build 62.7 → 65.5 s (on) and 57.5 s both (off).
+
+- Hints: the head names each column's dictionary, totals, directory pages, ids directory and leaders (512
+  objects at most), so the columns resolve in the same wave as the Version.
+- Page loads run 4 batches of 256 pages at once instead of one batch at a time.
+- Order by with a filter sizes its batches by the rows the filter is expected to match (exact for dictionary
+  columns, from page histograms) when its pages are not cached; hot queries keep the doubling batches.
+- Leaders (format 13): each Number, Int and Datetime column keeps its best 64 rows each way (value, page, row)
+  and an edge that no unlisted row beats. An order by without a filter reads only the pages of the rows it
+  needs, plus ties. Kept pages carry their leaders; an index written before format 13 gets them at its next
+  full rebuild. Formats 11 and 12 still read and are still written when there are no leaders.
+- Hedged GETs: a GET still running at 3× the recent median (at least 20 ms) is sent again; the first success
+  wins, a failure waits for the other, and at most 8 hedges are in flight. They did not fire on the slow store
+  (fixed latency), so their gain needs real S3.
+
+Review: one independent review. Fixed: a fast failing hedge beating a slow success, unbounded hedges, and two
+regressions the gate caught (unfiltered order by read the pages of all 64 leaders; filtered order by read every
+page when hot). Kept: a filtered order by on data where pages could be skipped may read more than before when
+cold; opening an index waits for column metadata even for vector-only queries; up to 4 page batches in memory.
+
+Not done: the AWS end-to-end cold run and the S3 Express tier (both need a go-ahead); vector cold waves
+(phase 7); text's fourth wave for string ids and reading only needed blocks of long spans.
 
 ## 9. Decisions for approval
 

@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
-use super::columns::Columns;
+use super::columns::chunk::Layout;
+use super::columns::{ColumnRef, Columns};
 use super::pages::Pages;
 use super::{Ann, Clusters, FORMAT, SegmentRef, Version};
 use crate::filter::FilterPart;
@@ -671,7 +672,7 @@ pub(crate) struct V11 {
     ann: Option<Ann>,
     next_seq: u64,
     text: Option<OldText>,
-    columns: Option<Columns>,
+    columns: Option<OldColumns>,
 }
 
 pub(crate) const V11_FORMAT: u32 = 11;
@@ -687,7 +688,7 @@ impl From<V11> for Version {
             ann: old.ann,
             next_seq: old.next_seq,
             text: old.text.map(TextIndex::from),
-            columns: old.columns,
+            columns: old.columns.map(Columns::from),
         }
     }
 }
@@ -703,7 +704,120 @@ impl From<&Version> for V11 {
             ann: version.ann.clone(),
             next_seq: version.next_seq,
             text: version.text.as_ref().map(OldText::from),
-            columns: version.columns.clone(),
+            columns: version.columns.as_ref().map(OldColumns::from),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V12 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<Ann>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+    columns: Option<OldColumns>,
+}
+
+pub(crate) const V12_FORMAT: u32 = 12;
+
+impl From<V12> for Version {
+    fn from(old: V12) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann,
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: old.columns.map(Columns::from),
+        }
+    }
+}
+
+impl From<&Version> for V12 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V12_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.clone(),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
+            columns: version.columns.as_ref().map(OldColumns::from),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct OldColumns {
+    pages: u64,
+    live: u64,
+    bytes: u64,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    ids: Vec<Hash>,
+    columns: BTreeMap<String, OldColumnRef>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct OldColumnRef {
+    layout: Layout,
+    dictionary: Hash,
+    totals: Hash,
+    directory: Vec<Hash>,
+}
+
+impl From<OldColumns> for Columns {
+    fn from(old: OldColumns) -> Self {
+        let columns = old.columns.into_iter().map(|(name, c)| {
+            let column = ColumnRef {
+                layout: c.layout,
+                dictionary: c.dictionary,
+                totals: c.totals,
+                directory: c.directory,
+                leaders: None,
+            };
+            (name, column)
+        });
+        Self {
+            pages: old.pages,
+            live: old.live,
+            bytes: old.bytes,
+            rows: old.rows,
+            rows_bytes: old.rows_bytes,
+            ids: old.ids,
+            columns: columns.collect(),
+        }
+    }
+}
+
+impl From<&Columns> for OldColumns {
+    fn from(columns: &Columns) -> Self {
+        let old = columns.columns.iter().map(|(name, c)| {
+            let column = OldColumnRef {
+                layout: c.layout,
+                dictionary: c.dictionary,
+                totals: c.totals,
+                directory: c.directory.clone(),
+            };
+            (name.clone(), column)
+        });
+        Self {
+            pages: columns.pages,
+            live: columns.live,
+            bytes: columns.bytes,
+            rows: columns.rows.clone(),
+            rows_bytes: columns.rows_bytes,
+            ids: columns.ids.clone(),
+            columns: old.collect(),
         }
     }
 }
@@ -716,6 +830,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V12_FORMAT => postcard::from_bytes::<V12>(raw)?.into(),
         V11_FORMAT => postcard::from_bytes::<V11>(raw)?.into(),
         V10_FORMAT => postcard::from_bytes::<V10>(raw)?.into(),
         9 => postcard::from_bytes::<V9>(raw)?.into(),

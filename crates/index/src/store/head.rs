@@ -27,6 +27,11 @@ pub(crate) enum Hint {
     Directory(Hash),
     Clusters(Hash),
     Postings(Hash, u64),
+    Dictionary(Hash),
+    Totals(Hash),
+    Pages(Hash),
+    Spans(Hash),
+    Leaders(Hash),
 }
 
 impl Hint {
@@ -40,6 +45,11 @@ impl Hint {
             Hint::Directory(hash) => format!("directory {hash}"),
             Hint::Clusters(hash) => format!("clusters {hash}"),
             Hint::Postings(hash, bytes) => format!("postings {hash} {bytes}"),
+            Hint::Dictionary(hash) => format!("dictionary {hash}"),
+            Hint::Totals(hash) => format!("totals {hash}"),
+            Hint::Pages(hash) => format!("pages {hash}"),
+            Hint::Spans(hash) => format!("spans {hash}"),
+            Hint::Leaders(hash) => format!("leaders {hash}"),
         }
     }
 
@@ -56,6 +66,11 @@ impl Hint {
             "directory" => Some(Hint::Directory(hash)),
             "clusters" => Some(Hint::Clusters(hash)),
             "postings" => Some(Hint::Postings(hash, more.parse().ok()?)),
+            "dictionary" => Some(Hint::Dictionary(hash)),
+            "totals" => Some(Hint::Totals(hash)),
+            "pages" => Some(Hint::Pages(hash)),
+            "spans" => Some(Hint::Spans(hash)),
+            "leaders" => Some(Hint::Leaders(hash)),
             _ => None,
         }
     }

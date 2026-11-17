@@ -6,6 +6,7 @@ use skywake_core::Hash;
 use crate::Result;
 use crate::format::columns::chunk::Layout;
 use crate::format::columns::dictionary::Dictionary;
+use crate::format::columns::leaders::Leaders;
 use crate::format::columns::stats::Totals;
 use crate::format::columns::{self, Columns, PageRef, Span};
 use crate::store::Storage;
@@ -22,6 +23,7 @@ pub(crate) struct Column {
     pub dictionary: Arc<Dictionary>,
     pub totals: Arc<Totals>,
     pub pages: Vec<PageRef>,
+    pub leaders: Option<Arc<Leaders>>,
 }
 
 impl Resolved {
@@ -31,12 +33,13 @@ impl Resolved {
             return Ok(found);
         }
         let loads = columns.columns.iter().map(|(name, column)| async move {
-            let (dictionary, totals, pages) = futures::try_join!(
+            let (dictionary, totals, pages, leaders) = futures::try_join!(
                 columns::dictionary(storage, column),
                 columns::totals(storage, column),
                 columns::pages(storage, column),
+                columns::leaders(storage, column),
             )?;
-            Ok::<_, crate::Error>((name, column, dictionary, totals, pages))
+            Ok::<_, crate::Error>((name, column, dictionary, totals, pages, leaders))
         });
         let (ids, loaded) = futures::try_join!(
             columns::directory::<Span>(storage, &columns.ids),
@@ -44,8 +47,11 @@ impl Resolved {
         )?;
         let mut resolved = BTreeMap::new();
         let mut weight = 64 * ids.len();
-        for (name, column, dictionary, totals, pages) in loaded {
+        for (name, column, dictionary, totals, pages, leaders) in loaded {
             weight += 64 * pages.len() + 16 * dictionary.values.len() + 8 * totals.histogram.len();
+            weight += leaders
+                .as_ref()
+                .map_or(0, |l| 48 * (l.high.rows.len() + l.low.rows.len()));
             weight += (pages.iter())
                 .map(|page| 8 * page.stats.histogram.as_ref().map_or(0, Vec::len))
                 .sum::<usize>();
@@ -54,6 +60,7 @@ impl Resolved {
                 dictionary,
                 totals,
                 pages,
+                leaders,
             };
             resolved.insert(name.clone(), column);
         }

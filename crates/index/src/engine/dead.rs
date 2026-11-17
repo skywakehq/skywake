@@ -63,6 +63,10 @@ impl Dead {
         Ok(dead)
     }
 
+    pub(crate) fn holds(&self, page: usize, row: usize) -> bool {
+        (self.pages.get(&page)).is_some_and(|bits| bits[row / 64] & (1 << (row % 64)) != 0)
+    }
+
     pub(crate) fn mask(&self, page: usize, selected: &mut Bits) {
         if let Some(dead) = self.pages.get(&page) {
             for (word, gone) in selected.iter_mut().zip(dead) {

@@ -2,6 +2,7 @@
 
 pub(crate) mod cache;
 pub(crate) mod head;
+pub(crate) mod hedge;
 pub(crate) mod reads;
 
 use cache::Cache;
@@ -25,8 +26,12 @@ use tokio::sync::Semaphore;
 use crate::filter::Directory;
 use crate::filter::attrs::Attrs;
 use crate::format::cluster::{ClusterRef, Codes};
+use crate::format::columns::dictionary::Dictionary;
+use crate::format::columns::leaders::Leaders;
+use crate::format::columns::stats::Totals;
+use crate::format::columns::{Columns, PageRef, Span};
 use crate::format::directory;
-use crate::format::legacy::{V10, V11};
+use crate::format::legacy::{V10, V11, V12};
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -177,6 +182,11 @@ impl Storage {
                 Hint::Postings(hash, bytes) => text::postings::read::open(self, hash, bytes)
                     .await
                     .map(drop),
+                Hint::Dictionary(hash) => self.get::<Dictionary>(hash).await.map(drop),
+                Hint::Totals(hash) => self.get::<Totals>(hash).await.map(drop),
+                Hint::Pages(hash) => self.get::<Vec<PageRef>>(hash).await.map(drop),
+                Hint::Spans(hash) => self.get::<Vec<Span>>(hash).await.map(drop),
+                Hint::Leaders(hash) => self.get::<Leaders>(hash).await.map(drop),
             };
         });
         futures::future::join_all(fetches).await;
@@ -195,10 +205,12 @@ impl Storage {
 
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
         let objects = &self.chunks.objects;
-        Ok(match (version.has_postings(), &version.columns) {
-            (true, _) => objects.put(version).await?,
-            (false, Some(_)) => objects.put(&V11::from(version)).await?,
-            (false, None) => objects.put(&V10::from(version)).await?,
+        let leaders = version.columns.as_ref().is_some_and(Columns::has_leaders);
+        Ok(match (leaders, version.has_postings(), &version.columns) {
+            (true, ..) => objects.put(version).await?,
+            (false, true, _) => objects.put(&V12::from(version)).await?,
+            (false, false, Some(_)) => objects.put(&V11::from(version)).await?,
+            (false, false, None) => objects.put(&V10::from(version)).await?,
         })
     }
 
@@ -488,6 +500,9 @@ pub(crate) fn hints(version: &Version) -> Vec<Hint> {
             }
         }
     }
+    if let Some(columns) = &version.columns {
+        hints.extend(column_hints(columns));
+    }
     if version.tail.len() <= HINTED_SEGMENTS {
         hints.extend(version.tail.iter().map(|s| Hint::Segment(s.hash)));
     }
@@ -507,6 +522,22 @@ pub(crate) fn hints(version: &Version) -> Vec<Hint> {
     }
     hints
 }
+
+fn column_hints(columns: &Columns) -> Vec<Hint> {
+    let mut hints: Vec<Hint> = columns.ids.iter().map(|&h| Hint::Spans(h)).collect();
+    for column in columns.columns.values() {
+        hints.push(Hint::Dictionary(column.dictionary));
+        hints.push(Hint::Totals(column.totals));
+        hints.extend(column.directory.iter().map(|&h| Hint::Pages(h)));
+        hints.extend(column.leaders.map(Hint::Leaders));
+    }
+    if hints.len() > HINTED_COLUMN_OBJECTS {
+        hints.clear();
+    }
+    hints
+}
+
+const HINTED_COLUMN_OBJECTS: usize = 512;
 
 const HINTED_PAGES: usize = 16;
 
