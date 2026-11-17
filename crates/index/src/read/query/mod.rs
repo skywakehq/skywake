@@ -27,7 +27,13 @@ const DEFAULT_RECALL: f32 = 0.95;
 
 const GAP: u64 = 256 << 10;
 
-const FILTER_FIRST_SHARE: f64 = 0.003;
+const RERANK_PER_HIT: usize = 4;
+
+const RERANK_LEAST: usize = 40;
+
+const RERANK_CAPPED_DIMS: usize = 256;
+
+const FILTER_FIRST_SHARE: f64 = 0.02;
 
 const FILTER_FIRST_ROWS: RangeInclusive<u64> = 4096..=100_000;
 
@@ -189,8 +195,11 @@ impl Search<'_> {
             self.exact(&self.known.order[visited..], top).await?;
         }
         let limit = kth(found.rows.iter().map(|e| e.upper), top);
-        let candidates = (found.rows.iter())
-            .filter(|e| e.lower <= limit)
+        let mut kept: Vec<&Estimate> = found.rows.iter().filter(|e| e.lower <= limit).collect();
+        if self.capped() {
+            keep_nearest(&mut kept, |e| e.lower + e.upper, k);
+        }
+        let candidates = (kept.into_iter())
             .map(|e| {
                 let codes = &found.codes[&e.cluster];
                 Candidate {
@@ -230,7 +239,7 @@ impl Search<'_> {
             .load(storage, clusters.map(|&c| c as usize))
             .await?;
         let rest = !std::ptr::eq(filter, choice.clause);
-        let exact = self.query.recall.unwrap_or(DEFAULT_RECALL) >= 1.0;
+        let exact = self.exact_recall();
         let (estimator, query) = self.prepared();
         let words = rabitq::words(self.column.dims);
         let mut anchors: HashMap<usize, Anchor> = HashMap::new();
@@ -269,8 +278,11 @@ impl Search<'_> {
             }
         }
         let limit = kth(rows.iter().map(|r| r.1), top);
+        rows.retain(|r| r.0 <= limit);
+        if self.capped() {
+            keep_nearest(&mut rows, |r| r.0 + r.1, self.query.top_k);
+        }
         let candidates = (rows.into_iter())
-            .filter(|r| r.0 <= limit)
             .map(|(_, _, b, i)| {
                 let located = &blocks[b].columns[self.pos];
                 Candidate {
@@ -297,6 +309,14 @@ impl Search<'_> {
         let bits = sample.eval(filter, None, rows);
         let passed = bits.iter().map(|w| w.count_ones()).sum::<u32>() as f64;
         Ok(((passed - passed.sqrt()).max(0.5) / rows as f64).min(1.0))
+    }
+
+    fn exact_recall(&self) -> bool {
+        self.query.recall.unwrap_or(DEFAULT_RECALL) >= 1.0
+    }
+
+    fn capped(&self) -> bool {
+        !self.exact_recall() && self.column.dims >= RERANK_CAPPED_DIMS
     }
 
     fn plan(&self, k: f64) -> usize {
@@ -508,6 +528,14 @@ impl Search<'_> {
             }
         }
         Ok(())
+    }
+}
+
+fn keep_nearest<T>(rows: &mut Vec<T>, middle: impl Fn(&T) -> f32, k: usize) {
+    let most = (RERANK_PER_HIT * k).max(RERANK_LEAST);
+    if rows.len() > most {
+        rows.select_nth_unstable_by(most, |a, b| middle(a).total_cmp(&middle(b)));
+        rows.truncate(most);
     }
 }
 
