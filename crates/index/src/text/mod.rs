@@ -5,7 +5,11 @@ mod dir;
 mod fields;
 mod highlight;
 mod hybrid;
+#[cfg(test)]
+mod oracle;
 pub(crate) mod part;
+mod posted;
+pub(crate) mod postings;
 mod search;
 mod tail;
 #[cfg(test)]

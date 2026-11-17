@@ -5,10 +5,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
+use super::columns::Columns;
 use super::pages::Pages;
 use super::{Ann, Clusters, FORMAT, SegmentRef, Version};
 use crate::filter::FilterPart;
-use crate::text::part::TextIndex;
+use crate::text::part::{PartRef, TextIndex};
 use crate::text::{Language, TextOptions};
 use crate::vector::calibrate::Calibration;
 use crate::{Column, Element, IdKind, Kind, Metric, Result, Schema};
@@ -278,7 +279,7 @@ pub(crate) struct V3 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<OldAnn>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V3> for Version {
@@ -297,7 +298,7 @@ impl From<V3> for Version {
             tail: old.tail,
             ann: ann(old.ann),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -312,7 +313,7 @@ pub(crate) struct V4 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<OldAnn>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V4> for Version {
@@ -325,7 +326,7 @@ impl From<V4> for Version {
             tail: old.tail,
             ann: ann(old.ann),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -340,7 +341,7 @@ pub(crate) struct V5 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<AnnV7>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V5> for Version {
@@ -353,7 +354,7 @@ impl From<V5> for Version {
             tail: old.tail,
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -386,7 +387,7 @@ pub(crate) struct V6 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<AnnV7>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V6> for Version {
@@ -399,7 +400,7 @@ impl From<V6> for Version {
             tail: old.tail,
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -424,7 +425,7 @@ pub(crate) struct V7 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<AnnV7>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V7> for Version {
@@ -444,7 +445,7 @@ impl From<V7> for Version {
             tail: old.tail,
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -509,7 +510,7 @@ pub(crate) struct V8 {
     pub tail: Vec<SegmentRef>,
     pub ann: Option<AnnV9>,
     pub next_seq: u64,
-    pub text: Option<TextIndex>,
+    pub text: Option<OldText>,
 }
 
 impl From<V8> for Version {
@@ -545,7 +546,7 @@ pub(crate) struct V9 {
     tail: Vec<SegmentRef>,
     ann: Option<AnnV9>,
     next_seq: u64,
-    text: Option<TextIndex>,
+    text: Option<OldText>,
 }
 
 impl From<V9> for Version {
@@ -558,8 +559,59 @@ impl From<V9> for Version {
             tail: old.tail,
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct OldText {
+    parts: Vec<OldPart>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct OldPart {
+    hot: Hash,
+    hot_bytes: u64,
+    blobs: Vec<Hash>,
+    docs: u32,
+    dead: Option<Hash>,
+    dead_docs: u32,
+    bytes: u64,
+}
+
+impl From<OldText> for TextIndex {
+    fn from(old: OldText) -> Self {
+        let parts = old.parts.into_iter().map(|part| PartRef {
+            hot: part.hot,
+            hot_bytes: part.hot_bytes,
+            blobs: part.blobs,
+            docs: part.docs,
+            dead: part.dead,
+            dead_docs: part.dead_docs,
+            bytes: part.bytes,
+            postings: None,
+        });
+        Self {
+            parts: parts.collect(),
+        }
+    }
+}
+
+impl From<&TextIndex> for OldText {
+    fn from(text: &TextIndex) -> Self {
+        let parts = text.parts.iter().map(|part| OldPart {
+            hot: part.hot,
+            hot_bytes: part.hot_bytes,
+            blobs: part.blobs.clone(),
+            docs: part.docs,
+            dead: part.dead,
+            dead_docs: part.dead_docs,
+            bytes: part.bytes,
+        });
+        Self {
+            parts: parts.collect(),
         }
     }
 }
@@ -573,7 +625,7 @@ pub(crate) struct V10 {
     tail: Vec<SegmentRef>,
     ann: Option<Ann>,
     next_seq: u64,
-    text: Option<TextIndex>,
+    text: Option<OldText>,
 }
 
 pub(crate) const V10_FORMAT: u32 = 10;
@@ -588,7 +640,7 @@ impl From<V10> for Version {
             tail: old.tail,
             ann: old.ann,
             next_seq: old.next_seq,
-            text: old.text,
+            text: old.text.map(TextIndex::from),
             columns: None,
         }
     }
@@ -604,7 +656,54 @@ impl From<&Version> for V10 {
             tail: version.tail.clone(),
             ann: version.ann.clone(),
             next_seq: version.next_seq,
-            text: version.text.clone(),
+            text: version.text.as_ref().map(OldText::from),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V11 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<Ann>,
+    next_seq: u64,
+    text: Option<OldText>,
+    columns: Option<Columns>,
+}
+
+pub(crate) const V11_FORMAT: u32 = 11;
+
+impl From<V11> for Version {
+    fn from(old: V11) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann,
+            next_seq: old.next_seq,
+            text: old.text.map(TextIndex::from),
+            columns: old.columns,
+        }
+    }
+}
+
+impl From<&Version> for V11 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V11_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.clone(),
+            next_seq: version.next_seq,
+            text: version.text.as_ref().map(OldText::from),
+            columns: version.columns.clone(),
         }
     }
 }
@@ -617,6 +716,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V11_FORMAT => postcard::from_bytes::<V11>(raw)?.into(),
         V10_FORMAT => postcard::from_bytes::<V10>(raw)?.into(),
         9 => postcard::from_bytes::<V9>(raw)?.into(),
         8 => postcard::from_bytes::<V8>(raw)?.into(),

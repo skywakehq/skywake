@@ -63,13 +63,13 @@ pub(crate) fn stores_of(location: &str, options: Option<IndexOpenOptions>) -> Re
     Ok((store, stores))
 }
 
-pub(crate) fn columns() -> Result<bool> {
-    match std::env::var("SKYWAKE_INDEX_COLUMNS").as_deref() {
+pub(crate) fn switch(name: &str) -> Result<bool> {
+    match std::env::var(name).as_deref() {
         Err(_) | Ok("") | Ok("off") => Ok(false),
         Ok("on") => Ok(true),
         Ok(other) => Err(failure(
             "internal",
-            format!("SKYWAKE_INDEX_COLUMNS: `{other}`: use `on` or `off`"),
+            format!("{name}: `{other}`: use `on` or `off`"),
         )),
     }
 }

@@ -26,6 +26,7 @@ pub(crate) enum Hint {
     Segment(Hash),
     Directory(Hash),
     Clusters(Hash),
+    Postings(Hash, u64),
 }
 
 impl Hint {
@@ -38,6 +39,7 @@ impl Hint {
             Hint::Segment(hash) => format!("segment {hash}"),
             Hint::Directory(hash) => format!("directory {hash}"),
             Hint::Clusters(hash) => format!("clusters {hash}"),
+            Hint::Postings(hash, bytes) => format!("postings {hash} {bytes}"),
         }
     }
 
@@ -53,6 +55,7 @@ impl Hint {
             "segment" => Some(Hint::Segment(hash)),
             "directory" => Some(Hint::Directory(hash)),
             "clusters" => Some(Hint::Clusters(hash)),
+            "postings" => Some(Hint::Postings(hash, more.parse().ok()?)),
             _ => None,
         }
     }

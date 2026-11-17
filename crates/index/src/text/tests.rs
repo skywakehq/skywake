@@ -1021,7 +1021,7 @@ async fn a_version_of_format_8_keeps_its_text_language() {
         tail: now.tail.clone(),
         ann: None,
         next_seq: now.next_seq,
-        text: now.text.clone(),
+        text: now.text.as_ref().map(From::from),
     };
     let hash = Objects::new(store.clone()).put(&old).await.unwrap();
     head::create(store.as_ref(), "old", hash, &[])

@@ -21,7 +21,7 @@ use crate::{Attributes, Id, Result, Schema, invalid};
 use columns::Columns;
 use pages::Pages;
 
-pub(crate) const FORMAT: u32 = 11;
+pub(crate) const FORMAT: u32 = 12;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 
@@ -55,6 +55,10 @@ impl Version {
 
     pub(crate) fn covers(&self) -> usize {
         self.built.len as usize
+    }
+
+    pub(crate) fn has_postings(&self) -> bool {
+        (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
     }
 
     pub(crate) fn tail(&self) -> &[SegmentRef] {

@@ -209,10 +209,12 @@ impl Snapshot {
         let (storage, version) = (self.storage.as_ref(), self.version.as_ref());
         Tail::load(storage, version).await?;
         let parts = version.text.as_ref().map_or(&[][..], |text| &text.parts);
-        let text_blobs = parts
-            .iter()
-            .flat_map(|p| p.blobs.iter().copied().chain([p.hot]));
+        let posted = parts.iter().flat_map(|p| &p.postings);
+        let text_blobs = (parts.iter())
+            .flat_map(|p| p.blobs.iter().copied().chain([p.hot]))
+            .chain(posted.clone().flat_map(|p| p.blobs.iter().copied()));
         storage.keep_on_disk(text_blobs.collect()).await?;
+        try_join_all(posted.map(|p| text::postings::read::opened(storage, p))).await?;
         try_join_all(
             parts
                 .iter()
