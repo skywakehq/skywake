@@ -5,7 +5,7 @@ use futures::future::try_join_all;
 use skywake_core::Hash;
 
 use super::span::Span;
-use super::{Directory, ID_BLOCK, Place, PostingsRef, sum, term_key};
+use super::{Directory, ID_BLOCK, Names, Place, PostingsRef, sum, term_key};
 use crate::store::{Storage, part};
 use crate::text::part::{blocking, read_blob};
 use crate::{Error, Id, Result};
@@ -114,6 +114,14 @@ pub(crate) async fn ids(
     docs: &[u32],
     known: &HashMap<u32, Id>,
 ) -> Result<Vec<Id>> {
+    if let Names::Runs(_) = directory.names {
+        return (docs.iter())
+            .map(|&doc| {
+                (directory.names.named(doc, directory.docs))
+                    .ok_or_else(|| Error::Corrupt(format!("text document {doc} has no id")))
+            })
+            .collect();
+    }
     let missing = docs.iter().filter(|doc| !known.contains_key(doc));
     let blocks: BTreeMap<usize, ()> = missing.map(|doc| (*doc as usize / ID_BLOCK, ())).collect();
     let read = try_join_all(
@@ -134,7 +142,12 @@ pub(crate) async fn ids(
 }
 
 async fn id_block(storage: &Storage, directory: &Directory, block: usize) -> Result<Arc<Vec<Id>>> {
-    let place = (directory.id_blocks.get(block))
+    let Names::Blocks(blocks) = &directory.names else {
+        return Err(Error::Corrupt(
+            "a posting directory has no id blocks".into(),
+        ));
+    };
+    let place = (blocks.get(block))
         .ok_or_else(|| Error::Corrupt(format!("a posting directory has no id block {block}")))?;
     let key = part(directory.blob(place)?, &format!("ids/{}", place.start));
     if let Some(found) = storage.cache().get(key) {

@@ -1,3 +1,5 @@
+use super::span::BLOCK;
+
 pub(super) const PAD: usize = 8;
 
 pub(super) fn width(max: u32) -> u8 {
@@ -29,12 +31,15 @@ pub(super) fn unpack(bytes: &[u8], bits: u8, out: &mut [u32]) {
         out.fill(0);
         return;
     }
+    let mut held = [0u8; 4 * BLOCK + PAD];
+    let len = packed_len(out.len().min(BLOCK), bits).min(bytes.len());
+    held[..len].copy_from_slice(&bytes[..len]);
     let mask = (1u64 << bits) - 1;
-    for (i, value) in out.iter_mut().enumerate() {
-        let bit = i * bits as usize;
-        let word: [u8; 8] = (bytes.get(bit / 8..bit / 8 + 8))
-            .and_then(|eight| eight.try_into().ok())
-            .unwrap_or_default();
-        *value = ((u64::from_le_bytes(word) >> (bit % 8)) & mask) as u32;
+    let mut bit = 0usize;
+    for value in out.iter_mut().take(BLOCK) {
+        let at = bit >> 3;
+        let word = u64::from_le_bytes(held[at..at + PAD].try_into().unwrap_or_default());
+        *value = ((word >> (bit & 7)) & mask) as u32;
+        bit += bits as usize;
     }
 }

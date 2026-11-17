@@ -57,7 +57,7 @@ impl Posted {
         let known: HashMap<u32, Id> = (self.spans.iter().flatten())
             .flat_map(|span| &span.head.best)
             .filter(|best| docs.contains(&best.doc))
-            .map(|best| (best.doc, best.id.clone()))
+            .filter_map(|best| Some((best.doc, best.id.clone()?)))
             .collect();
         let ids = read::ids(storage, &self.directory, docs, &known).await?;
         Ok(docs.iter().copied().zip(ids).collect())

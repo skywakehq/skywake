@@ -602,14 +602,48 @@ hit at a time, blobs recorded only after all uploads, unchecked range reads, hit
 depended on thread timing in the last digit (now summed in f64), threads without a global cap, and span
 parsing on the async runtime.
 
-Accepted for phase 5, with postings on: build +16% and index +17%, because the Tantivy files are still kept
-for phrases, filters and stored fields. Not met: "cold in 3 waves". A cold query is head, version with the
-directory, spans, and then ids for hits outside the stored best postings (88% of queries). Carried to phase 6:
-that fourth wave, reading only the blocks a query needs instead of whole long spans (16 MB cold is mostly
-stopword postings), and hinting the Tantivy hot blob again for queries that still need it (parts with postings
-hint only the posting directory, so the first filtered or `include` query in a process opens Tantivy in the
-query). Also left: SIMD unpacking, a thread pool instead of scoped threads, and two ids with the same 64-bit
-key in one part resolving to one id (as in today's id map).
+Phase 5 gaps closed on the same branch (postings on, all 8.8M passages, same harness; `phase5-text-msmarco`
+is `d9250e5`):
+
+| MS MARCO, 8.8M             | tpuf v3 | Phase 4  | d9250e5          | Gaps closed     |
+| -------------------------- | ------: | -------: | ---------------: | --------------: |
+| warm p50, ms               |         |      2.4 |              0.6 |             0.5 |
+| warm p90, ms               |      18 |      9.7 |              2.0 |             1.9 |
+| warm p99, ms               |         |     25.7 |              4.2 |             4.1 |
+| cold p90, ms               |     306 |      287 |              273 |             229 |
+| cold waves, mean / most    |         |    4 / 4 |         3.88 / 4 |           3 / 3 |
+| cold GETs                  |         |     38.2 |             15.2 |            15.6 |
+| cold bytes                 |         |  23.0 MB |          16.1 MB |         21.4 MB |
+| MRR@10 / nDCG@10, dev      |         | 0.1835 / 0.2281 | 0.1836 / 0.2282 | 0.1837 / 0.2283 |
+| build                      |         |   67.2 s |   77.8 s (+16%)  |  67.1 s (0%)    |
+| index                      |         | 6,069 MB | 7,097 MB (+17%)  | 6,646 MB (+9.5%) |
+
+- Cold in 3 waves: documents go to Tantivy in groups (4,096 documents or 128 KB), so a part's documents keep
+  their write order and numeric ids form runs. The posting directory, read in wave 2, holds those runs, so a
+  hit's id needs no fetch. String and UUID ids still read id blocks in a fourth wave for hits outside each
+  term's 32 best postings.
+- Cold bytes: not met as asked. Choosing the blocks of a long span that can beat the threshold needs the span's
+  block index before its blocks, which is a fourth wave; 3 waves won. Norms are now packed per block
+  (259 MB of norms on disk) and short spans no longer repeat their postings as a best list. Cold bytes rose
+  from 16.1 to 21.4 MB because the Tantivy hot blob is hinted again (next item); it is still under phase 4.
+- Hints: parts with postings hint both the posting directory and the Tantivy hot blob, so filtered, `include`,
+  fuzzy and highlighted queries open no Tantivy part inside the query.
+- Build and index: posting files are drafted on 8 threads, one term range each, in a deterministic layout.
+  Tantivy's `key` fast field now holds each document's write order (it compresses to almost nothing) instead
+  of an 8-byte id hash, which saves about 70 MB; ids reach the id map from the writer. Both are now within 10%.
+- SIMD and pool: unpacking copies a block into a stack buffer first, 1.8x faster in a micro-benchmark; a
+  width-specialized version and a rayon pool measured no better, so neither is kept. No hand-written SIMD.
+- Two ids with the same 64-bit key in one part now fail the build with an `Invalid` error instead of one id
+  silently answering for both.
+
+Review: two independent reviews. Fixed: old posting directories decoding as garbage (directories now start
+with a layout mark and older ones read as corrupt; only `d9250e5` wrote them), grouping without a byte cap
+removing Tantivy's back-pressure, per-worker spill runs small enough to exhaust open files at the merge, and
+blob layout depending on thread timing.
+
+Still open for phase 6: reading only the needed blocks of long spans (needs a wave budget for it), the fourth
+wave for non-numeric ids, the cold bytes of the Tantivy hot blob, and the postings-off gate rerun with grouped
+writes (grouping also changes the postings-off build).
 
 ## 9. Decisions for approval
 

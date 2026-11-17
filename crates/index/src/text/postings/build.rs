@@ -11,7 +11,7 @@ use tantivy::schema::{Field, IndexRecordOption};
 use tantivy::{DocSet, Index as Tantivy, SegmentReader, TERMINATED};
 
 use super::span::{BEST, BLOCK, Best, Posting, encode};
-use super::{Directory, ID_BLOCK, Place, PostingsRef, sum, term_key};
+use super::{Directory, ID_BLOCK, Names, Place, PostingsRef, sum, term_key};
 use crate::store::{Storage, Written};
 use crate::text::engine;
 use crate::text::part::{IdMap, blocking};
@@ -23,35 +23,28 @@ const PER_BUCKET: u64 = 64;
 
 const RUN: usize = 128 << 20;
 
-const ID_ENTRY: usize = 12;
+const WORKERS: usize = 8;
 
 #[derive(Default)]
 pub(crate) struct Known {
-    keys: Vec<(u64, u64)>,
+    starts: Vec<u64>,
     bytes: Vec<u8>,
 }
 
 impl Known {
-    pub(crate) fn add(&mut self, key: u64, id: &Id) -> Result<()> {
-        self.keys.push((key, self.bytes.len() as u64));
+    pub(crate) fn add(&mut self, id: &Id) -> Result<()> {
+        self.starts.push(self.bytes.len() as u64);
         self.bytes.extend(postcard::to_stdvec(id)?);
         Ok(())
     }
 
-    pub(crate) fn by_doc(mut self, entries: &[u8], docs: u32) -> Result<DocIds> {
-        self.keys.sort_unstable();
-        let mut starts = vec![u64::MAX; docs as usize];
-        for entry in entries.as_chunks::<ID_ENTRY>().0 {
-            let (key, doc) = entry.split_at(8);
-            let key = u64::from_le_bytes(key.try_into().unwrap_or_default());
-            let doc = u32::from_le_bytes(doc.try_into().unwrap_or_default());
-            let at = self.keys.partition_point(|known| known.0 < key);
-            let found = self.keys.get(at).filter(|known| known.0 == key);
-            match (found, starts.get_mut(doc as usize)) {
-                (Some(known), Some(start)) => *start = known.1,
-                _ => return Err(Error::Corrupt(format!("text document {doc} has no id"))),
-            }
-        }
+    pub(crate) fn by_doc(self, order: &[u32]) -> Result<DocIds> {
+        let starts = (order.iter().enumerate())
+            .map(|(doc, &at)| {
+                (self.starts.get(at as usize).copied())
+                    .ok_or_else(|| Error::Corrupt(format!("text document {doc} has no id")))
+            })
+            .collect::<Result<_>>()?;
         Ok(DocIds {
             starts,
             bytes: self.bytes,
@@ -77,6 +70,7 @@ struct Chunks {
     folder: PathBuf,
     current: Vec<u8>,
     lens: Vec<u64>,
+    first: u32,
 }
 
 impl Chunks {
@@ -85,6 +79,7 @@ impl Chunks {
             folder,
             current: Vec::new(),
             lens: Vec::new(),
+            first: 0,
         }
     }
 
@@ -94,7 +89,9 @@ impl Chunks {
             self.flush()?;
         }
         let place = Place {
-            blob: u32::try_from(self.lens.len()).map_err(engine)?,
+            blob: (u32::try_from(self.lens.len()).ok())
+                .and_then(|at| at.checked_add(self.first))
+                .ok_or_else(|| engine("too many posting blobs"))?,
             start: self.current.len() as u64,
             len: len as u64,
         };
@@ -115,13 +112,13 @@ impl Chunks {
 }
 
 pub(crate) struct Draft {
-    folder: tempfile::TempDir,
-    lens: Vec<u64>,
+    _folder: tempfile::TempDir,
+    files: Vec<(PathBuf, u64)>,
     docs: u32,
     fields: Vec<(String, u64)>,
     buckets: Vec<Place>,
     long: Vec<(u64, Place)>,
-    id_blocks: Vec<Place>,
+    names: Names,
 }
 
 struct Short {
@@ -130,6 +127,20 @@ struct Short {
     limit: usize,
     spans: Vec<u8>,
     places: Vec<(u64, usize, usize)>,
+    runs: Vec<PathBuf>,
+}
+
+struct Job {
+    number: u16,
+    name: String,
+    field: Field,
+    from: Option<Vec<u8>>,
+    to: Option<Vec<u8>>,
+}
+
+struct Piece {
+    chunks: Chunks,
+    long: Vec<(u64, Place)>,
     runs: Vec<PathBuf>,
 }
 
@@ -145,66 +156,164 @@ pub(crate) fn draft(
         ));
     };
     let folder = tempfile::tempdir().map_err(engine)?;
-    let mut chunks = Chunks::new(folder.path().to_path_buf());
     let docs = segment.max_doc();
-    let mut terms = 0u64;
-    for &field in text.values() {
-        terms += segment
-            .inverted_index(field)
-            .map_err(engine)?
-            .terms()
-            .num_terms() as u64;
-    }
-    let mut short = Short::new(folder.path().to_path_buf(), terms.div_ceil(PER_BUCKET), RUN);
-    let (mut fields, mut long) = (Vec::new(), Vec::new());
+    let workers = WORKERS;
+    let (mut terms, mut fields, mut jobs) = (0u64, Vec::new(), Vec::new());
     for (number, (name, &field)) in text.iter().enumerate() {
         let number = u16::try_from(number).map_err(engine)?;
-        let mut terms = Terms {
-            segment,
-            ids,
-            chunks: &mut chunks,
-            long: &mut long,
-            short: &mut short,
-        };
-        fields.push((name.clone(), terms.field(number, name, field)?));
+        let inverted = segment.inverted_index(field).map_err(engine)?;
+        let count = inverted.terms().num_terms() as u64;
+        terms += count;
+        fields.push((name.clone(), inverted.total_num_tokens()));
+        let mut cuts = vec![None];
+        for i in 1..workers as u64 {
+            let mut bytes = Vec::new();
+            if inverted
+                .terms()
+                .ord_to_term(i * count / workers as u64, &mut bytes)
+                .map_err(engine)?
+            {
+                cuts.push(Some(bytes));
+            }
+        }
+        cuts.dedup();
+        cuts.push(None);
+        for pair in cuts.windows(2) {
+            jobs.push(Job {
+                number,
+                name: name.clone(),
+                field,
+                from: pair[0].clone(),
+                to: pair[1].clone(),
+            });
+        }
+    }
+    let runs = Names::runs(docs, |doc| ids.get(doc))?;
+    let named = runs.is_some();
+    let buckets = terms.div_ceil(PER_BUCKET);
+    let pieces: Vec<Piece> = std::thread::scope(|scope| {
+        let jobs = &jobs;
+        let handles: Vec<_> = (0..workers)
+            .map(|worker| {
+                let folder = folder.path().join(format!("w{worker}"));
+                scope.spawn(move || -> Result<Piece> {
+                    std::fs::create_dir_all(&folder).map_err(engine)?;
+                    let mut piece = Piece {
+                        chunks: Chunks::new(folder.clone()),
+                        long: Vec::new(),
+                        runs: Vec::new(),
+                    };
+                    let mut short = Short::new(folder, buckets, RUN / 2);
+                    for job in jobs.iter().skip(worker).step_by(workers) {
+                        let mut terms = Terms {
+                            segment,
+                            ids,
+                            named,
+                            chunks: &mut piece.chunks,
+                            long: &mut piece.long,
+                            short: &mut short,
+                        };
+                        terms.field(job)?;
+                    }
+                    short.spill()?;
+                    piece.chunks.flush()?;
+                    piece.runs = std::mem::take(&mut short.runs);
+                    Ok(piece)
+                })
+            })
+            .collect();
+        (handles.into_iter())
+            .map(|handle| {
+                handle
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+            })
+            .collect::<Result<_>>()
+    })?;
+    let (mut files, mut long, mut short) = (
+        Vec::new(),
+        Vec::new(),
+        Short::new(folder.path().to_path_buf(), buckets, RUN),
+    );
+    for piece in pieces {
+        let offset = u32::try_from(files.len()).map_err(engine)?;
+        long.extend(piece.long.into_iter().map(|(key, place)| {
+            (
+                key,
+                Place {
+                    blob: place.blob + offset,
+                    ..place
+                },
+            )
+        }));
+        files.extend(
+            (piece.chunks.lens.iter().enumerate())
+                .map(|(at, &len)| (piece.chunks.folder.join(at.to_string()), len)),
+        );
+        short.runs.extend(piece.runs);
     }
     long.sort_unstable_by_key(|(key, place)| (*key, place.blob, place.start));
+    let main = folder.path().join("main");
+    std::fs::create_dir_all(&main).map_err(engine)?;
+    let mut chunks = Chunks::new(main);
+    chunks.first = u32::try_from(files.len()).map_err(engine)?;
     let buckets = short.store(&mut chunks)?;
-    let mut id_blocks = Vec::with_capacity((docs as usize).div_ceil(ID_BLOCK));
-    for first in (0..docs).step_by(ID_BLOCK) {
-        let last = first.saturating_add(ID_BLOCK as u32).min(docs);
-        let block: Vec<Id> = (first..last)
-            .map(|doc| ids.get(doc))
-            .collect::<Result<_>>()?;
-        id_blocks.push(chunks.append(&postcard::to_stdvec(&block)?)?);
-    }
+    let names = match runs {
+        Some(runs) => Names::Runs(runs),
+        None => {
+            let mut blocks = Vec::with_capacity((docs as usize).div_ceil(ID_BLOCK));
+            for first in (0..docs).step_by(ID_BLOCK) {
+                let last = first.saturating_add(ID_BLOCK as u32).min(docs);
+                let block: Vec<Id> = (first..last)
+                    .map(|doc| ids.get(doc))
+                    .collect::<Result<_>>()?;
+                blocks.push(chunks.append(&postcard::to_stdvec(&block)?)?);
+            }
+            Names::Blocks(blocks)
+        }
+    };
     chunks.flush()?;
+    files.extend(
+        (chunks.lens.iter().enumerate())
+            .map(|(at, &len)| (chunks.folder.join(at.to_string()), len)),
+    );
     Ok(Draft {
-        folder,
-        lens: chunks.lens,
+        _folder: folder,
+        files,
         docs,
         fields,
         buckets,
         long,
-        id_blocks,
+        names,
     })
 }
 
 struct Terms<'a> {
     segment: &'a SegmentReader,
     ids: &'a DocIds,
+    named: bool,
     chunks: &'a mut Chunks,
     long: &'a mut Vec<(u64, Place)>,
     short: &'a mut Short,
 }
 
 impl Terms<'_> {
-    fn field(&mut self, number: u16, name: &str, field: Field) -> Result<u64> {
-        let inverted = self.segment.inverted_index(field).map_err(engine)?;
-        let norms = self.segment.get_fieldnorms_reader(field).map_err(engine)?;
+    fn field(&mut self, job: &Job) -> Result<()> {
+        let inverted = self.segment.inverted_index(job.field).map_err(engine)?;
+        let norms = self
+            .segment
+            .get_fieldnorms_reader(job.field)
+            .map_err(engine)?;
         let tokens = inverted.total_num_tokens();
         let average = tokens.max(1) as f32 / self.segment.max_doc().max(1) as f32;
-        let mut stream = inverted.terms().stream().map_err(engine)?;
+        let mut range = inverted.terms().range();
+        if let Some(from) = &job.from {
+            range = range.ge(from);
+        }
+        if let Some(to) = &job.to {
+            range = range.lt(to);
+        }
+        let mut stream = range.into_stream().map_err(engine)?;
         let mut list: Vec<Posting> = Vec::new();
         while stream.advance() {
             let Ok(term) = std::str::from_utf8(stream.key()) else {
@@ -222,18 +331,19 @@ impl Terms<'_> {
             if list.is_empty() {
                 continue;
             }
-            let span = encode(number, term, &list, best(&list, average, self.ids)?)?;
-            let key = term_key(name, term);
+            let best = best(&list, average, self.ids, self.named)?;
+            let span = encode(job.number, term, &list, best)?;
+            let key = term_key(&job.name, term);
             match list.len() > BLOCK {
                 true => self.long.push((key, self.chunks.append(&span)?)),
                 false => self.short.add(key, &span)?,
             }
         }
-        Ok(tokens)
+        Ok(())
     }
 }
 
-fn best(list: &[Posting], average: f32, ids: &DocIds) -> Result<Vec<Best>> {
+fn best(list: &[Posting], average: f32, ids: &DocIds, named: bool) -> Result<Vec<Best>> {
     let mut heap: BinaryHeap<Reverse<(u32, Reverse<usize>)>> = BinaryHeap::with_capacity(BEST + 1);
     for (at, &(_, tf, norm)) in list.iter().enumerate() {
         let length = FieldNormReader::id_to_fieldnorm(norm) as f32;
@@ -248,7 +358,10 @@ fn best(list: &[Posting], average: f32, ids: &DocIds) -> Result<Vec<Best>> {
     kept.into_iter()
         .map(|at| {
             let (doc, tf, norm) = list[at];
-            let id = ids.get(doc)?;
+            let id = match named {
+                true => None,
+                false => Some(ids.get(doc)?),
+            };
             Ok(Best { doc, tf, norm, id })
         })
         .collect()
@@ -369,9 +482,9 @@ impl Draft {
         ids: IdMap,
         written: &mut Written,
     ) -> Result<PostingsRef> {
-        let mut blobs: Vec<Hash> = Vec::with_capacity(self.lens.len() + 1);
-        for number in 0..self.lens.len() {
-            let path = self.folder.path().join(number.to_string());
+        let mut blobs: Vec<Hash> = Vec::with_capacity(self.files.len() + 1);
+        for (path, _) in &self.files {
+            let path = path.clone();
             let content = blocking(move || std::fs::read(path))
                 .await?
                 .map_err(engine)?;
@@ -385,7 +498,7 @@ impl Draft {
             blobs: blobs.clone(),
             buckets: self.buckets,
             long: self.long,
-            id_blocks: self.id_blocks,
+            names: self.names,
             ids,
         };
         let encoded = directory.encode()?;
@@ -397,7 +510,7 @@ impl Draft {
             directory,
             directory_bytes,
             blobs,
-            bytes: self.lens.iter().sum::<u64>() + directory_bytes,
+            bytes: self.files.iter().map(|(_, len)| len).sum::<u64>() + directory_bytes,
         })
     }
 }

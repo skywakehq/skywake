@@ -27,7 +27,7 @@ fn span(list: &[Posting], best: usize) -> Arc<Span> {
             doc,
             tf,
             norm,
-            id: Id::Num(doc as u64),
+            id: Some(Id::Num(doc as u64)),
         })
         .collect();
     Arc::new(Span::parse(&encode(0, "word", list, best).unwrap()).unwrap())
@@ -231,4 +231,28 @@ fn a_floor_above_every_score_finds_nothing_and_no_terms_find_nothing() {
     assert!(search_on(std::slice::from_ref(&term), 500, None, 10, 1e9, None).is_empty());
     assert!(search_on(&[], 500, None, 10, 0.0, None).is_empty());
     assert!(search_on(&[term], 500, None, 0, 0.0, None).is_empty());
+}
+
+#[test]
+fn id_runs_name_every_document_and_give_up_on_scattered_ids() {
+    use super::Names;
+    let dense = [7u64, 8, 9, 20, 21, 3];
+    let runs = Names::runs(6, |doc| Ok(Id::Num(dense[doc as usize]))).unwrap();
+    let names = Names::Runs(runs.unwrap());
+    for (doc, id) in dense.iter().enumerate() {
+        assert_eq!(names.named(doc as u32, 6), Some(Id::Num(*id)));
+    }
+    assert_eq!(names.named(6, 6), None);
+    let scattered = Names::runs(10_000, |doc| Ok(Id::Num(doc as u64 * 2))).unwrap();
+    assert!(scattered.is_none());
+    let text = Names::runs(3, |doc| Ok(Id::Str(doc.to_string()))).unwrap();
+    assert!(text.is_none());
+}
+
+#[test]
+fn two_ids_with_one_key_fail_the_build() {
+    use crate::text::part::entries;
+    assert!(entries(&[9, 4, 7], &[2, 0, 1]).is_ok());
+    let shared = entries(&[5, 3, 5], &[0, 1, 2]);
+    assert!(matches!(shared, Err(crate::Error::Invalid(_))));
 }

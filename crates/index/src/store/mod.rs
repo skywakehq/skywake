@@ -481,10 +481,12 @@ pub(crate) fn chunk_path(hash: Hash) -> Path {
 pub(crate) fn hints(version: &Version) -> Vec<Hint> {
     let mut hints = Vec::new();
     if let Some(text) = &version.text {
-        hints.extend(text.parts.iter().map(|p| match &p.postings {
-            Some(postings) => Hint::Postings(postings.directory, postings.directory_bytes),
-            None => Hint::Text(p.hot, p.hot_bytes),
-        }));
+        for p in &text.parts {
+            hints.push(Hint::Text(p.hot, p.hot_bytes));
+            if let Some(postings) = &p.postings {
+                hints.push(Hint::Postings(postings.directory, postings.directory_bytes));
+            }
+        }
     }
     if version.tail.len() <= HINTED_SEGMENTS {
         hints.extend(version.tail.iter().map(|s| Hint::Segment(s.hash)));

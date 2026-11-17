@@ -9,8 +9,10 @@ pub(super) struct Cursor<'a> {
     count: usize,
     loaded: bool,
     counted: bool,
+    normed: bool,
     docs: [u32; BLOCK],
     tfs: [u32; BLOCK],
+    norms: [u8; BLOCK],
     pub doc: u32,
 }
 
@@ -23,8 +25,10 @@ impl<'a> Cursor<'a> {
             count: 0,
             loaded: false,
             counted: false,
+            normed: false,
             docs: [0; BLOCK],
             tfs: [0; BLOCK],
+            norms: [0; BLOCK],
             doc: 0,
         }
     }
@@ -95,6 +99,7 @@ impl<'a> Cursor<'a> {
             self.at = 0;
             self.loaded = true;
             self.counted = false;
+            self.normed = false;
         }
     }
 
@@ -106,7 +111,11 @@ impl<'a> Cursor<'a> {
         self.tfs[self.at]
     }
 
-    pub(super) fn norm(&self) -> u8 {
-        self.span.norms(self.block)[self.at]
+    pub(super) fn norm(&mut self) -> u8 {
+        if !self.normed {
+            self.span.norms(self.block, &mut self.norms);
+            self.normed = true;
+        }
+        self.norms[self.at]
     }
 }

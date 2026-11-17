@@ -9,7 +9,7 @@ use object_store::{ObjectStore, ObjectStoreExt};
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 use tantivy::directory::MmapDirectory;
-use tantivy::indexer::NoMergePolicy;
+use tantivy::indexer::{NoMergePolicy, UserOperation};
 use tantivy::schema::Value as _;
 use tantivy::{Index as Tantivy, IndexWriter, ReloadPolicy, Searcher, TantivyDocument};
 
@@ -161,7 +161,14 @@ pub(crate) struct PartWriter {
     fields: Arc<Fields>,
     docs: u32,
     known: Option<Known>,
+    keys: Vec<u64>,
+    group: Vec<UserOperation>,
+    grouped: usize,
 }
+
+const GROUP: usize = 4096;
+
+const GROUP_BYTES: usize = 128 << 10;
 
 impl PartWriter {
     pub(crate) fn new(fields: Arc<Fields>, memory: usize, postings: bool) -> Result<Self> {
@@ -185,17 +192,22 @@ impl PartWriter {
             fields,
             docs: 0,
             known: postings.then(Known::default),
+            keys: Vec::new(),
+            group: Vec::with_capacity(GROUP),
+            grouped: 0,
         })
     }
 
     pub(crate) fn add(&mut self, id: &Id, attributes: &Attributes) -> Result<()> {
         let fields = &self.fields;
         let mut doc = TantivyDocument::default();
-        doc.add_bytes(fields.doc, &postcard::to_stdvec(&(id, attributes))?);
-        let key = key(id);
-        doc.add_u64(fields.key, key);
+        let stored = postcard::to_stdvec(&(id, attributes))?;
+        self.grouped += stored.len();
+        doc.add_bytes(fields.doc, &stored);
+        doc.add_u64(fields.key, self.docs as u64);
+        self.keys.push(key(id));
         if let Some(known) = &mut self.known {
-            known.add(key, id)?;
+            known.add(id)?;
         }
         for (name, value) in attributes {
             if let Some(&field) = fields.text.get(name) {
@@ -228,8 +240,20 @@ impl PartWriter {
                 _ => {}
             }
         }
-        self.writer.add_document(doc).map_err(engine)?;
+        self.group.push(UserOperation::Add(doc));
         self.docs += 1;
+        match self.group.len() >= GROUP || self.grouped >= GROUP_BYTES {
+            true => self.send(),
+            false => Ok(()),
+        }
+    }
+
+    fn send(&mut self) -> Result<()> {
+        if !self.group.is_empty() {
+            let group = std::mem::replace(&mut self.group, Vec::with_capacity(GROUP));
+            self.grouped = 0;
+            self.writer.run(group).map_err(engine)?;
+        }
         Ok(())
     }
 
@@ -237,7 +261,8 @@ impl PartWriter {
         self.docs
     }
 
-    pub(crate) fn finish(self) -> Result<Built> {
+    pub(crate) fn finish(mut self) -> Result<Built> {
+        self.send()?;
         let mut writer = self.writer;
         writer.commit().map_err(engine)?;
         let segments = self.index.searchable_segment_ids().map_err(engine)?;
@@ -251,10 +276,11 @@ impl PartWriter {
             .map_err(engine)?;
         writer.garbage_collect_files().wait().map_err(engine)?;
         drop(writer);
-        let ids = id_entries(&self.index, self.docs)?;
+        let order = order(&self.index, self.docs)?;
+        let ids = entries(&self.keys, &order)?;
         let postings = match self.known {
             Some(known) => {
-                let by_doc = known.by_doc(&ids, self.docs)?;
+                let by_doc = known.by_doc(&order)?;
                 Some(draft(&self.index, &self.fields.text, &by_doc)?)
             }
             None => None,
@@ -268,19 +294,36 @@ impl PartWriter {
     }
 }
 
-fn id_entries(index: &Tantivy, docs: u32) -> Result<Vec<u8>> {
+fn order(index: &Tantivy, docs: u32) -> Result<Vec<u32>> {
     let reader = index.reader().map_err(engine)?;
     let searcher = reader.searcher();
-    let mut pairs = Vec::with_capacity(docs as usize);
+    let mut order = Vec::with_capacity(docs as usize);
     for segment in searcher.segment_readers() {
         let column = segment.fast_fields().u64("key").map_err(engine)?;
         for doc in 0..segment.max_doc() {
-            if let Some(key) = column.first(doc) {
-                pairs.push((key, doc));
-            }
+            let at = (column.first(doc)).and_then(|at| u32::try_from(at).ok());
+            order.push(
+                at.ok_or_else(|| Error::Corrupt(format!("text document {doc} has no order")))?,
+            );
         }
     }
+    Ok(order)
+}
+
+pub(crate) fn entries(keys: &[u64], order: &[u32]) -> Result<Vec<u8>> {
+    let mut pairs = Vec::with_capacity(order.len());
+    for (doc, &at) in order.iter().enumerate() {
+        let key = (keys.get(at as usize))
+            .ok_or_else(|| Error::Corrupt(format!("text document {doc} has no key")))?;
+        pairs.push((*key, doc as u32));
+    }
     pairs.sort_unstable();
+    if let Some(pair) = pairs.windows(2).find(|pair| pair[0].0 == pair[1].0) {
+        return Err(Error::Invalid(format!(
+            "two ids in one text part share the key {:#x}",
+            pair[0].0
+        )));
+    }
     let mut bytes = Vec::with_capacity(pairs.len() * ID_ENTRY);
     for (key, doc) in pairs {
         bytes.extend_from_slice(&key.to_le_bytes());

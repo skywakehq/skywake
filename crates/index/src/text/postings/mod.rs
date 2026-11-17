@@ -1,5 +1,6 @@
 pub(crate) mod build;
 mod cursor;
+mod names;
 mod pack;
 pub(crate) mod read;
 pub(crate) mod score;
@@ -10,11 +11,15 @@ mod tests;
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
+pub(crate) use names::Names;
+
 use super::engine;
 use super::part::IdMap;
 use crate::{Error, Result};
 
 pub(crate) const ID_BLOCK: usize = 1024;
+
+const MARK: [u8; 4] = *b"swp2";
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct PostingsRef {
@@ -38,23 +43,26 @@ pub(crate) struct Directory {
     pub blobs: Vec<Hash>,
     pub buckets: Vec<Place>,
     pub long: Vec<(u64, Place)>,
-    pub id_blocks: Vec<Place>,
+    pub names: Names,
     pub ids: IdMap,
 }
 
 impl Directory {
     fn encode(&self) -> Result<Vec<u8>> {
-        let raw = postcard::to_stdvec(self)?;
+        let mut raw = MARK.to_vec();
+        raw.extend(postcard::to_stdvec(self)?);
         zstd::encode_all(&raw[..], 3).map_err(engine)
     }
 
     fn decode(bytes: &[u8]) -> Result<Self> {
         let raw = zstd::decode_all(bytes).map_err(engine)?;
-        Ok(postcard::from_bytes(&raw)?)
+        let body = (raw.strip_prefix(&MARK[..]))
+            .ok_or_else(|| Error::Corrupt("a posting directory has an unknown layout".into()))?;
+        Ok(postcard::from_bytes(body)?)
     }
 
     fn weight(&self) -> usize {
-        1024 + 32 * (self.buckets.len() + self.long.len() + self.id_blocks.len() + self.blobs.len())
+        1024 + 32 * (self.buckets.len() + self.long.len() + self.names.len() + self.blobs.len())
             + 8 * self.ids.firsts.len()
     }
 
