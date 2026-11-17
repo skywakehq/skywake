@@ -251,9 +251,10 @@ async fn pass(
             tokio::spawn(async move {
                 tokio::time::sleep_until(due).await;
                 let (method, path, body) = request(&name, family.ask(n));
+                let sent = Instant::now();
                 let answer = api.call(method, &path, Some(&body)).await;
                 (
-                    due.elapsed(),
+                    sent.elapsed(),
                     answer.and_then(|answer| check(family, &answer)),
                 )
             })

@@ -528,27 +528,31 @@ final k rows only. Nothing else moved more than 10%. Ordering by a number column
 the row path; NaN now sorts above every number. Not done in phase 3: composite projections and the planner
 (3.6). The filtered cold order by still reads 79 MB in 9 waves; projections are what would cut it.
 
-Phase 4, local, end to end (`phase4-api-1m-recheck`): `index-bench api` loads 1M rows through `POST /v2/indexes/{index}/rows`,
-waits for the build, and runs each family open loop at 8 QPS for 30 s after 10 s of warm-up, so every query
-holds a read lease and skips the head. The API runs on a laptop against a local folder store and the dev
-Postgres, with columns on. p90 in ms:
+Phase 4, local, end to end: `index-bench api` loads 1M rows through `POST /v2/indexes/{index}/rows`, waits
+for the build, and runs each family open loop at 8 QPS for 30 s after 10 s of warm-up, so every query holds a
+read lease and skips the head. The API runs on a laptop against a local folder store and the dev Postgres,
+with columns on. p90 in ms; "back to back" is curl with no gap between requests:
 
-| Query                        | engine, hot | API, first run | API |
-| ---------------------------- | ----------: | -------------: | --: |
-| count                        |         0.0 |            9.8 | 6.7 |
-| count, category = c          |         2.5 |           11.5 | 9.3 |
-| count, category and range    |         6.8 |           21.5 |  19 |
-| grouped count (1,000)        |         0.8 |             13 |  13 |
-| grouped count, range         |         3.9 |           23.5 |  22 |
-| order by                     |         1.4 |           11.3 |  11 |
-| order by, category = c       |         4.1 |             17 |  18 |
+| Query                        | engine, hot | API, first run | API, 8 QPS | API, back to back |
+| ---------------------------- | ----------: | -------------: | ---------: | ----------------: |
+| count                        |         0.0 |            9.8 |        3.6 |              0.78 |
+| count, category = c          |         2.5 |           11.5 |        6.9 |                   |
+| count, category and range    |         6.8 |           21.5 |         16 |                   |
+| grouped count (1,000)        |         0.8 |             13 |         11 |               2.3 |
+| grouped count, range         |         3.9 |           23.5 |         20 |                   |
+| order by                     |         1.4 |           11.3 |        8.5 |               1.8 |
+| order by, category = c       |         4.1 |             17 |         16 |                   |
 
-The first run found v2 counts rechecking the API key in Postgres on every call, which also emptied the key
-cache so the inner v1 call looked it up again: two round trips a count, now none. With that fixed, `/v1`
-aggregate answers a count in 0.9 ms end to end and `/v2/count` in 3.2 ms with curl; idle gaps between
-requests on the laptop add about 2 ms. What is left sits in the API, not the engine: v2 forwards each call
-through the v1 app in process, v2 `query` reads the index's info for its schema first, and grouped answers
-pass 1,000 groups through JSON twice. These are the next cuts before the AWS run.
+Cut from the API (`phase4-api-1m-direct`): v2 counts rechecked the API key in Postgres on every call and
+emptied the key cache, so the inner v1 call looked it up again; v2 counts and aggregates read the index's
+info, which computes its stats, before answering; v2 order by read it for a schema it does not use. Each v2
+read is now one in-process v1 call, within 0.3 ms of calling v1 directly. The harness times from the send,
+not the scheduled tick, which on this laptop ran up to 3 ms late.
+
+What is left is the machine. At 8 QPS each request arrives after 125 ms idle, and on this laptop the
+engine's own `server_ms` for a grouped count is 3 to 4 ms after a gap against 1.6 ms back to back: work that
+wakes parked threads runs several times slower, and the more work, the bigger the gap. These numbers cannot
+say what a server does; the AWS run (on Linux, with no efficiency cores) is the measurement that counts.
 
 ## 9. Decisions for approval
 

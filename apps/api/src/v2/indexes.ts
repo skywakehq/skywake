@@ -56,6 +56,10 @@ export class Indexes {
     return orMissing(this.scope, "index", this.name, this.scope.v1.get<Index>(this.path));
   }
 
+  async read<T>(path: string, body: unknown): Promise<T> {
+    return orMissing(this.scope, "index", this.name, this.scope.v1.post<T>(path, body));
+  }
+
   async info() {
     const index = await this.index();
     const branches = await this.scope.v1.get<Branch[]>(`${this.path}/branches`);
