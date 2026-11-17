@@ -446,12 +446,12 @@ empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
 
 | Workload                    | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
 | --------------------------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
-| count, hot                  |      22 |   294 |         |         |         |         |         |         |
-| count, cold                 |      29 | 1,778 |         |         |         |         |         |         |
-| filtered count, hot         |      22 |    88 |         |         |         |         |         |         |
-| filtered count, cold        |     128 | 1,526 |         |         |         |         |         |         |
-| grouped count (1,000), hot  |     521 |   422 |         |         |         |         |         |         |
-| order by, filtered, hot     |      22 |    87 |         |         |         |         |         |         |
+| count, hot                  |      22 |   294 |      63 |         |         |         |         |         |
+| count, cold                 |      29 | 1,778 |     233 |         |         |         |         |         |
+| filtered count, hot         |      22 |    88 |      68 |         |         |         |         |         |
+| filtered count, cold        |     128 | 1,526 |     218 |         |         |         |         |         |
+| grouped count (1,000), hot  |     521 |   422 |      66 |         |         |         |         |         |
+| order by, filtered, hot     |      22 |    87 |      87 |         |         |         |         |         |
 
 At 10M rows (load 400 s, build 252 s, index 8.1 GB; `phase0-attrs-10m`, hot rows that overlapped other
 work rerun idle in `phase0-attrs-10m-rerun`), p90 in ms:
@@ -485,6 +485,29 @@ Nothing regresses past the gate. A full build encodes column pages from each gro
 them, so it reads nothing back; a first version that read every cluster again cost +16% build time.
 Incremental builds still read the clusters they rewrote. Column pages cost about 20 bytes a row for the four
 attributes.
+
+Phase 2 gate at 1M rows on the slow store with columns on, against phase 0 (`phase2-attrs-1m`), p90 in ms:
+
+| Query                        | hot, phase 0 | hot | hot+head, phase 0 | hot+head | cold, phase 0 |  cold |
+| ---------------------------- | -----------: | --: | ----------------: | -------: | ------------: | ----: |
+| count                        |          238 | 0.0 |               294 |       63 |         1,778 |   233 |
+| count, category = c          |         10.7 | 2.5 |                88 |       68 |         1,526 |   218 |
+| count, category and range    |          7.6 | 6.8 |                82 |       79 |         1,468 |   366 |
+| grouped count (1,000)        |          348 | 0.8 |               422 |       66 |         1,982 |   212 |
+| grouped count, range         |         48.5 | 3.9 |               117 |       80 |         1,470 |   365 |
+| order by                     |          461 | 477 |               532 |      528 |         2,111 | 2,014 |
+| order by, category = c       |          8.8 |  11 |                87 |       87 |         1,512 | 1,506 |
+
+Cold counts read 1.4 MB in 55 GETs and 3 waves instead of 87 MB in 507 GETs and 19 waves; counts that scan
+pages read 20 MB in 59 GETs and 5 waves. Hot+head is now one head read plus the query. Order by is unchanged
+until phase 3: the run flagged its hot p90 (+26%) and p99, so both order-by queries were rerun 60 times with
+columns on and off (`phase2-order-check-on`, `-off`) and came out the same (523 vs 530 ms, 9.3 vs 9.2 ms).
+Build and bytes are as in phase 1. Every answer is checked against the row path by a differential test over
+random writes, deletes, filters and groupings.
+
+Not done in phase 2 and carried forward: retraction sidecars (dead rows are found per query from the tail),
+SIMD kernels, parallel page scans, column cost in incremental builds, and the 10M run. Locators for secondary
+vector columns move to phase 7.
 
 ## 9. Decisions for approval
 
