@@ -5,7 +5,7 @@ import type { AppEnv, Services } from "./context.ts";
 import { addressOf } from "./request.ts";
 
 /** The request reads only, so the caller remembered from an earlier request will do. */
-const QUERY = /\/(query|search|hybrid|multi|rank|order|aggregate)$/;
+const QUERY = /\/(query|search|hybrid|multi|rank|order|aggregate|count)$/;
 const reads = (method: string, path: string) =>
   method === "GET" || method === "HEAD" || (method === "POST" && QUERY.test(path));
 
