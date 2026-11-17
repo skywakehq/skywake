@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::dictionary::Coder;
-#[cfg(test)]
-use super::dictionary::Dictionary;
+use super::dictionary::{Coder, Dictionary};
 use super::packed::Packed;
 use crate::Value;
 
@@ -114,7 +112,6 @@ impl Chunk {
         })
     }
 
-    #[cfg(test)]
     pub(crate) fn values(&self, layout: Layout, dictionary: &Dictionary) -> Vec<Option<Value>> {
         let rows = self.rows as usize;
         let all: Vec<Value> = match (&self.data, self.codes()) {

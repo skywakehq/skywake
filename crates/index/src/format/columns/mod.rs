@@ -2,9 +2,11 @@ pub(crate) mod build;
 pub(crate) mod chunk;
 pub(crate) mod dictionary;
 pub(crate) mod packed;
+pub(crate) mod plain;
 pub(crate) mod stats;
 #[cfg(test)]
 mod tests;
+pub(crate) mod writer;
 
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
@@ -25,6 +27,8 @@ pub(crate) const DIRECTORY_PAGE: usize = 64;
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Columns {
     pub pages: u64,
+    pub live: u64,
+    pub rows: Vec<Hash>,
     pub ids: Vec<Hash>,
     pub columns: BTreeMap<String, ColumnRef>,
 }
@@ -54,7 +58,7 @@ pub(crate) struct PageRef {
 impl Columns {
     pub(crate) fn weight(&self) -> usize {
         let directories: usize = self.columns.values().map(|c| c.directory.len()).sum();
-        256 + 32 * (self.ids.len() + directories) + 128 * self.columns.len()
+        256 + 32 * (self.rows.len() + self.ids.len() + directories) + 128 * self.columns.len()
     }
 }
 

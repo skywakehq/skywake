@@ -41,7 +41,8 @@ pub(crate) async fn build(
     let built_before = version.ann.is_some() || version.text.is_some() || !vectors;
     let parts_missing = (version.ann.as_ref())
         .is_some_and(|ann| !ann.parts.keys().eq(&version.schema.filter_index));
-    let columns_missing = columns && version.ann.is_some() && version.columns.is_none();
+    let columns_missing =
+        columns && version.columns.is_none() && (version.ann.is_some() || !vectors);
     let nothing_new = version.tail.is_empty() && built_before && !parts_missing && !columns_missing;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
@@ -81,6 +82,9 @@ pub(crate) async fn build(
             filter::build(storage, schema, ann, base.as_ref(), budget, &mut written).await?;
     }
     let columns = match (&ann, columns) {
+        (None, true) => {
+            Some(format::columns::plain::build(storage, &version, full, &mut written).await?)
+        }
         (Some(ann), true) => {
             let old = (base.as_ref().zip(version.columns.as_ref()))
                 .filter(|_| incremental)
@@ -100,7 +104,7 @@ pub(crate) async fn build(
                 true => current.ann == base,
                 false => current.covers() < covers || (full && current.ann == base),
             };
-            let text_applies = current.text == version.text;
+            let text_applies = current.text == version.text && current.columns == version.columns;
             let skip = covers.checked_sub(current.covers())?;
             (apply && text_applies && skip <= current.tail.len()).then(|| Version {
                 built: built.clone(),

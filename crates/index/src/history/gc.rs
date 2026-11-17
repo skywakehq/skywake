@@ -276,6 +276,7 @@ impl Reachable {
             .values()
             .flat_map(|c| [c.dictionary, c.totals]);
         self.blobs.extend(small);
+        self.blobs.extend(columns.rows.iter().copied());
         for page in self
             .chunks::<Vec<Span>>(objects, columns.ids.iter().copied())
             .await?

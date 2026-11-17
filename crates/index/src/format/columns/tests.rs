@@ -226,3 +226,145 @@ async fn turning_columns_on_backfills_and_off_writes_format_10() {
     let fresh = Index::open(gate.clone(), crate::MAIN).await.unwrap();
     agree(&fresh, &fresh.version().await.unwrap()).await;
 }
+
+fn plain_schema() -> Schema {
+    Schema::new()
+        .text("body", crate::TextOptions::default())
+        .attribute("city", Kind::String)
+        .attribute("n", Kind::Int)
+        .attribute("score", Kind::Number)
+        .attribute("tags", Kind::Strings)
+}
+
+fn plain_docs(ids: impl Iterator<Item = u64>, salt: u64) -> Vec<Doc> {
+    ids.map(|id| {
+        let mut doc = Doc::new(id)
+            .attribute("n", ((id + salt) * 7919 % 100_003) as i64)
+            .attribute("body", format!("doc {id} salt {salt}"));
+        if id % 7 != 0 {
+            doc = doc.attribute(
+                "city",
+                ["paris", "lima", "oslo"][((id + salt) % 3) as usize],
+            );
+        }
+        if id % 5 != 0 {
+            doc = doc.attribute("score", id as f64 / 8.0);
+        }
+        if id % 3 == 0 {
+            doc = doc.attribute("tags", Value::Strings(vec![format!("t{}", id % 4)]));
+        }
+        doc
+    })
+    .collect()
+}
+
+async fn agree_plain(index: &Index, version: &Version) {
+    let storage = &index.storage;
+    let columns = version.columns.as_ref().expect("the build wrote columns");
+    let mut expected: BTreeMap<crate::Id, crate::Attributes> = BTreeMap::new();
+    crate::read::live::each(storage, version, None, |id, attributes| {
+        expected.insert(id.clone(), attributes);
+    })
+    .await
+    .unwrap();
+    let spans = super::directory::<super::Span>(storage, &columns.ids)
+        .await
+        .unwrap();
+    assert_eq!(spans.len() as u64, columns.pages);
+    let mut seen: BTreeMap<crate::Id, usize> = BTreeMap::new();
+    for (page, span) in spans.iter().enumerate() {
+        let page_ids = ids(storage, span).await.unwrap();
+        for (name, column) in &columns.columns {
+            let refs = pages(storage, column).await.unwrap();
+            let dictionary = dictionary(storage, column).await.unwrap();
+            let values = chunk(storage, &refs[page].span)
+                .await
+                .unwrap()
+                .values(column.layout, &dictionary);
+            assert_eq!(values.len(), page_ids.len(), "{name} page {page}");
+            for (id, value) in page_ids.iter().zip(values) {
+                assert_eq!(value, expected[id].get(name).cloned(), "{name} of {id}");
+            }
+        }
+        for id in page_ids.iter() {
+            assert!(seen.insert(id.clone(), page).is_none(), "{id} twice");
+        }
+    }
+    assert!(seen.keys().eq(expected.keys()));
+    assert_eq!(columns.live, expected.len() as u64);
+    let map: Vec<Arc<crate::format::rows::RowPage>> =
+        storage.get_all(columns.rows.clone()).await.unwrap();
+    let mut mapped = 0;
+    for (at, page) in map.iter().enumerate() {
+        for (i, id) in page.ids.iter().enumerate() {
+            assert_eq!(crate::format::rows::page_of(id, map.len()), at);
+            assert_eq!(seen[id], page.clusters[i] as usize, "{id}");
+            mapped += 1;
+        }
+    }
+    assert_eq!(mapped, expected.len());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn indexes_without_vectors_get_pages_and_a_row_map() {
+    let gate = Gate::new();
+    let options = Options {
+        columns: true,
+        ..Options::default()
+    };
+    let index = Index::create_with(gate.clone(), plain_schema(), options)
+        .await
+        .unwrap();
+    for from in (0..20_000).step_by(5_000) {
+        index
+            .upsert(plain_docs(from..from + 5_000, 0))
+            .await
+            .unwrap();
+    }
+    index.build().await.unwrap();
+    let before = index.version().await.unwrap();
+    agree_plain(&index, &before).await;
+    assert_eq!(before.columns.as_ref().unwrap().pages, 3);
+
+    index
+        .upsert(plain_docs((100..130).chain(20_000..20_100), 1))
+        .await
+        .unwrap();
+    index.delete(vec![5u64.into(), 6u64.into()]).await.unwrap();
+    index.build().await.unwrap();
+    let after = index.version().await.unwrap();
+    agree_plain(&index, &after).await;
+
+    let (old, new) = (
+        before.columns.as_ref().unwrap(),
+        after.columns.as_ref().unwrap(),
+    );
+    assert_eq!(new.pages, old.pages + 1);
+    let storage = &index.storage;
+    let old_pages = pages(storage, &old.columns["city"]).await.unwrap();
+    let new_pages = pages(storage, &new.columns["city"]).await.unwrap();
+    let old_ids = super::directory::<super::Span>(storage, &old.ids)
+        .await
+        .unwrap();
+    let written: Vec<u64> = (100..130).chain([5, 6]).collect();
+    let mut kept = 0;
+    for (page, span) in old_ids.iter().enumerate() {
+        let page_ids = ids(storage, span).await.unwrap();
+        let touched = page_ids
+            .iter()
+            .any(|id| written.iter().any(|&w| *id == w.into()));
+        assert_eq!(
+            new_pages[page].span != old_pages[page].span,
+            touched,
+            "page {page}"
+        );
+        kept += usize::from(!touched);
+    }
+    assert!(kept > 0);
+
+    crate::gc::collect(gate.clone(), std::time::Duration::ZERO, false)
+        .await
+        .unwrap();
+    let fresh = Index::open(gate.clone(), crate::MAIN).await.unwrap();
+    agree_plain(&fresh, &fresh.version().await.unwrap()).await;
+}
