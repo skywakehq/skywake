@@ -8,6 +8,7 @@ use super::spill::Spill;
 use crate::build::{Coding, groups, segments, store_clusters};
 use crate::format::SegmentRef;
 use crate::format::cluster::{Cluster, ClusterRef};
+use crate::format::columns::writer::Writer;
 use crate::store::{Storage, Written};
 use crate::{Attributes, Error, Id, Result};
 
@@ -17,6 +18,7 @@ pub(super) async fn fill(
     (slots, c, counts): (&Run<'_>, usize, &[u64]),
     (budget, row_bytes, spill): (usize, usize, bool),
     coding: &Coding,
+    mut pages: Option<&mut Writer<'_>>,
     written: &mut Written,
 ) -> Result<Vec<ClusterRef>> {
     let (dims, k) = (coding.dims, counts.len());
@@ -44,6 +46,9 @@ pub(super) async fn fill(
                 let cluster = &mut fill[row.cluster as usize - group[0]].1;
                 push(cluster, row.id, row.seq, &row.vector, row.attributes);
             }
+            if let Some(pages) = pages.as_deref_mut() {
+                feed(pages, &fill, written).await?;
+            }
             stored.extend(store_clusters(storage, fill, coding, written).await?);
         }
     } else {
@@ -65,10 +70,26 @@ pub(super) async fn fill(
                 },
             )
             .await?;
+            if let Some(pages) = pages.as_deref_mut() {
+                feed(pages, &fill, written).await?;
+            }
             stored.extend(store_clusters(storage, fill, coding, written).await?);
         }
     }
     Ok(stored)
+}
+
+async fn feed(
+    pages: &mut Writer<'_>,
+    fill: &[(usize, Cluster)],
+    written: &mut Written,
+) -> Result<()> {
+    for (_, cluster) in fill {
+        pages
+            .add_rows(&cluster.ids, &cluster.attributes, written)
+            .await?;
+    }
+    Ok(())
 }
 
 fn empty(group: &[usize], counts: &[u64], dims: usize) -> Vec<(usize, Cluster)> {

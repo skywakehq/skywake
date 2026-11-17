@@ -397,6 +397,7 @@ async fn random_case(seed: u64) {
     let options = Options {
         cluster_rows: 20 + draw.below(60) as usize,
         page_rows: 16 + draw.below(100) as usize,
+        build_bytes: [1 << 30, 16 << 10][draw.below(2) as usize],
         columns: true,
         ..Options::default()
     };

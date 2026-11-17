@@ -60,11 +60,15 @@ pub(crate) async fn build(
         }
     }
     let incremental = grown.is_some();
+    let mut filled = None;
     let mut ann = match (grown, vectors) {
         (Some(ann), _) => Some(ann),
         (None, true) => {
             let sizes = (budget, cluster_rows, spill);
-            Some(full_build(storage, &version, sizes, &mut written).await?)
+            let on = columns.is_some();
+            let (ann, pages) = full_build(storage, &version, sizes, on, &mut written).await?;
+            filled = pages;
+            Some(ann)
         }
         (None, false) => None,
     };
@@ -82,6 +86,7 @@ pub(crate) async fn build(
             filter::build(storage, schema, ann, base.as_ref(), budget, &mut written).await?;
     }
     let columns = match (&ann, columns) {
+        (Some(_), Some(_)) if filled.is_some() => filled,
         (None, Some(page_rows)) => {
             let build =
                 format::columns::plain::build(storage, &version, page_rows, full, &mut written);

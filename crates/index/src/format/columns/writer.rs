@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use futures::{StreamExt, TryStreamExt, stream};
+use futures::{StreamExt, TryStreamExt, future, stream};
 use skywake_core::Hash;
 
 use super::chunk::{Chunk, Layout};
@@ -10,7 +10,7 @@ use super::stats::{Stats, Totals};
 use super::{ColumnRef, Columns, DIRECTORY_PAGE, PageRef, Span, directory};
 use crate::format::cluster::checksum;
 use crate::store::{PARALLELISM, Storage, Written};
-use crate::{Id, Kind, Result, Schema, Value};
+use crate::{Attributes, Id, Kind, Result, Schema, Value};
 
 const PIECE: usize = 64 << 20;
 const DICTIONARY_SHARE: usize = 4;
@@ -132,6 +132,22 @@ impl<'a> Writer<'a> {
         Ok(())
     }
 
+    pub(crate) async fn add_rows(
+        &mut self,
+        ids: &[Id],
+        rows: &[Attributes],
+        written: &mut Written,
+    ) -> Result<()> {
+        let values: Values = (self.columns.iter())
+            .map(|building| {
+                let name = &building.name;
+                let column = rows.iter().map(|row| row.get(name).cloned()).collect();
+                (name.clone(), column)
+            })
+            .collect();
+        self.add(ids, &values, written).await
+    }
+
     pub(crate) async fn finish(
         self,
         rows: Vec<Hash>,
@@ -145,19 +161,21 @@ impl<'a> Writer<'a> {
         let ids: Vec<Span> = (self.ids.into_iter())
             .map(|p| p.into_span(&blobs))
             .collect();
-        let mut bytes = rows_bytes + ids.iter().map(length).sum::<u64>();
+        let stores = (self.columns.into_iter()).map(|building| building.store(storage, &blobs));
+        let (stored, (directory, size)) =
+            futures::try_join!(future::try_join_all(stores), put_directory(storage, &ids),)?;
+        written.chunks(directory.iter().copied());
+        let mut bytes = rows_bytes + size + ids.iter().map(length).sum::<u64>();
         let mut refs = BTreeMap::new();
-        for building in self.columns {
-            let name = building.name.clone();
-            let (column, size) = building.store(storage, &blobs, written).await?;
+        for (name, column, size, hashes) in stored {
+            written.chunks(hashes);
             bytes += size;
             refs.insert(name, column);
         }
-        let (directory, size) = put_directory(storage, &ids, written).await?;
         Ok(Columns {
             pages,
             live,
-            bytes: bytes + size,
+            bytes,
             rows,
             rows_bytes,
             ids: directory,
@@ -178,8 +196,7 @@ impl Building {
         self,
         storage: &Storage,
         blobs: &[Hash],
-        written: &mut Written,
-    ) -> Result<(ColumnRef, u64)> {
+    ) -> Result<(String, ColumnRef, u64, Vec<Hash>)> {
         let mut totals = Totals::default();
         let pages: Vec<PageRef> = (self.pages.into_iter())
             .map(|(pending, stats)| {
@@ -192,16 +209,20 @@ impl Building {
             .collect();
         let chunks: u64 = pages.iter().map(|page| length(&page.span)).sum();
         let dictionary = self.coder.finish();
-        let (dictionary, a) = put(storage, &dictionary, written).await?;
-        let (totals, b) = put(storage, &totals, written).await?;
-        let (directory, c) = put_directory(storage, &pages, written).await?;
+        let ((dictionary, a), (totals, b), (directory, c)) = futures::try_join!(
+            put(storage, &dictionary),
+            put(storage, &totals),
+            put_directory(storage, &pages),
+        )?;
+        let mut hashes = vec![dictionary, totals];
+        hashes.extend(directory.iter().copied());
         let column = ColumnRef {
             layout: self.layout,
             dictionary,
             totals,
             directory,
         };
-        Ok((column, chunks + a + b + c))
+        Ok((self.name, column, chunks + a + b + c, hashes))
     }
 }
 
@@ -295,22 +316,15 @@ fn layout(kind: Kind, sample: Option<&Vec<Option<Value>>>) -> Layout {
     }
 }
 
-async fn put<T: serde::Serialize>(
-    storage: &Storage,
-    value: &T,
-    written: &mut Written,
-) -> Result<(Hash, u64)> {
+async fn put<T: serde::Serialize>(storage: &Storage, value: &T) -> Result<(Hash, u64)> {
     let encoded = postcard::to_stdvec(value)?;
     let size = encoded.len() as u64;
-    let hash = storage.put(encoded).await?;
-    written.chunks([hash]);
-    Ok((hash, size))
+    Ok((storage.put(encoded).await?, size))
 }
 
 async fn put_directory<T: serde::Serialize + Sync>(
     storage: &Storage,
     entries: &[T],
-    written: &mut Written,
 ) -> Result<(Vec<Hash>, u64)> {
     let encoded = (entries.chunks(DIRECTORY_PAGE))
         .map(postcard::to_stdvec)
@@ -321,6 +335,5 @@ async fn put_directory<T: serde::Serialize + Sync>(
         .buffered(PARALLELISM)
         .try_collect()
         .await?;
-    written.chunks(hashes.iter().copied());
     Ok((hashes, size))
 }
