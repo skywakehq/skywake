@@ -9,7 +9,7 @@ pub(crate) mod stats;
 mod tests;
 pub(crate) mod writer;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt, stream};
@@ -115,6 +115,83 @@ pub(crate) async fn warm(storage: &Storage, columns: &Columns) -> Result<()> {
         .buffer_unordered(PARALLELISM)
         .try_for_each(|_| async { Ok(()) })
         .await
+}
+
+pub(crate) async fn chunks(storage: &Storage, spans: &[Span]) -> Result<Vec<Arc<Chunk>>> {
+    read_many(storage, spans).await
+}
+
+pub(crate) async fn ids_many(storage: &Storage, spans: &[Span]) -> Result<Vec<Arc<Vec<Id>>>> {
+    read_many(storage, spans).await
+}
+
+const GAP: u64 = 256 << 10;
+const MERGED: u64 = 8 << 20;
+
+async fn read_many<T>(storage: &Storage, spans: &[Span]) -> Result<Vec<Arc<T>>>
+where
+    T: for<'de> Deserialize<'de> + Send + Sync + 'static,
+{
+    let key = |span: &Span| part(span.blob, &format!("column {}..{}", span.start, span.end));
+    let mut found: Vec<Option<Arc<T>>> =
+        spans.iter().map(|s| storage.cache().get(key(s))).collect();
+    let mut by_blob: HashMap<Hash, Vec<usize>> = HashMap::new();
+    for i in (0..spans.len()).filter(|&i| found[i].is_none()) {
+        by_blob.entry(spans[i].blob).or_default().push(i);
+    }
+    let mut ranges: Vec<(Hash, u64, u64, Vec<usize>)> = Vec::new();
+    for (blob, mut members) in by_blob {
+        members.sort_by_key(|&i| spans[i].start);
+        let mut current: Option<(u64, u64, Vec<usize>)> = None;
+        for i in members {
+            let span = &spans[i];
+            current = match current {
+                Some((start, end, mut group))
+                    if span.start <= end + GAP && span.end.max(end) - start <= MERGED =>
+                {
+                    group.push(i);
+                    Some((start, end.max(span.end), group))
+                }
+                Some((start, end, group)) => {
+                    ranges.push((blob, start, end, group));
+                    Some((span.start, span.end, vec![i]))
+                }
+                None => Some((span.start, span.end, vec![i])),
+            };
+        }
+        if let Some((start, end, group)) = current {
+            ranges.push((blob, start, end, group));
+        }
+    }
+    let fetched: Vec<(u64, Vec<u8>, Vec<usize>)> = stream::iter(ranges)
+        .map(|(blob, start, end, members)| async move {
+            let bytes = storage.range(blob, start..end).await?;
+            Ok::<_, Error>((start, bytes, members))
+        })
+        .buffer_unordered(PARALLELISM)
+        .try_collect()
+        .await?;
+    for (start, bytes, members) in fetched {
+        for i in members {
+            let span = &spans[i];
+            let piece = &bytes[(span.start - start) as usize..(span.end - start) as usize];
+            if checksum(piece) != span.check {
+                return Err(Error::Corrupt(format!(
+                    "a column chunk of blob {} does not match its checksum",
+                    span.blob
+                )));
+            }
+            let value: Arc<T> = Arc::new(postcard::from_bytes(piece)?);
+            storage
+                .cache()
+                .insert(key(span), Arc::clone(&value), 2 * piece.len());
+            found[i] = Some(value);
+        }
+    }
+    Ok(found
+        .into_iter()
+        .map(|v| v.expect("every span was read"))
+        .collect())
 }
 
 async fn read<T>(storage: &Storage, span: &Span) -> Result<Arc<T>>

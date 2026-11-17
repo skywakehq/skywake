@@ -7,6 +7,7 @@ use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::chunk::{Chunk, Layout};
 use crate::format::columns::writer::covers;
+use crate::format::columns::{self, Span};
 use crate::read::snapshot::{Aggregate, Measure, Tallied, Tally, keys_of};
 use crate::read::tail::Tail;
 use crate::store::Storage;
@@ -49,6 +50,7 @@ pub(crate) async fn aggregate(
         .values()
         .all(|m| *m == Measure::Count(None));
     let totals = counting && filter.is_none() && groups.start_from_totals(&resolved);
+    let mut scans = Vec::new();
     for page in 0..resolved.pages() {
         let dead_rows = dead.pages.get(&page);
         if totals && dead_rows.is_none() {
@@ -64,16 +66,20 @@ pub(crate) async fn aggregate(
         if counting && dead_rows.is_none() && groups.add_stats(&resolved, page, proof, filter) {
             continue;
         }
-        let loaded = load(storage, &resolved, page, filter, aggregate).await?;
-        let mut selected = match filter {
-            Some(filter) => loaded.select(filter),
-            None => ones(loaded.rows),
-        };
-        if let Some(dead) = dead_rows {
-            let alive: Bits = dead.iter().map(|word| !word).collect();
-            and(&mut selected, &alive);
+        scans.push(page);
+    }
+    for batch in scans.chunks(BATCH) {
+        for loaded in load(storage, &resolved, batch, filter, aggregate).await? {
+            let mut selected = match filter {
+                Some(filter) => loaded.select(filter),
+                None => ones(loaded.rows),
+            };
+            if let Some(dead) = dead.pages.get(&loaded.page) {
+                let alive: Bits = dead.iter().map(|word| !word).collect();
+                and(&mut selected, &alive);
+            }
+            groups.scan(&loaded, &selected)?;
         }
-        groups.scan(&loaded, &selected)?;
     }
     for (id, row) in tail.live(&newest) {
         let attributes = &tail.segment(row).attributes[row.row];
@@ -84,13 +90,15 @@ pub(crate) async fn aggregate(
     Ok(Some(groups.finish()))
 }
 
+const BATCH: usize = 256;
+
 async fn load<'a>(
     storage: &Storage,
     resolved: &'a Resolved,
-    page: usize,
+    pages: &[usize],
     filter: Option<&Filter>,
     aggregate: &Aggregate,
-) -> Result<Page<'a>> {
+) -> Result<Vec<Page<'a>>> {
     let mut names: Vec<&str> = aggregate.group_by.iter().map(String::as_str).collect();
     names.extend(
         aggregate
@@ -104,19 +112,38 @@ async fn load<'a>(
     }
     names.sort_unstable();
     names.dedup();
-    let reads = names.iter().map(|name| resolved.chunk(storage, name, page));
-    let chunks: Vec<Arc<Chunk>> = futures::future::try_join_all(reads).await?;
+    let spans: Vec<Span> = (pages.iter())
+        .flat_map(|&page| {
+            let columns = &resolved.columns;
+            names
+                .iter()
+                .map(move |name| columns[*name].pages[page].span.clone())
+        })
+        .collect();
+    let chunks: Vec<Arc<Chunk>> = columns::chunks(storage, &spans).await?;
     let ids = match filter.is_some_and(uses_ids) {
-        true => Some(resolved.ids(storage, page).await?),
+        true => {
+            let spans: Vec<Span> = pages
+                .iter()
+                .map(|&page| resolved.ids[page].clone())
+                .collect();
+            Some(columns::ids_many(storage, &spans).await?)
+        }
         false => None,
     };
-    Ok(Page {
-        resolved,
-        page,
-        rows: rows_of(resolved, page),
-        chunks: names.into_iter().map(String::from).zip(chunks).collect(),
-        ids,
-    })
+    let mut chunks = chunks.into_iter();
+    let mut ids = ids.map(Vec::into_iter);
+    Ok((pages.iter())
+        .map(|&page| Page {
+            resolved,
+            page,
+            rows: rows_of(resolved, page),
+            chunks: (names.iter().map(|name| name.to_string()))
+                .zip(chunks.by_ref())
+                .collect(),
+            ids: ids.as_mut().and_then(Iterator::next),
+        })
+        .collect())
 }
 
 fn rows_of(resolved: &Resolved, page: usize) -> usize {

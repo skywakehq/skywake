@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use super::chunk::{Chunk, Data, Layout};
 use super::dictionary::Dictionary;
 use crate::{Filter, Value};
@@ -49,6 +51,28 @@ impl Chunk {
                     set(&mut bits, row, pass(packed.get(row) as u32));
                 }
             }
+            Data::Ints { base, packed } if compare(leaf, layout).is_some() => {
+                let (op, operand) = compare(leaf, layout).expect("checked");
+                match operand {
+                    Operand::Int(x) => fill_by(&mut bits, rows, |row| {
+                        op.holds(base.wrapping_add(packed.get(row) as i64).cmp(&x))
+                    }),
+                    Operand::Float(x) => fill_by(&mut bits, rows, |row| {
+                        let n = base.wrapping_add(packed.get(row) as i64) as f64;
+                        n.partial_cmp(&x).is_some_and(|o| op.holds(o))
+                    }),
+                }
+            }
+            Data::Floats(floats) if compare(leaf, layout).is_some() => {
+                let (op, operand) = compare(leaf, layout).expect("checked");
+                let x = match operand {
+                    Operand::Int(x) => x as f64,
+                    Operand::Float(x) => x,
+                };
+                fill_by(&mut bits, rows, |row| {
+                    floats[row].partial_cmp(&x).is_some_and(|o| op.holds(o))
+                });
+            }
             Data::Ints { base, packed } => {
                 for row in 0..rows {
                     let n = base.wrapping_add(packed.get(row) as i64);
@@ -76,6 +100,61 @@ impl Chunk {
             }
         }
         bits
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Op {
+    Eq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+}
+
+impl Op {
+    fn holds(self, order: Ordering) -> bool {
+        match self {
+            Op::Eq => order.is_eq(),
+            Op::Lt => order.is_lt(),
+            Op::Lte => order.is_le(),
+            Op::Gt => order.is_gt(),
+            Op::Gte => order.is_ge(),
+        }
+    }
+}
+
+enum Operand {
+    Int(i64),
+    Float(f64),
+}
+
+fn compare(leaf: &Filter, layout: Layout) -> Option<(Op, Operand)> {
+    let (op, value) = match leaf {
+        Filter::Eq(_, v) => (Op::Eq, v),
+        Filter::Lt(_, v) => (Op::Lt, v),
+        Filter::Lte(_, v) => (Op::Lte, v),
+        Filter::Gt(_, v) => (Op::Gt, v),
+        Filter::Gte(_, v) => (Op::Gte, v),
+        _ => return None,
+    };
+    let operand = match (layout, value) {
+        (Layout::Ints, Value::Int(x)) | (Layout::Datetimes, Value::Datetime(x)) => Operand::Int(*x),
+        (Layout::Ints | Layout::Floats, Value::Number(x)) => Operand::Float(*x),
+        (Layout::Floats, Value::Int(x)) => Operand::Float(*x as f64),
+        _ => return None,
+    };
+    Some((op, operand))
+}
+
+fn fill_by(bits: &mut Bits, rows: usize, on: impl Fn(usize) -> bool) {
+    for (w, word) in bits.iter_mut().enumerate() {
+        let start = w * 64;
+        let mut out = 0u64;
+        for bit in 0..(rows - start).min(64) {
+            out |= u64::from(on(start + bit)) << bit;
+        }
+        *word = out;
     }
 }
 
