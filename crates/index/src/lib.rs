@@ -284,19 +284,21 @@ impl Index {
 
     /// The newest snapshot, given `epoch`: a number the caller raises whenever
     /// the branch may have moved, and never repeats. While it stays the same, the
-    /// head is not read again, for up to a minute, so a build's new version is
-    /// picked up later. A read that started at an older epoch never replaces the
-    /// head kept for a newer one.
+    /// head is not read again on the query's path; once a minute it is read in the
+    /// background, so a build's new version is picked up later. A read that
+    /// started at an older epoch never replaces the head kept for a newer one.
     pub async fn snapshot_for(&self, epoch: u64) -> Result<Snapshot> {
         let known = lock(&self.known).clone();
         let version = match known {
-            Some((seen, at, version)) if seen == epoch && at.elapsed() <= EVENTUAL => version,
+            Some((seen, at, version)) if seen == epoch => {
+                if at.elapsed() > EVENTUAL {
+                    self.refresh(epoch);
+                }
+                version
+            }
             _ => {
                 let version = self.storage.current(&self.branch).await?;
-                let mut known = lock(&self.known);
-                if known.as_ref().is_none_or(|(seen, ..)| *seen <= epoch) {
-                    *known = Some((epoch, Instant::now(), version.clone()));
-                }
+                self.remember(epoch, version.clone());
                 version
             }
         };
@@ -304,6 +306,25 @@ impl Index {
             storage: self.storage.clone(),
             version,
         })
+    }
+
+    fn refresh(&self, epoch: u64) {
+        if let Some((_, at, _)) = lock(&self.known).as_mut() {
+            *at = Instant::now();
+        }
+        let index = self.clone();
+        tokio::spawn(async move {
+            if let Ok(version) = index.storage.current(&index.branch).await {
+                index.remember(epoch, version);
+            }
+        });
+    }
+
+    fn remember(&self, epoch: u64, version: Arc<Version>) {
+        let mut known = lock(&self.known);
+        if known.as_ref().is_none_or(|(seen, ..)| *seen <= epoch) {
+            *known = Some((epoch, Instant::now(), version));
+        }
     }
 
     pub async fn query(&self, query: &Query) -> Result<Vec<Hit>> {
