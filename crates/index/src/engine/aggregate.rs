@@ -7,6 +7,7 @@ use super::filter::{Page, Partial, Proof, ones, prove, rows_of, uses_ids};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::chunk::Layout;
+use crate::format::columns::projection::{Directory, Run};
 use crate::format::columns::select::Bits;
 use crate::format::columns::writer::covers;
 use crate::layout::scalar;
@@ -158,26 +159,12 @@ async fn projected_count(
         };
         keyed.push((key, bound));
     }
-    let directory = &projection.directory;
-    let positions = keyed.iter().map(|&(key, bound)| {
-        directory.position(storage, move |c, k| match bound {
-            Bound::Above(true) | Bound::Below(false) => (c, k) < (code, key),
-            Bound::Above(false) | Bound::Below(true) => (c, k) <= (code, key),
-        })
-    });
-    let (floor, ceiling, found) = futures::try_join!(
-        directory.position(storage, |c, _| c < code),
-        directory.position(storage, |c, _| c <= code),
-        futures::future::try_join_all(positions),
-    )?;
-    let (mut start, mut end) = (floor, ceiling);
-    for (&(_, bound), at) in keyed.iter().zip(found) {
-        match bound {
-            Bound::Above(_) => start = start.max(at),
-            Bound::Below(_) => end = end.min(at),
-        }
-    }
-    let mut count = end.saturating_sub(start);
+    let counts = (projection.runs.iter()).map(|run| net(storage, run, code, &keyed));
+    let counted: i64 = futures::future::try_join_all(counts)
+        .await?
+        .into_iter()
+        .sum();
+    let mut count = counted.max(0) as u64;
     if dead.rows > 0 {
         let pages: Vec<usize> = dead.pages.keys().copied().collect();
         let names = [by.as_str(), sort.as_str()];
@@ -200,6 +187,42 @@ fn same_kind(schema: &Schema, name: &str, value: &Value) -> bool {
             | (Some(Kind::Int), Value::Int(_))
             | (Some(Kind::Datetime), Value::Datetime(_))
     )
+}
+
+async fn net(storage: &Storage, run: &Run, code: u32, keyed: &[(u64, Bound)]) -> Result<i64> {
+    let removed = match &run.removed {
+        Some(removed) => within(storage, removed, code, keyed).await?,
+        None => 0,
+    };
+    let added = within(storage, &run.added, code, keyed).await?;
+    Ok(added as i64 - removed as i64)
+}
+
+async fn within(
+    storage: &Storage,
+    directory: &Directory,
+    code: u32,
+    keyed: &[(u64, Bound)],
+) -> Result<u64> {
+    let positions = keyed.iter().map(|&(key, bound)| {
+        directory.position(storage, move |c, k| match bound {
+            Bound::Above(true) | Bound::Below(false) => (c, k) < (code, key),
+            Bound::Above(false) | Bound::Below(true) => (c, k) <= (code, key),
+        })
+    });
+    let (floor, ceiling, found) = futures::try_join!(
+        directory.position(storage, |c, _| c < code),
+        directory.position(storage, |c, _| c <= code),
+        futures::future::try_join_all(positions),
+    )?;
+    let (mut start, mut end) = (floor, ceiling);
+    for (&(_, bound), at) in keyed.iter().zip(found) {
+        match bound {
+            Bound::Above(_) => start = start.max(at),
+            Bound::Below(_) => end = end.min(at),
+        }
+    }
+    Ok(end.saturating_sub(start))
 }
 
 #[derive(Clone, Copy)]

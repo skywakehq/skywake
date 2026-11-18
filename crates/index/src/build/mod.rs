@@ -127,7 +127,7 @@ pub(crate) async fn build(
     };
     let columns = match columns {
         Some(mut built) => {
-            let old = (version.columns.as_ref()).map_or(&[][..], |c| &c.projections);
+            let old = version.columns.as_ref();
             let wanted =
                 crate::layout::projections(&version.schema, storage, version.columns.as_ref());
             let sizes = (budget, spill);

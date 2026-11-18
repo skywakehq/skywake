@@ -8,7 +8,7 @@ use futures::TryStreamExt;
 
 use crate::format::Version;
 use crate::format::columns::cached;
-use crate::format::columns::projection::Entry;
+use crate::format::columns::projection::{Directory, Entry, owns};
 use crate::format::columns::writer::covers;
 use crate::read::snapshot::{Order, Row};
 use crate::read::tail::{self, Tail};
@@ -206,8 +206,38 @@ async fn projected(
     let Some(code) = resolved.columns[by.as_str()].code(value) else {
         return Ok(Some(BTreeMap::new()));
     };
-    let directory = &projection.directory;
-    let mut picker = Picker::new(dead, wanted);
+    let owners = projection.owners();
+    let mut candidates = Vec::new();
+    for (at, run) in projection.runs.iter().enumerate() {
+        let fresh = || Picker::new(dead, wanted, owners, at);
+        let picker = pick_run(storage, &run.added, code, descending, fresh).await?;
+        candidates.extend(picker.picked);
+    }
+    if projection.runs.len() > 1 {
+        candidates.sort_unstable_by_key(|entry| entry.key);
+        if descending {
+            candidates.reverse();
+        }
+        let mut picker = Picker::new(dead, wanted, &[], 0);
+        candidates.iter().all(|entry| picker.take(entry));
+        candidates = picker.picked;
+    }
+    let complete = candidates.len() >= wanted || column.totals.missing == 0;
+    let mut picked: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for entry in candidates {
+        (picked.entry(entry.page as usize).or_default()).push(entry.row as usize);
+    }
+    Ok(complete.then_some(picked))
+}
+
+async fn pick_run<'d>(
+    storage: &Storage,
+    directory: &Directory,
+    code: u32,
+    descending: bool,
+    fresh: impl Fn() -> Picker<'d>,
+) -> Result<Picker<'d>> {
+    let mut picker = fresh();
     let headed = match directory.head(code) {
         Some(None) => true,
         Some(Some(head)) => {
@@ -218,7 +248,7 @@ async fn projected(
         None => false,
     };
     if !headed {
-        picker = Picker::new(dead, wanted);
+        picker = fresh();
         let (start, end) = futures::try_join!(
             directory.position(storage, |c, _| c < code),
             directory.position(storage, |c, _| c <= code),
@@ -227,37 +257,37 @@ async fn projected(
             .walk(storage, start..end, descending, |entry| picker.take(entry))
             .await?;
     }
-    let complete = picker.live >= wanted || column.totals.missing == 0;
-    Ok(complete.then_some(picker.picked))
+    Ok(picker)
 }
 
 struct Picker<'d> {
     dead: &'d Dead,
     wanted: usize,
-    picked: BTreeMap<usize, Vec<usize>>,
-    live: usize,
+    owners: &'d [u8],
+    run: usize,
+    picked: Vec<Entry>,
     last: Option<u64>,
 }
 
 impl<'d> Picker<'d> {
-    fn new(dead: &'d Dead, wanted: usize) -> Self {
+    fn new(dead: &'d Dead, wanted: usize, owners: &'d [u8], run: usize) -> Self {
         Self {
             dead,
             wanted,
-            picked: BTreeMap::new(),
-            live: 0,
+            owners,
+            run,
+            picked: Vec::new(),
             last: None,
         }
     }
 
     fn take(&mut self, entry: &Entry) -> bool {
-        if self.live >= self.wanted && self.last != Some(entry.key) {
+        if self.picked.len() >= self.wanted && self.last != Some(entry.key) {
             return false;
         }
         let (page, row) = (entry.page as usize, entry.row as usize);
-        if !self.dead.holds(page, row) {
-            self.picked.entry(page).or_default().push(row);
-            self.live += 1;
+        if owns(self.owners, self.run, entry) && !self.dead.holds(page, row) {
+            self.picked.push(*entry);
             self.last = Some(entry.key);
         }
         true

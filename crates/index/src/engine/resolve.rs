@@ -65,7 +65,11 @@ impl Resolved {
         let mut resolved = BTreeMap::new();
         let mut weight = 64 * ids.len();
         weight += (projections.iter())
-            .map(|p| 48 * p.directory.blocks.len())
+            .flat_map(|p| &p.runs)
+            .map(|run| {
+                let removed = run.removed.as_ref().map_or(0, |r| r.blocks.len());
+                48 * (run.added.blocks.len() + removed) + run.added.owners.len()
+            })
             .sum::<usize>();
         for (name, column, dictionary, totals, pages, leaders) in loaded {
             weight += 64 * pages.len() + 16 * dictionary.values.len() + 8 * totals.histogram.len();

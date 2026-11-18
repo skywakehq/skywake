@@ -286,7 +286,7 @@ impl Reachable {
         {
             self.blobs.extend(page.iter().map(|span| span.blob));
         }
-        let projections = columns.projections.iter().map(|p| p.directory);
+        let projections = columns.projections.iter().flat_map(|p| p.directories());
         for directory in self
             .chunks::<projection::Directory>(objects, projections)
             .await?

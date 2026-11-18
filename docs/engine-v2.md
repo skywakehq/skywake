@@ -823,8 +823,14 @@ Then the two gaps that cost speed (`phase8c-attrs-1m-*`):
   so a filtered order by goes from the hinted directory straight to its pages: cold 276 → 216 ms, 4 → 3 waves.
   It reads a block only when dead rows or ties use up a code's head.
 
-Not done: incremental projection blocks (a changed column rebuilds its projection, a build-time cost), and a
-shape log that survives restarts or is kept per branch (the current layout and projections are kept instead).
+- Projections grow incrementally as a stack of sorted runs (LSM style). A build sorts only the pages whose by or
+  sort chunks changed: an added run of their new entries and a removed run of their old ones. Counts add each
+  run's added range and subtract its removed range; order by picks each run's top rows (a per-page owner byte
+  skips superseded entries) and merges them. Runs merge in size tiers (at most 8), and a full re-sort happens
+  only once pending runs reach half the base, so build cost is amortised O(changed rows · log n), not O(n).
+
+Not done: a shape log that survives restarts or is kept per branch (the current layout and projections are kept
+instead).
 
 ## 9. Decisions for approval
 

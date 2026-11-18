@@ -555,7 +555,8 @@ fn column_hints(columns: &Columns) -> Vec<Hint> {
         columns
             .projections
             .iter()
-            .map(|p| Hint::Projection(p.directory)),
+            .flat_map(|p| p.directories())
+            .map(Hint::Projection),
     );
     if hints.len() > HINTED_COLUMN_OBJECTS {
         hints.clear();

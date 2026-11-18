@@ -390,7 +390,7 @@ async fn projections_answer_like_the_row_path() {
         })
         .collect()
     };
-    let first = docs(&mut draw, 0..3000);
+    let first = docs(&mut draw, 0..6000);
     with.upsert(first.clone()).await.unwrap();
     without.upsert(first).await.unwrap();
     with.build().await.unwrap();
@@ -431,14 +431,25 @@ async fn projections_answer_like_the_row_path() {
         (projections[0].by.as_str(), projections[0].sort.as_str()),
         ("city", "score")
     );
-    for round in 0..2 {
-        if round == 1 {
-            let changed = docs(&mut draw, 2900..3100);
+    let mut layered = 0;
+    for round in 0..5u64 {
+        if round > 0 {
+            let start = round * 37;
+            let added = 6000 + round * 5;
+            let mut changed = docs(&mut draw, start..start + 5);
+            changed.extend(docs(&mut draw, added..added + 5));
             with.upsert(changed.clone()).await.unwrap();
             without.upsert(changed).await.unwrap();
-            let gone: Vec<Id> = (100..140).map(Id::from).collect();
+            let gone: Vec<Id> = (start + 10..start + 13).map(Id::from).collect();
             with.delete(gone.clone()).await.unwrap();
             without.delete(gone).await.unwrap();
+            if round != 4 {
+                with.build().await.unwrap();
+                without.build().await.unwrap();
+            }
+            let version = with.storage.current(&with.branch).await.unwrap();
+            let runs = version.columns.as_ref().unwrap().projections[0].runs.len();
+            layered = layered.max(runs);
         }
         for _ in 0..30 {
             let order = ordering(&mut draw);
@@ -454,4 +465,5 @@ async fn projections_answer_like_the_row_path() {
             assert!(same(&got, &want), "{count:?}\n got {got:?}\nwant {want:?}");
         }
     }
+    assert!(layered > 1);
 }
