@@ -228,7 +228,7 @@ async fn turning_columns_on_backfills_and_off_writes_format_10() {
         .unwrap();
     assert_eq!(
         postcard::take_from_bytes::<u32>(&raw).unwrap().0,
-        crate::format::FORMAT
+        crate::format::legacy::V13_FORMAT
     );
     crate::gc::collect(gate.clone(), std::time::Duration::ZERO, false)
         .await

@@ -1,7 +1,8 @@
-//! Adaptive layout: the attributes queries range over or order by, and the key a rebuild sorts rows on.
+//! Adaptive layout: what queries range over, order by and group by, and how a rebuild lays rows out for it.
 
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash as _, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering as Atomic};
 use std::sync::{PoisonError, RwLock};
 
@@ -11,44 +12,84 @@ use crate::format::columns::{self, Columns};
 use crate::store::Storage;
 use crate::{Attributes, Filter, Id, Kind, Result, Schema, Value};
 
-const NAMES: usize = 256;
+const SHAPES: usize = 1024;
 const HALVE_AT: u64 = 1 << 20;
 const LEAST: u64 = 16;
 const SIGN: u64 = 1 << 63;
+pub(crate) const PROJECTIONS: usize = 2;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Use {
+    Range,
+    Group,
+    Pair,
+}
+
+#[derive(Debug)]
+struct Counted {
+    used: Use,
+    first: String,
+    second: String,
+    count: AtomicU64,
+}
+
+type Seen<'a> = (Use, &'a str, &'a str);
 
 #[derive(Debug, Default)]
 pub(crate) struct Shapes {
-    seen: RwLock<HashMap<String, AtomicU64>>,
+    seen: RwLock<HashMap<u64, Counted>>,
 }
 
 impl Shapes {
     pub(crate) fn order<V>(&self, by: &str, filter: Option<&Filter<V>>) {
-        let mut names = vec![by];
+        let mut shapes = vec![(Use::Range, by, "")];
         if let Some(filter) = filter {
-            ranged(filter, &mut names);
+            ranged(filter, &mut shapes);
+            let mut equal = Vec::new();
+            equals(filter, &mut equal);
+            shapes.extend(equal.into_iter().map(|name| (Use::Pair, name, by)));
         }
-        self.add(names);
+        self.add(shapes);
     }
 
     pub(crate) fn filter<V>(&self, filter: Option<&Filter<V>>) {
-        let mut names = Vec::new();
-        if let Some(filter) = filter {
-            ranged(filter, &mut names);
-        }
-        self.add(names);
+        let Some(filter) = filter else { return };
+        let mut shapes = Vec::new();
+        ranged(filter, &mut shapes);
+        let mut equal = Vec::new();
+        equals(filter, &mut equal);
+        let pairs: Vec<Seen> = (equal.iter())
+            .flat_map(|&e| shapes.iter().map(move |&(_, r, _)| (Use::Pair, e, r)))
+            .collect();
+        shapes.extend(pairs);
+        self.add(shapes);
     }
 
-    fn add(&self, mut names: Vec<&str>) {
-        names.sort_unstable();
-        names.dedup();
+    pub(crate) fn group(&self, names: &[String]) {
+        self.add(
+            names
+                .iter()
+                .map(|name| (Use::Group, name.as_str(), ""))
+                .collect(),
+        );
+    }
+
+    fn add(&self, mut shapes: Vec<Seen>) {
+        if shapes.is_empty() {
+            return;
+        }
+        shapes.sort_unstable_by_key(|&(used, a, b)| (used as u8, a, b));
+        shapes.dedup();
         let mut halve = false;
         let mut new = Vec::new();
         {
             let seen = self.seen.read().unwrap_or_else(PoisonError::into_inner);
-            for name in names {
-                match seen.get(name) {
-                    Some(count) => halve |= count.fetch_add(1, Atomic::Relaxed) + 1 >= HALVE_AT,
-                    None => new.push(name),
+            for shape in shapes {
+                match seen.get(&key_of(shape)) {
+                    Some(counted) => {
+                        halve |= counted.count.fetch_add(1, Atomic::Relaxed) + 1 >= HALVE_AT
+                    }
+                    None => new.push(shape),
                 }
             }
         }
@@ -56,16 +97,23 @@ impl Shapes {
             return;
         }
         let mut seen = self.seen.write().unwrap_or_else(PoisonError::into_inner);
-        for name in new {
-            if seen.len() < NAMES || seen.contains_key(name) {
-                let count = seen.entry(name.to_string()).or_default();
-                count.fetch_add(1, Atomic::Relaxed);
+        for shape @ (used, first, second) in new {
+            let key = key_of(shape);
+            if seen.len() >= SHAPES && !seen.contains_key(&key) {
+                continue;
             }
+            let counted = seen.entry(key).or_insert_with(|| Counted {
+                used,
+                first: first.to_string(),
+                second: second.to_string(),
+                count: AtomicU64::new(0),
+            });
+            counted.count.fetch_add(1, Atomic::Relaxed);
         }
         if halve {
-            seen.retain(|_, count| {
-                let half = count.load(Atomic::Relaxed) / 2;
-                count.store(half, Atomic::Relaxed);
+            seen.retain(|_, counted| {
+                let half = counted.count.load(Atomic::Relaxed) / 2;
+                counted.count.store(half, Atomic::Relaxed);
                 half > 0
             });
         }
@@ -73,30 +121,105 @@ impl Shapes {
 
     #[cfg(test)]
     pub(crate) fn forget(&self) {
-        self.seen
-            .write()
+        (self.seen.write())
             .unwrap_or_else(PoisonError::into_inner)
             .clear();
     }
 
-    fn busiest(&self, schema: &Schema) -> Option<String> {
+    fn ranked(&self, used: Use, keep: impl Fn(&str, &str) -> bool) -> Vec<(String, String)> {
         let seen = self.seen.read().unwrap_or_else(PoisonError::into_inner);
-        (seen.iter())
-            .map(|(name, count)| (name, count.load(Atomic::Relaxed)))
-            .filter(|&(name, count)| count >= LEAST && sortable(schema, name))
-            .max_by_key(|&(name, count)| (count, Reverse(name)))
-            .map(|(name, _)| name.clone())
+        let mut found: Vec<(u64, &Counted)> = (seen.values())
+            .filter(|c| c.used == used && keep(&c.first, &c.second))
+            .map(|c| (c.count.load(Atomic::Relaxed), c))
+            .filter(|&(count, _)| count >= LEAST)
+            .collect();
+        found.sort_unstable_by_key(|&(count, c)| (Reverse(count), &c.first, &c.second));
+        (found.into_iter())
+            .map(|(_, c)| (c.first.clone(), c.second.clone()))
+            .collect()
+    }
+
+    fn busiest(&self, schema: &Schema) -> Option<String> {
+        let ranked = self.ranked(Use::Range, |name, _| sortable(schema, name));
+        ranked.into_iter().next().map(|(name, _)| name)
+    }
+
+    pub(crate) fn grouped(&self, schema: &Schema) -> Vec<String> {
+        let ranked = self.ranked(Use::Group, |name, _| schema.attributes.contains_key(name));
+        ranked.into_iter().map(|(name, _)| name).collect()
+    }
+
+    fn pairs(&self, schema: &Schema) -> Vec<(String, String)> {
+        let mut ranked = self.ranked(Use::Pair, |by, sort| {
+            by != sort && coded(schema, by) && scalar_kind(schema, sort)
+        });
+        ranked.truncate(PROJECTIONS);
+        ranked
     }
 }
 
-fn ranged<'a, V>(filter: &'a Filter<V>, names: &mut Vec<&'a str>) {
+fn key_of((used, first, second): Seen) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    (used, first, second).hash(&mut hasher);
+    hasher.finish()
+}
+
+fn ranged<'a, V>(filter: &'a Filter<V>, shapes: &mut Vec<Seen<'a>>) {
     match filter {
         Filter::Lt(name, _) | Filter::Lte(name, _) | Filter::Gt(name, _) | Filter::Gte(name, _) => {
-            names.push(name);
+            shapes.push((Use::Range, name, ""));
         }
-        Filter::And(all) | Filter::Or(all) => all.iter().for_each(|f| ranged(f, names)),
-        Filter::Not(inner) => ranged(inner, names),
+        Filter::And(all) | Filter::Or(all) => all.iter().for_each(|f| ranged(f, shapes)),
+        Filter::Not(inner) => ranged(inner, shapes),
         _ => {}
+    }
+}
+
+fn equals<'a, V>(filter: &'a Filter<V>, names: &mut Vec<&'a str>) {
+    match filter {
+        Filter::Eq(name, _) => names.push(name),
+        Filter::And(all) => all.iter().for_each(|f| equals(f, names)),
+        _ => {}
+    }
+}
+
+fn coded(schema: &Schema, name: &str) -> bool {
+    matches!(
+        schema.attributes.get(name),
+        Some(Kind::String | Kind::Bool | Kind::Uuid)
+    )
+}
+
+fn scalar_kind(schema: &Schema, name: &str) -> bool {
+    matches!(
+        schema.attributes.get(name),
+        Some(Kind::Number | Kind::Int | Kind::Datetime)
+    )
+}
+
+pub(crate) fn projections(
+    schema: &Schema,
+    storage: &Storage,
+    old: Option<&Columns>,
+) -> Vec<(String, String)> {
+    let wanted = storage.shapes().pairs(schema);
+    if !wanted.is_empty() {
+        return wanted;
+    }
+    (old.iter().flat_map(|c| &c.projections))
+        .map(|p| (p.by.clone(), p.sort.clone()))
+        .collect()
+}
+
+pub(crate) fn scalar(value: &Value) -> Option<u64> {
+    match value {
+        Value::Number(n) if n.is_nan() => None,
+        Value::Number(n) => {
+            let bits = (n + 0.0).to_bits();
+            Some(if bits & SIGN == 0 { bits | SIGN } else { !bits })
+        }
+        Value::Int(n) | Value::Datetime(n) => Some(*n as u64 ^ SIGN),
+        _ => None,
     }
 }
 
@@ -158,12 +281,8 @@ impl Key {
     fn of(value: Option<&Value>) -> Self {
         match value {
             Some(Value::Number(n)) if n.is_nan() => Key::Scalar(u64::MAX),
-            Some(Value::Number(n)) => {
-                let bits = (n + 0.0).to_bits();
-                Key::Scalar(if bits & SIGN == 0 { bits | SIGN } else { !bits })
-            }
-            Some(Value::Int(n) | Value::Datetime(n)) => Key::Scalar(*n as u64 ^ SIGN),
             Some(Value::String(s)) => Key::Text(s.clone()),
+            Some(value) if let Some(key) = scalar(value) => Key::Scalar(key),
             _ => Key::Missing,
         }
     }
@@ -238,6 +357,20 @@ mod tests {
             shapes.order::<Value>("price", None);
         }
         assert_eq!(shapes.busiest(&schema), Some("price".into()));
+    }
+
+    #[test]
+    fn pairs_and_groups_are_counted() {
+        let shapes = Shapes::default();
+        let mut schema = schema();
+        schema.attributes.insert("city".into(), Kind::String);
+        for _ in 0..LEAST {
+            let eq = Filter::Eq("city".into(), Value::from("a"));
+            shapes.order("price", Some(&eq));
+            shapes.group(&["city".to_string()]);
+        }
+        assert_eq!(shapes.pairs(&schema), vec![("city".into(), "price".into())]);
+        assert_eq!(shapes.grouped(&schema), vec!["city".to_string()]);
     }
 
     #[test]

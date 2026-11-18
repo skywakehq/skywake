@@ -21,7 +21,7 @@ use crate::{Attributes, Id, Result, Schema, invalid};
 use columns::Columns;
 use pages::Pages;
 
-pub(crate) const FORMAT: u32 = 13;
+pub(crate) const FORMAT: u32 = 14;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 

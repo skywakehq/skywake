@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use super::dead::Dead;
-use super::filter::{Page, ones, rows_of, share};
+use super::filter::{Page, Partial, ones, rows_of, share};
 use super::resolve::{Column, Resolved};
 use futures::TryStreamExt;
 
@@ -72,10 +72,14 @@ pub(crate) async fn order(
 
     let (by, descending) = keys[0];
     let column = &resolved.columns[by];
-    let leading = filter
-        .is_none()
-        .then(|| leading(order, column, &dead, descending, wanted));
-    if let Some(picked) = leading.flatten() {
+    let picked = match filter {
+        None => leading(order, column, &dead, descending, wanted),
+        Some(filter) => {
+            let wanting = (by, descending, wanted);
+            projected(storage, &resolved, order, filter, &dead, wanting).await?
+        }
+    };
+    if let Some(picked) = picked {
         let pages: Vec<usize> = picked.keys().copied().collect();
         let mut names = loaded.clone();
         names.extend(order.include.iter().map(String::as_str));
@@ -106,6 +110,7 @@ pub(crate) async fn order(
     if !cold {
         pages.iter_mut().for_each(|(.., share)| *share = 1.0);
     }
+    let partial = Partial::of(storage, filter);
     let (mut next, mut batch) = (0, FIRST_BATCH);
     while next < pages.len() {
         let mut end = next;
@@ -125,7 +130,7 @@ pub(crate) async fn order(
         while let Some(batch) = loads.try_next().await? {
             for page in batch {
                 let mut selected = match filter {
-                    Some(filter) => page.select(filter),
+                    Some(filter) => page.select_with(filter, partial.as_ref()),
                     None => ones(page.rows),
                 };
                 dead.mask(page.page, &mut selected);
@@ -174,6 +179,56 @@ fn leading(
         }
     }
     (live >= wanted).then_some(picked)
+}
+
+async fn projected(
+    storage: &Storage,
+    resolved: &Resolved,
+    order: &Order,
+    filter: &Filter,
+    dead: &Dead,
+    (sort, descending, wanted): (&str, bool, usize),
+) -> Result<Option<BTreeMap<usize, Vec<usize>>>> {
+    let Filter::Eq(by, value) = filter else {
+        return Ok(None);
+    };
+    let found = (resolved.projections.iter()).find(|p| p.by == *by && p.sort == sort);
+    let (Some(projection), Some(present)) = (found, resolved.columns[sort].totals.max.as_ref())
+    else {
+        return Ok(None);
+    };
+    let column = &resolved.columns[sort];
+    let missing_last = order.key_order(descending, Some(present), None) == Ordering::Less;
+    if wanted == 0 || (column.totals.missing > 0 && !missing_last) {
+        return Ok(None);
+    }
+    let Some(code) = resolved.columns[by.as_str()].code(value) else {
+        return Ok(Some(BTreeMap::new()));
+    };
+    let directory = &projection.directory;
+    let (start, end) = futures::try_join!(
+        directory.position(storage, |c, _| c < code),
+        directory.position(storage, |c, _| c <= code),
+    )?;
+    let mut picked: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut live = 0;
+    let mut last = None;
+    directory
+        .walk(storage, start..end, descending, |entry| {
+            if live >= wanted && last != Some(entry.key) {
+                return false;
+            }
+            let (page, row) = (entry.page as usize, entry.row as usize);
+            if !dead.holds(page, row) {
+                picked.entry(page).or_default().push(row);
+                live += 1;
+                last = Some(entry.key);
+            }
+            true
+        })
+        .await?;
+    let complete = live >= wanted || column.totals.missing == 0;
+    Ok(complete.then_some(picked))
 }
 
 fn has_nan(column: &Column) -> bool {

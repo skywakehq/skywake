@@ -121,6 +121,25 @@ pub(crate) async fn build(
         }
         _ => None,
     };
+    let columns = match columns {
+        Some(mut built) => {
+            let old = (version.columns.as_ref()).map_or(&[][..], |c| &c.projections);
+            let wanted =
+                crate::layout::projections(&version.schema, storage, version.columns.as_ref());
+            let sizes = (budget, spill);
+            let made = format::columns::projection::build(
+                storage,
+                &built,
+                old,
+                &wanted,
+                sizes,
+                &mut written,
+            );
+            built.projections = made.await?;
+            Some(built)
+        }
+        None => None,
+    };
     let text = crate::text::build::build(storage, &version, budget, full, postings, &mut written);
     let text = text.await?;
     let built = (version.built)

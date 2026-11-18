@@ -32,6 +32,7 @@ pub(crate) enum Hint {
     Pages(Hash),
     Spans(Hash),
     Leaders(Hash),
+    Projection(Hash),
 }
 
 impl Hint {
@@ -50,6 +51,7 @@ impl Hint {
             Hint::Pages(hash) => format!("pages {hash}"),
             Hint::Spans(hash) => format!("spans {hash}"),
             Hint::Leaders(hash) => format!("leaders {hash}"),
+            Hint::Projection(hash) => format!("projection {hash}"),
         }
     }
 
@@ -71,6 +73,7 @@ impl Hint {
             "pages" => Some(Hint::Pages(hash)),
             "spans" => Some(Hint::Spans(hash)),
             "leaders" => Some(Hint::Leaders(hash)),
+            "projection" => Some(Hint::Projection(hash)),
             _ => None,
         }
     }

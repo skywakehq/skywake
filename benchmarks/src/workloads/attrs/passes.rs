@@ -31,6 +31,7 @@ pub(super) async fn load(store: &Store, plan: &Plan) -> Result<Setup> {
     let options = Options {
         unbuilt_bytes: u64::MAX,
         columns: plan.columns,
+        partials: false,
         ..Options::default()
     };
     let index = Index::create_with(store.store.clone(), schema(plan.dims), options).await?;
@@ -107,6 +108,7 @@ pub(super) async fn measure(store: &Store, plan: &Plan) -> Result<Vec<Pass>> {
     let options = Options {
         cache_bytes: plan.cache_bytes,
         columns: plan.columns,
+        partials: false,
         ..Options::default()
     };
     let index = Index::open_with(store.store.clone(), skywake_index::MAIN, options).await?;

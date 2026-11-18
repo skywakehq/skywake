@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::Value;
 
 pub(crate) const MAX_CODES: usize = 1 << 16;
+pub(crate) const GROUPED_CODES: usize = 1 << 20;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Dictionary {
@@ -39,14 +40,24 @@ impl Word {
 pub(crate) struct Coder {
     pub dictionary: Dictionary,
     codes: HashMap<Word, u32>,
+    limit: usize,
 }
 
 impl Coder {
+    #[cfg(test)]
     pub(crate) fn new(dictionary: Dictionary) -> Self {
+        Self::with_limit(dictionary, MAX_CODES)
+    }
+
+    pub(crate) fn with_limit(dictionary: Dictionary, limit: usize) -> Self {
         let codes = (dictionary.values.iter().enumerate())
             .filter_map(|(code, value)| Some((Word::of(value)?, code as u32)))
             .collect();
-        Self { dictionary, codes }
+        Self {
+            dictionary,
+            codes,
+            limit,
+        }
     }
 
     pub(crate) fn code(&mut self, value: &Value) -> Option<u32> {
@@ -54,7 +65,7 @@ impl Coder {
         if let Some(&code) = self.codes.get(&word) {
             return Some(code);
         }
-        if self.dictionary.values.len() >= MAX_CODES {
+        if self.dictionary.values.len() >= self.limit {
             return None;
         }
         let code = self.dictionary.values.len() as u32;

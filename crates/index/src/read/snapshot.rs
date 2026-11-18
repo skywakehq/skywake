@@ -402,6 +402,7 @@ impl Snapshot {
             .map(|f| f.typed(schema))
             .transpose()?;
         self.storage.shapes().filter(aggregate.filter.as_ref());
+        self.storage.shapes().group(&aggregate.group_by);
         let engine = crate::engine::aggregate::aggregate(
             &self.storage,
             &self.version,

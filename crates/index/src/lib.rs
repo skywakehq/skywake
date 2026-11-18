@@ -68,6 +68,8 @@ pub struct Options {
     pub columns: bool,
     pub page_rows: usize,
     pub postings: bool,
+    /// Caches each page's rows for a filter, so a repeated filter skips its predicates.
+    pub partials: bool,
 }
 
 impl Default for Options {
@@ -85,6 +87,7 @@ impl Default for Options {
             columns: false,
             page_rows: 8192,
             postings: false,
+            partials: true,
         }
     }
 }
@@ -152,6 +155,7 @@ impl Index {
                 options.cache_bytes,
                 options.disk.clone(),
                 options.shared.clone(),
+                options.partials,
             )),
             branch: branch.to_string(),
             writer: Arc::new(Writer::new(options.commit_rows, options.queued_rows)),

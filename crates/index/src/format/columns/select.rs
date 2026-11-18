@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use super::chunk::{Chunk, Data, Layout};
 use super::dictionary::Dictionary;
@@ -6,30 +7,58 @@ use crate::{Filter, Value};
 
 pub(crate) type Bits = Vec<u64>;
 
+const DENSE_MEMO: usize = 4;
+
 impl Chunk {
     pub(crate) fn select(&self, leaf: &Filter, layout: Layout, dictionary: &Dictionary) -> Bits {
         let rows = self.rows as usize;
         let mut bits = vec![0u64; rows.div_ceil(64)];
-        let mut known = vec![0u8; dictionary.values.len()];
-        let mut pass = |code: u32| {
-            let at = code as usize;
-            if known[at] == 0 {
-                known[at] = 1 + u8::from(leaf.test(Some(&dictionary.values[at])));
+        let values = &dictionary.values;
+        if values.len() <= DENSE_MEMO * rows.max(1) {
+            let mut known = vec![0u8; values.len()];
+            self.select_into(&mut bits, leaf, layout, |code| {
+                let at = code as usize;
+                if known[at] == 0 {
+                    known[at] = 1 + u8::from(leaf.test(Some(&values[at])));
+                }
+                known[at] == 2
+            });
+        } else {
+            let mut known: HashMap<u32, bool> = HashMap::new();
+            self.select_into(&mut bits, leaf, layout, |code| {
+                *known
+                    .entry(code)
+                    .or_insert_with(|| leaf.test(Some(&values[code as usize])))
+            });
+        }
+        if let Some(missing) = &self.missing {
+            for (word, gone) in bits.iter_mut().zip(missing) {
+                *word &= !gone;
             }
-            known[at] == 2
-        };
+        }
+        bits
+    }
+
+    fn select_into(
+        &self,
+        bits: &mut Bits,
+        leaf: &Filter,
+        layout: Layout,
+        mut pass: impl FnMut(u32) -> bool,
+    ) {
+        let rows = self.rows as usize;
         match (&self.data, compare(leaf, layout)) {
             (Data::Empty, _) => {}
             (Data::Constant(code), _) => {
                 if pass(*code) {
-                    fill(&mut bits, 0, rows);
+                    fill(bits, 0, rows);
                 }
             }
             (Data::Runs { codes, ends }, _) => {
                 let mut start = 0;
                 for (&code, &end) in codes.iter().zip(ends) {
                     if pass(code) {
-                        fill(&mut bits, start, end as usize);
+                        fill(bits, start, end as usize);
                     }
                     start = end as usize;
                 }
@@ -43,22 +72,22 @@ impl Chunk {
                 _,
             ) => {
                 if pass(*common) {
-                    fill(&mut bits, 0, rows);
+                    fill(bits, 0, rows);
                 }
                 for (&row, &code) in at.iter().zip(codes) {
-                    set(&mut bits, row as usize, pass(code));
+                    set(bits, row as usize, pass(code));
                 }
             }
             (Data::Codes(packed), _) => {
                 for row in 0..rows {
-                    set(&mut bits, row, pass(packed.get(row) as u32));
+                    set(bits, row, pass(packed.get(row) as u32));
                 }
             }
             (Data::Ints { base, packed }, Some((op, operand))) => match operand {
-                Operand::Int(x) => fill_by(&mut bits, rows, |row| {
+                Operand::Int(x) => fill_by(bits, rows, |row| {
                     op.holds(base.wrapping_add(packed.get(row) as i64).cmp(&x))
                 }),
-                Operand::Float(x) => fill_by(&mut bits, rows, |row| {
+                Operand::Float(x) => fill_by(bits, rows, |row| {
                     let n = base.wrapping_add(packed.get(row) as i64) as f64;
                     n.partial_cmp(&x).is_some_and(|o| op.holds(o))
                 }),
@@ -68,7 +97,7 @@ impl Chunk {
                     Operand::Int(x) => x as f64,
                     Operand::Float(x) => x,
                 };
-                fill_by(&mut bits, rows, |row| {
+                fill_by(bits, rows, |row| {
                     floats[row].partial_cmp(&x).is_some_and(|o| op.holds(o))
                 });
             }
@@ -79,26 +108,20 @@ impl Chunk {
                         Layout::Datetimes => Value::Datetime(n),
                         _ => Value::Int(n),
                     };
-                    set(&mut bits, row, leaf.test(Some(&value)));
+                    set(bits, row, leaf.test(Some(&value)));
                 }
             }
             (Data::Floats(floats), None) => {
                 for (row, &n) in floats.iter().enumerate() {
-                    set(&mut bits, row, leaf.test(Some(&Value::Number(n))));
+                    set(bits, row, leaf.test(Some(&Value::Number(n))));
                 }
             }
             (Data::Values(values), _) => {
                 for (row, value) in values.iter().enumerate() {
-                    set(&mut bits, row, leaf.test(Some(value)));
+                    set(bits, row, leaf.test(Some(value)));
                 }
             }
         }
-        if let Some(missing) = &self.missing {
-            for (word, gone) in bits.iter_mut().zip(missing) {
-                *word &= !gone;
-            }
-        }
-        bits
     }
 }
 

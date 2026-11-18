@@ -5,7 +5,7 @@ use futures::{StreamExt, TryStreamExt, future, stream};
 use skywake_core::Hash;
 
 use super::chunk::{Chunk, Layout};
-use super::dictionary::{Coder, Dictionary, Word};
+use super::dictionary::{Coder, Dictionary, GROUPED_CODES, MAX_CODES, Word};
 use super::leaders::{Gather, Leaders, ranks};
 use super::stats::{Stats, Totals};
 use super::{ColumnRef, Columns, DIRECTORY_PAGE, PageRef, Span, directory};
@@ -93,18 +93,22 @@ impl<'a> Writer<'a> {
         sample: Option<&Values>,
         old: Option<&'a Old>,
     ) -> Self {
+        let grouped = storage.shapes().grouped(schema);
         let columns = (schema.attributes.iter())
             .map(|(name, &kind)| {
                 let previous = old.and_then(|old| old.columns.get(name));
+                let wide = grouped.contains(name) && codable(kind);
                 let layout = match previous {
                     Some((layout, ..)) => *layout,
+                    None if wide => Layout::Dictionary,
                     None => layout(kind, sample.and_then(|s| s.get(name))),
                 };
                 let dictionary = previous.map(|(_, d, _)| (**d).clone()).unwrap_or_default();
+                let limit = if wide { GROUPED_CODES } else { MAX_CODES };
                 Building {
                     name: name.clone(),
                     layout,
-                    coder: Coder::new(dictionary),
+                    coder: Coder::with_limit(dictionary, limit),
                     pages: Vec::new(),
                     leaders: ranks(kind).then(Gather::new),
                 }
@@ -209,6 +213,7 @@ impl<'a> Writer<'a> {
             rows_bytes,
             ids: directory,
             columns: refs,
+            projections: Vec::new(),
         })
     }
 }
@@ -339,6 +344,13 @@ impl Pieces {
         }
         Ok(self.blobs)
     }
+}
+
+fn codable(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::String | Kind::Bool | Kind::Uuid | Kind::Int | Kind::Datetime | Kind::Number
+    )
 }
 
 fn layout(kind: Kind, sample: Option<&Vec<Option<Value>>>) -> Layout {

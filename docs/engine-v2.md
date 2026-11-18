@@ -783,9 +783,32 @@ Unfiltered counts and grouped counts are within noise (count by group hot 0.5 �
   rebuild keeps the key whose pages are already in order, so a layout is never lost.
 - Effect: pages become disjoint on the key, so range filters skip most of them by min and max.
 
-Not done: automatic composite projections, the per-page partial-result cache, dictionaries past 64K values,
-and clustering for indexes with vectors (their rows are laid out by cluster). The log lives in memory per
-process and is shared by the branches of one store.
+Then the rest of the phase (`phase8b-attrs-1m-plain`, `-adapt`, same runs; format 14):
+
+| Query, after the adapting rebuild        | Hot before | Hot after | Cold before | Cold after | Cold read      | Waves |
+| ---------------------------------------- | ---------: | --------: | ----------: | ---------: | -------------: | ----: |
+| count, category and popularity > p       |        0.4 |       0.1 |         215 |        214 | 9.5 → 7.6 MB   | 3     |
+| order by popularity, top 10, category    |        1.1 |       0.1 |         252 |        276 | 43.9 → 7.9 MB  | 3 → 4 |
+
+Without an adapting rebuild every p90 is within noise of the first part (plain hot rerun: 3.6 and 2.7 ms for
+the two filtered queries).
+
+- Composite projections (format 14): for the busiest (equality attribute, sort attribute) pairs, at most two,
+  every live row's (code, sort key, page, row), sorted, in blocks of 4,096 with running counts and a
+  directory the head hints. A filtered order by walks one block from the end of its code and reads only the
+  pages of the rows it needs, plus ties; a filtered count with one equality and ranges on the sort attribute
+  is two seeks and a subtraction, minus dead rows that match, plus the tail. Built after the columns with the
+  external sort; kept as they are when neither column's pages changed. Formats 10 to 13 still read and are
+  still written when there are no projections.
+- Dictionaries past 64K values: an attribute grouped by in at least 16 queries is coded with up to 1M values.
+  A page's predicate memo switches to a hash map when the dictionary is over 4× the page's rows.
+- Per-page partial results: a page's selection for a filter is cached by (filter, the page's chunks), so a
+  repeated filter and a fork that kept the page skip the predicates. `Options::partials`, off in benchmark runs.
+
+Kept: the filtered order by spends a fourth wave on its block (cold p90 +9% on the slow store, 82% fewer
+bytes). Not done: clustering for indexes with vectors (their rows are laid out by cluster), incremental
+projection blocks (a changed column rebuilds its projection), and a shape log that survives restarts (the
+current layout and projections are kept instead).
 
 ## 9. Decisions for approval
 

@@ -1,21 +1,23 @@
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, OnceLock};
 
 use skywake_core::Hash;
 
-use crate::Result;
 use crate::format::columns::chunk::Layout;
-use crate::format::columns::dictionary::Dictionary;
+use crate::format::columns::dictionary::{Dictionary, Word};
 use crate::format::columns::leaders::Leaders;
+use crate::format::columns::projection::{self, Projected};
 use crate::format::columns::stats::Totals;
 use crate::format::columns::{self, Columns, PageRef, Span};
 use crate::store::Storage;
+use crate::{Result, Value};
 
 pub(crate) struct Resolved {
     pub live: u64,
     pub ids: Vec<Span>,
     pub rows: Vec<usize>,
     pub columns: BTreeMap<String, Column>,
+    pub projections: Vec<Projected>,
 }
 
 pub(crate) struct Column {
@@ -24,6 +26,18 @@ pub(crate) struct Column {
     pub totals: Arc<Totals>,
     pub pages: Vec<PageRef>,
     pub leaders: Option<Arc<Leaders>>,
+    lookup: OnceLock<HashMap<Word, u32>>,
+}
+
+impl Column {
+    pub(crate) fn code(&self, value: &Value) -> Option<u32> {
+        let lookup = self.lookup.get_or_init(|| {
+            (self.dictionary.values.iter().enumerate())
+                .filter_map(|(code, value)| Some((Word::of(value)?, code as u32)))
+                .collect()
+        });
+        lookup.get(&Word::of(value)?).copied()
+    }
 }
 
 impl Resolved {
@@ -41,12 +55,17 @@ impl Resolved {
             )?;
             Ok::<_, crate::Error>((name, column, dictionary, totals, pages, leaders))
         });
-        let (ids, loaded) = futures::try_join!(
+        let projected = (columns.projections.iter()).map(|p| projection::directory(storage, p));
+        let (ids, loaded, projections) = futures::try_join!(
             columns::directory::<Span>(storage, &columns.ids),
             futures::future::try_join_all(loads),
+            futures::future::try_join_all(projected),
         )?;
         let mut resolved = BTreeMap::new();
         let mut weight = 64 * ids.len();
+        weight += (projections.iter())
+            .map(|p| 48 * p.directory.blocks.len())
+            .sum::<usize>();
         for (name, column, dictionary, totals, pages, leaders) in loaded {
             weight += 64 * pages.len() + 16 * dictionary.values.len() + 8 * totals.histogram.len();
             weight += leaders
@@ -61,6 +80,7 @@ impl Resolved {
                 totals,
                 pages,
                 leaders,
+                lookup: OnceLock::new(),
             };
             resolved.insert(name.clone(), column);
         }
@@ -76,6 +96,7 @@ impl Resolved {
             ids,
             rows,
             columns: resolved,
+            projections,
         });
         storage.cache().insert(key, Arc::clone(&resolved), weight);
         Ok(resolved)

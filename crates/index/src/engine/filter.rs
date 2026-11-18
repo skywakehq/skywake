@@ -11,6 +11,7 @@ use crate::format::columns::select::Bits;
 use crate::format::columns::{self, Span};
 use crate::store::Storage;
 use crate::{Filter, Id, Result, Value};
+use skywake_core::Hash;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Proof {
@@ -204,6 +205,23 @@ impl<'a> Page<'a> {
             .buffered(LOADS)
     }
 
+    pub(crate) fn select_with(&self, filter: &Filter, partial: Option<&Partial>) -> Bits {
+        let Some(partial) = partial else {
+            return self.select(filter);
+        };
+        let spans: Vec<Hash> = (partial.names.iter())
+            .map(|name| columns::key(&self.resolved.columns[name.as_str()].pages[self.page].span))
+            .collect();
+        let key = Hash::of(&postcard::to_stdvec(&(partial.predicate, spans)).unwrap_or_default());
+        let cache = partial.storage.cache();
+        if let Some(found) = cache.get::<Bits>(key) {
+            return (*found).clone();
+        }
+        let bits = self.select(filter);
+        cache.insert(key, Arc::new(bits.clone()), 8 * bits.len() + 64);
+        bits
+    }
+
     pub(crate) fn select(&self, filter: &Filter) -> Bits {
         match prove(filter, self.resolved, self.page) {
             Proof::None => return vec![0; self.rows.div_ceil(64)],
@@ -292,6 +310,27 @@ pub(crate) fn rows_of(bits: &[u64], rows: usize) -> impl Iterator<Item = usize> 
         })
         .take_while(move |&row| row < rows)
     })
+}
+
+pub(crate) struct Partial<'s> {
+    storage: &'s Storage,
+    predicate: Hash,
+    names: Vec<String>,
+}
+
+impl<'s> Partial<'s> {
+    pub(crate) fn of(storage: &'s Storage, filter: Option<&Filter>) -> Option<Self> {
+        let filter = filter.filter(|f| storage.partials() && !uses_ids(f))?;
+        let mut names = Vec::new();
+        filter.names(&mut names);
+        names.sort_unstable();
+        names.dedup();
+        Some(Self {
+            storage,
+            predicate: Hash::of(format!("{filter:?}").as_bytes()),
+            names: names.into_iter().map(str::to_string).collect(),
+        })
+    }
 }
 
 pub(crate) fn uses_ids(filter: &Filter) -> bool {

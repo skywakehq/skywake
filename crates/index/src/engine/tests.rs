@@ -338,3 +338,97 @@ async fn columns_answer_like_the_row_path() {
         case(seed).await;
     }
 }
+
+#[tokio::test]
+async fn projections_answer_like_the_row_path() {
+    let schema = Schema::new()
+        .attribute("city", Kind::String)
+        .attribute("score", Kind::Number)
+        .text("body", crate::TextOptions::default());
+    let engine = Options {
+        columns: true,
+        page_rows: 50,
+        ..Options::default()
+    };
+    let with = Index::create_with(Gate::new(), schema.clone(), engine)
+        .await
+        .unwrap();
+    let without = Index::create_with(Gate::new(), schema, Options::default())
+        .await
+        .unwrap();
+    let mut draw = Draw(11);
+    let docs = |draw: &mut Draw, ids: std::ops::Range<u64>| -> Vec<Doc> {
+        ids.map(|id| {
+            let mut doc = Doc::new(id).attribute("city", format!("c{}", draw.below(6)));
+            if draw.below(10) != 0 {
+                doc = doc.attribute("score", draw.below(300) as f64 / 4.0);
+            }
+            doc
+        })
+        .collect()
+    };
+    let first = docs(&mut draw, 0..3000);
+    with.upsert(first.clone()).await.unwrap();
+    without.upsert(first).await.unwrap();
+    with.build().await.unwrap();
+    without.build().await.unwrap();
+    let city =
+        |draw: &mut Draw| Filter::Eq("city".into(), Value::from(format!("c{}", draw.below(7))));
+    let ordering = |draw: &mut Draw| {
+        let mut order = Order::new("score", 1 + draw.below(40) as usize);
+        order.descending = draw.below(2) == 0;
+        order.missing_lowest = order.descending;
+        order.filter = Some(city(draw));
+        order
+    };
+    let counting = |draw: &mut Draw| {
+        let low = draw.below(300) as f64 / 4.0;
+        let mut all = vec![city(draw), Filter::Gt("score".into(), Value::Number(low))];
+        if draw.below(2) == 0 {
+            all.push(Filter::Lte(
+                "score".into(),
+                Value::Number(low + draw.below(100) as f64),
+            ));
+        }
+        Aggregate {
+            filter: Some(Filter::And(all)),
+            measures: BTreeMap::from([("n".to_string(), Measure::Count(None))]),
+            ..Aggregate::default()
+        }
+    };
+    for _ in 0..20 {
+        with.order(&ordering(&mut draw)).await.unwrap();
+        with.aggregate(&counting(&mut draw)).await.unwrap();
+    }
+    with.rebuild().await.unwrap();
+    let version = with.storage.current(&with.branch).await.unwrap();
+    let projections = &version.columns.as_ref().unwrap().projections;
+    assert_eq!(projections.len(), 1);
+    assert_eq!(
+        (projections[0].by.as_str(), projections[0].sort.as_str()),
+        ("city", "score")
+    );
+    for round in 0..2 {
+        if round == 1 {
+            let changed = docs(&mut draw, 2900..3100);
+            with.upsert(changed.clone()).await.unwrap();
+            without.upsert(changed).await.unwrap();
+            let gone: Vec<Id> = (100..140).map(Id::from).collect();
+            with.delete(gone.clone()).await.unwrap();
+            without.delete(gone).await.unwrap();
+        }
+        for _ in 0..30 {
+            let order = ordering(&mut draw);
+            let got = with.order(&order).await.unwrap();
+            let want = without.order(&order).await.unwrap();
+            assert!(
+                same_rows(&got, &want),
+                "{order:?}\n got {got:?}\nwant {want:?}"
+            );
+            let count = counting(&mut draw);
+            let got = with.aggregate(&count).await.unwrap();
+            let want = without.aggregate(&count).await.unwrap();
+            assert!(same(&got, &want), "{count:?}\n got {got:?}\nwant {want:?}");
+        }
+    }
+}

@@ -4,6 +4,7 @@ pub(crate) mod dictionary;
 pub(crate) mod leaders;
 pub(crate) mod packed;
 pub(crate) mod plain;
+pub(crate) mod projection;
 pub(crate) mod select;
 pub(crate) mod stats;
 #[cfg(test)]
@@ -23,6 +24,7 @@ use crate::{Error, Id, Result};
 use chunk::{Chunk, Layout};
 use dictionary::Dictionary;
 use leaders::Leaders;
+use projection::ProjectionRef;
 use stats::{Stats, Totals};
 
 pub(crate) const DIRECTORY_PAGE: usize = 64;
@@ -36,6 +38,7 @@ pub(crate) struct Columns {
     pub rows_bytes: u64,
     pub ids: Vec<Hash>,
     pub columns: BTreeMap<String, ColumnRef>,
+    pub projections: Vec<ProjectionRef>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -64,7 +67,8 @@ pub(crate) struct PageRef {
 impl Columns {
     pub(crate) fn weight(&self) -> usize {
         let directories: usize = self.columns.values().map(|c| c.directory.len()).sum();
-        256 + 32 * (self.rows.len() + self.ids.len() + directories) + 128 * self.columns.len()
+        let objects = self.rows.len() + self.ids.len() + directories;
+        256 + 32 * objects + 128 * (self.columns.len() + self.projections.len())
     }
 
     pub(crate) fn has_leaders(&self) -> bool {
@@ -151,7 +155,7 @@ pub(crate) fn cached(storage: &Storage, span: &Span) -> bool {
     storage.cache().get::<Chunk>(key(span)).is_some()
 }
 
-fn key(span: &Span) -> Hash {
+pub(crate) fn key(span: &Span) -> Hash {
     part(span.blob, &format!("column {}..{}", span.start, span.end))
 }
 

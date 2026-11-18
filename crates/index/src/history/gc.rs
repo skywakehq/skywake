@@ -18,7 +18,7 @@ pub use skywake_core::Collected;
 use serde::de::DeserializeOwned;
 
 use crate::format::cluster::ClusterRef;
-use crate::format::columns::{Columns, PageRef, Span};
+use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory::Directory;
 use crate::format::pages::Pages;
 use crate::format::{SegmentRef, Version, decode_version};
@@ -285,6 +285,14 @@ impl Reachable {
             .await?
         {
             self.blobs.extend(page.iter().map(|span| span.blob));
+        }
+        let projections = columns.projections.iter().map(|p| p.directory);
+        for directory in self
+            .chunks::<projection::Directory>(objects, projections)
+            .await?
+        {
+            self.blobs
+                .extend(directory.blocks.iter().map(|block| block.hash));
         }
         for column in columns.columns.values() {
             let directory = column.directory.iter().copied();

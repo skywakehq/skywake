@@ -757,6 +757,93 @@ impl From<&Version> for V12 {
 }
 
 #[derive(Serialize, Deserialize)]
+pub(crate) struct V13 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<Ann>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+    columns: Option<Columns13>,
+}
+
+pub(crate) const V13_FORMAT: u32 = 13;
+
+impl From<V13> for Version {
+    fn from(old: V13) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann,
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: old.columns.map(Columns::from),
+        }
+    }
+}
+
+impl From<&Version> for V13 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V13_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.clone(),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
+            columns: version.columns.as_ref().map(Columns13::from),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Columns13 {
+    pages: u64,
+    live: u64,
+    bytes: u64,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    ids: Vec<Hash>,
+    columns: BTreeMap<String, ColumnRef>,
+}
+
+impl From<Columns13> for Columns {
+    fn from(old: Columns13) -> Self {
+        Self {
+            pages: old.pages,
+            live: old.live,
+            bytes: old.bytes,
+            rows: old.rows,
+            rows_bytes: old.rows_bytes,
+            ids: old.ids,
+            columns: old.columns,
+            projections: Vec::new(),
+        }
+    }
+}
+
+impl From<&Columns> for Columns13 {
+    fn from(columns: &Columns) -> Self {
+        Self {
+            pages: columns.pages,
+            live: columns.live,
+            bytes: columns.bytes,
+            rows: columns.rows.clone(),
+            rows_bytes: columns.rows_bytes,
+            ids: columns.ids.clone(),
+            columns: columns.columns.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub(crate) struct OldColumns {
     pages: u64,
     live: u64,
@@ -795,6 +882,7 @@ impl From<OldColumns> for Columns {
             rows_bytes: old.rows_bytes,
             ids: old.ids,
             columns: columns.collect(),
+            projections: Vec::new(),
         }
     }
 }
@@ -830,6 +918,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V13_FORMAT => postcard::from_bytes::<V13>(raw)?.into(),
         V12_FORMAT => postcard::from_bytes::<V12>(raw)?.into(),
         V11_FORMAT => postcard::from_bytes::<V11>(raw)?.into(),
         V10_FORMAT => postcard::from_bytes::<V10>(raw)?.into(),

@@ -3,14 +3,15 @@ use std::collections::HashMap;
 use futures::TryStreamExt;
 
 use super::dead::Dead;
-use super::filter::{Page, Proof, ones, prove, rows_of, uses_ids};
+use super::filter::{Page, Partial, Proof, ones, prove, rows_of, uses_ids};
 use super::resolve::{Column, Resolved};
 use crate::format::Version;
 use crate::format::columns::chunk::Layout;
 use crate::format::columns::select::Bits;
 use crate::format::columns::writer::covers;
+use crate::layout::scalar;
 use crate::read::snapshot::{Aggregate, Measure, Tallied, Tally, keys_of};
-use crate::read::tail::Tail;
+use crate::read::tail::{Row as TailRow, Tail};
 use crate::store::Storage;
 use crate::{Filter, Result, Value};
 
@@ -36,6 +37,13 @@ pub(crate) async fn aggregate(
     let newest = tail.newest();
     let dead = Dead::find(storage, version, &resolved, newest.keys().copied()).await?;
     let mut groups = Groups::new(aggregate, &resolved);
+    if let Some(count) = projected_count(storage, &resolved, aggregate, filter, &dead).await? {
+        if count > 0 {
+            groups.count(0, count);
+        }
+        add_tail(&mut groups, &tail, &newest, filter)?;
+        return Ok(Some(groups.finish()?));
+    }
     let counting = aggregate
         .measures
         .values()
@@ -63,24 +71,120 @@ pub(crate) async fn aggregate(
         scans.push(page);
     }
     let ids = filter.is_some_and(uses_ids);
+    let partial = Partial::of(storage, filter);
     let mut loads = Page::stream(storage, &resolved, &scans, &names, ids);
     while let Some(batch) = loads.try_next().await? {
         for loaded in batch {
             let mut selected = match filter {
-                Some(filter) => loaded.select(filter),
+                Some(filter) => loaded.select_with(filter, partial.as_ref()),
                 None => ones(loaded.rows),
             };
             dead.mask(loaded.page, &mut selected);
             groups.scan(&loaded, &selected)?;
         }
     }
-    for (id, row) in tail.live(&newest) {
+    add_tail(&mut groups, &tail, &newest, filter)?;
+    Ok(Some(groups.finish()?))
+}
+
+fn add_tail(
+    groups: &mut Groups<'_>,
+    tail: &Tail,
+    newest: &HashMap<&crate::Id, Option<TailRow>>,
+    filter: Option<&Filter>,
+) -> Result<()> {
+    for (id, row) in tail.live(newest) {
         let attributes = &tail.segment(row).attributes[row.row];
         if filter.is_none_or(|f| f.matches(id, attributes)) {
             groups.add_row(attributes)?;
         }
     }
-    Ok(Some(groups.finish()?))
+    Ok(())
+}
+
+async fn projected_count(
+    storage: &Storage,
+    resolved: &Resolved,
+    aggregate: &Aggregate,
+    filter: Option<&Filter>,
+    dead: &Dead,
+) -> Result<Option<u64>> {
+    let counting = (aggregate.measures.values()).all(|m| *m == Measure::Count(None));
+    let Some(Filter::And(all)) = filter.filter(|_| counting && aggregate.group_by.is_empty())
+    else {
+        return Ok(None);
+    };
+    let mut equal = None;
+    let mut bounds = Vec::new();
+    for leaf in all {
+        match leaf {
+            Filter::Eq(name, value) if equal.is_none() => equal = Some((name, value)),
+            Filter::Gt(name, v) => bounds.push((name, v, Bound::Above(false))),
+            Filter::Gte(name, v) => bounds.push((name, v, Bound::Above(true))),
+            Filter::Lt(name, v) => bounds.push((name, v, Bound::Below(false))),
+            Filter::Lte(name, v) => bounds.push((name, v, Bound::Below(true))),
+            _ => return Ok(None),
+        }
+    }
+    let (Some((by, value)), Some(&(sort, ..))) = (equal, bounds.first()) else {
+        return Ok(None);
+    };
+    if bounds.iter().any(|(name, ..)| *name != sort) {
+        return Ok(None);
+    }
+    let found = (resolved.projections.iter()).find(|p| p.by == *by && p.sort == *sort);
+    let Some(projection) = found else {
+        return Ok(None);
+    };
+    let Some(code) = resolved.columns[by.as_str()].code(value) else {
+        return Ok(Some(0));
+    };
+    let mut keyed = Vec::new();
+    for &(_, value, bound) in &bounds {
+        let Some(key) = scalar(value) else {
+            return Ok(None);
+        };
+        keyed.push((key, bound));
+    }
+    let directory = &projection.directory;
+    let positions = keyed.iter().map(|&(key, bound)| {
+        directory.position(storage, move |c, k| match bound {
+            Bound::Above(true) | Bound::Below(false) => (c, k) < (code, key),
+            Bound::Above(false) | Bound::Below(true) => (c, k) <= (code, key),
+        })
+    });
+    let (floor, ceiling, found) = futures::try_join!(
+        directory.position(storage, |c, _| c < code),
+        directory.position(storage, |c, _| c <= code),
+        futures::future::try_join_all(positions),
+    )?;
+    let (mut start, mut end) = (floor, ceiling);
+    for (&(_, bound), at) in keyed.iter().zip(found) {
+        match bound {
+            Bound::Above(_) => start = start.max(at),
+            Bound::Below(_) => end = end.min(at),
+        }
+    }
+    let mut count = end.saturating_sub(start);
+    if dead.rows > 0 {
+        let pages: Vec<usize> = dead.pages.keys().copied().collect();
+        let names = [by.as_str(), sort.as_str()];
+        for page in Page::load(storage, resolved, &pages, &names, false).await? {
+            let selected = page.select(filter.expect("a projected count has a filter"));
+            let gone = &dead.pages[&page.page];
+            let hits: u32 = (selected.iter().zip(gone))
+                .map(|(s, g)| (s & g).count_ones())
+                .sum();
+            count -= u64::from(hits);
+        }
+    }
+    Ok(Some(count))
+}
+
+#[derive(Clone, Copy)]
+enum Bound {
+    Above(bool),
+    Below(bool),
 }
 
 fn names<'a>(aggregate: &'a Aggregate, filter: Option<&'a Filter>) -> Vec<&'a str> {

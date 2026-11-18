@@ -13,6 +13,7 @@ use reads::From;
 use std::io;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -30,9 +31,9 @@ use crate::format::cluster::{ClusterRef, Codes};
 use crate::format::columns::dictionary::Dictionary;
 use crate::format::columns::leaders::Leaders;
 use crate::format::columns::stats::Totals;
-use crate::format::columns::{Columns, PageRef, Span};
+use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
-use crate::format::legacy::{V10, V11, V12};
+use crate::format::legacy::{V10, V11, V12, V13};
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -52,6 +53,7 @@ pub(crate) struct Storage {
     cache: Arc<Cache>,
     disk: Option<Disk>,
     shapes: Shapes,
+    partials: AtomicBool,
 }
 
 struct Disk {
@@ -136,6 +138,7 @@ impl Storage {
         cache_bytes: usize,
         disk: Option<Arc<ChunkCache>>,
         shared: Option<String>,
+        partials: bool,
     ) -> Self {
         Self {
             chunks: Chunks {
@@ -149,11 +152,16 @@ impl Storage {
             store,
             cache: Arc::new(Cache::new(cache_bytes)),
             shapes: Shapes::default(),
+            partials: AtomicBool::new(partials),
             disk: disk.map(|cache| Disk {
                 cache,
                 fills: Arc::new(Semaphore::new(FILLS)),
             }),
         }
+    }
+
+    pub(crate) fn partials(&self) -> bool {
+        self.partials.load(Ordering::Relaxed)
     }
 
     pub(crate) fn shapes(&self) -> &Shapes {
@@ -194,6 +202,7 @@ impl Storage {
                 Hint::Pages(hash) => self.get::<Vec<PageRef>>(hash).await.map(drop),
                 Hint::Spans(hash) => self.get::<Vec<Span>>(hash).await.map(drop),
                 Hint::Leaders(hash) => self.get::<Leaders>(hash).await.map(drop),
+                Hint::Projection(hash) => self.get::<projection::Directory>(hash).await.map(drop),
             };
         });
         futures::future::join_all(fetches).await;
@@ -212,9 +221,13 @@ impl Storage {
 
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
         let objects = &self.chunks.objects;
-        let leaders = version.columns.as_ref().is_some_and(Columns::has_leaders);
+        let columns = version.columns.as_ref();
+        if columns.is_some_and(|c| !c.projections.is_empty()) {
+            return Ok(objects.put(version).await?);
+        }
+        let leaders = columns.is_some_and(Columns::has_leaders);
         Ok(match (leaders, version.has_postings(), &version.columns) {
-            (true, ..) => objects.put(version).await?,
+            (true, ..) => objects.put(&V13::from(version)).await?,
             (false, true, _) => objects.put(&V12::from(version)).await?,
             (false, false, Some(_)) => objects.put(&V11::from(version)).await?,
             (false, false, None) => objects.put(&V10::from(version)).await?,
@@ -538,6 +551,12 @@ fn column_hints(columns: &Columns) -> Vec<Hint> {
         hints.extend(column.directory.iter().map(|&h| Hint::Pages(h)));
         hints.extend(column.leaders.map(Hint::Leaders));
     }
+    hints.extend(
+        columns
+            .projections
+            .iter()
+            .map(|p| Hint::Projection(p.directory)),
+    );
     if hints.len() > HINTED_COLUMN_OBJECTS {
         hints.clear();
     }

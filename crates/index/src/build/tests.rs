@@ -170,7 +170,7 @@ async fn a_build_too_big_for_memory_makes_the_same_clusters_either_way() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_sorter_holding_a_few_items_sorts_any_number_on_disk_or_in_the_bucket() {
-    let storage = Storage::new(Gate::new(), 1 << 20, None, None);
+    let storage = Storage::new(Gate::new(), 1 << 20, None, None, true);
     let items: Vec<(u64, String)> = (0..5000u64)
         .map(|i| (i.wrapping_mul(0x9e37_79b9_7f4a_7c15) % 997, format!("x{i}")))
         .collect();
