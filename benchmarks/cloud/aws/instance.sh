@@ -196,7 +196,7 @@ if [ "$TPUF" = 1 ]; then
   index=$(python3.11 -c 'import json,sys; print(json.load(open(sys.argv[1]))["settings"]["index"])' \
     "$RESULTS/tpuf-uniform/results.json")
   step recall "real held-out queries on the same index, unfiltered and at 1%" \
-    bench --index "$index" --families vector,vector-filtered --probes dataset \
+    bench --index "$index" --rows 10000000 --families vector,vector-filtered --probes dataset \
     --qps 8 --warm 60 --seconds 120 --recall 1000 --out "$RESULTS/tpuf-dataset"
   exit
 fi
