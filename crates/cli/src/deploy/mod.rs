@@ -16,7 +16,7 @@ use crate::cli::Global;
 use detect::Found;
 use plan::Plan;
 use settings::{Database, FILE, Settings, Size, Target, folder};
-use ui::{Ui, accent, dim, strong};
+use ui::{Ui, accent, dim, good, left, right, strong};
 
 #[derive(Args)]
 #[command(args_conflicts_with_subcommands = true)]
@@ -189,7 +189,10 @@ fn finish(ui: &Ui, outcome: Result<Value>) -> Result<()> {
             println!("{}", json!({ "error": format!("{error:#}") }));
             std::process::exit(1);
         }
-        Err(error) => Err(error),
+        Err(error) => {
+            ui.failure(&error);
+            std::process::exit(1);
+        }
     }
 }
 
@@ -331,47 +334,73 @@ fn pick_size(ui: &Ui, target: Target, data: Option<u32>) -> Result<Size> {
 }
 
 fn show_plan(ui: &Ui, settings: &Settings, plan: &Plan) {
-    ui.section(&format!("Plan for {}", strong(&settings.name)));
-    ui.note(format!(
-        "{} · {} · {}",
-        settings.target,
-        settings.size,
-        settings.target.about()
+    let place = (settings.region.clone()).unwrap_or_else(|| settings.target.about().to_string());
+    ui.section(&format!(
+        "{} {}",
+        accent("◆"),
+        strong(format!("Plan · {}", settings.name))
+    ));
+    ui.quiet(format!(
+        "  {} · {} · {place}",
+        settings.target, settings.size
     ));
     ui.blank();
-    let width = plan
+    let kind = plan
         .resources
         .iter()
-        .map(|r| r.kind.len() + 1)
+        .map(|r| r.kind.len())
+        .max()
+        .unwrap_or(0);
+    let name = plan
+        .resources
+        .iter()
+        .map(|r| r.name.len())
         .max()
         .unwrap_or(0);
     for resource in &plan.resources {
         ui.note(format!(
-            "{} {} {}  {}",
-            accent("+"),
-            dim(format!("{:<width$}", resource.kind)),
-            strong(&resource.name),
+            "  {} {} {} {}",
+            good("+"),
+            dim(left(resource.kind, kind)),
+            strong(left(&resource.name, name)),
             dim(&resource.detail)
         ));
     }
     let cost = &plan.cost;
+    ui.blank();
     if cost.lines.is_empty() {
-        ui.blank();
-        ui.rows(&[("cost", format!("{}  {}", strong("$0/mo"), dim(&cost.note)))]);
+        ui.note(format!(
+            "  {} {}  {}",
+            dim("cost"),
+            accent(strong("$0/mo")),
+            dim(&cost.note)
+        ));
         return;
     }
+    let item = cost
+        .lines
+        .iter()
+        .map(|l| l.item.len())
+        .max()
+        .unwrap_or(0)
+        .max(20);
     let mut lines: Vec<String> = (cost.lines.iter())
-        .map(|line| format!("{:<44} {:>8}", line.item, price::money(line.monthly)))
+        .map(|line| {
+            format!(
+                "{} {}",
+                left(&line.item, item),
+                right(price::money(line.monthly), 8)
+            )
+        })
         .collect();
-    lines.push(dim("─".repeat(53)));
+    lines.push(dim("┄".repeat(item + 9)));
     lines.push(format!(
-        "{:<44} {:>8}",
-        strong("Monthly"),
-        strong(price::money(cost.monthly))
+        "{} {}",
+        left(strong("per month"), item),
+        right(accent(strong(price::money(cost.monthly))), 8)
     ));
-    ui.blank();
-    ui.card("Estimated cost", &lines);
-    ui.note(&cost.note);
+    ui.card("estimated cost", &lines);
+    ui.quiet(format!("  {}", cost.note));
 }
 
 async fn plan_only(ui: &Ui, choice: Choice) -> Result<Value> {
@@ -379,9 +408,9 @@ async fn plan_only(ui: &Ui, choice: Choice) -> Result<Value> {
     let plan = plan::plan(&settings);
     show_plan(ui, &settings, &plan);
     ui.blank();
-    ui.note(format!(
-        "Nothing changed. Settings would be saved to {}",
-        path.display()
+    ui.quiet(format!(
+        "Nothing changed. Settings would go to {}",
+        ui::tilde(&path)
     ));
     Ok(json!({ "plan": plan, "settings": settings, "path": path }))
 }
@@ -397,15 +426,11 @@ async fn up(ui: &Ui, choice: Choice) -> Result<Value> {
     ui.blank();
     if !plan.ready {
         settings.save(&path)?;
-        ui.warn(format!(
-            "Deploying to {} isn't built yet: only `local` runs today.",
-            settings.target
-        ));
-        ui.note(format!(
-            "Settings saved to {} for when it is.",
-            path.display()
-        ));
-        bail!("deploying to {} isn't built yet", settings.target);
+        bail!(
+            "deploying to {} isn't built yet: only `local` runs today\nsettings saved to {} for when it is",
+            settings.target,
+            ui::tilde(&path)
+        );
     }
     let verb = if fresh { "Deploy" } else { "Apply" };
     if !ui.confirm(&format!("{verb} {}?", settings.name), choice.yes)? {
@@ -459,58 +484,70 @@ fn cost(ui: &Ui, data: Option<u32>) -> Result<Value> {
         }
         rows.push((size, cells));
     }
+    let data_gb = data.unwrap_or(50);
     ui.section(&format!(
-        "Monthly cost with {} GB of data",
-        data.unwrap_or(50)
+        "{} {}",
+        accent("◆"),
+        strong(format!("Monthly cost · {data_gb} GB of data"))
     ));
     ui.blank();
-    ui.note(format!(
-        "{:<8} {:>8} {:>8} {:>8}   {}",
-        "", "aws", "gcp", "azure", "shape"
-    ));
+    let head: Vec<String> = ["aws", "gcp", "azure"]
+        .iter()
+        .map(|c| right(dim(c), 8))
+        .collect();
+    ui.note(format!("  {} {}", left("", 7), head.join("")));
+    let top = (rows.iter())
+        .map(|(_, cells)| cells.iter().copied().fold(f64::INFINITY, f64::min))
+        .fold(0.0, f64::max)
+        .sqrt();
     for (size, cells) in &rows {
         let low = cells.iter().copied().fold(f64::INFINITY, f64::min);
         let shown: Vec<String> = (cells.iter())
-            .map(|&value| {
-                let text = format!("{:>8}", price::money(value));
-                match value == low {
-                    true => accent(text),
-                    false => text,
-                }
+            .map(|&value| match value == low {
+                true => right(accent(strong(price::money(value))), 8),
+                false => right(price::money(value), 8),
             })
             .collect();
+        let blocks = ((low.sqrt() / top) * 14.0).round().max(1.0) as usize;
         ui.note(format!(
-            "{} {}   {}",
-            strong(format!("{:<8}", size.to_string())),
-            shown.join(" "),
+            "  {} {}   {}  {}",
+            left(strong(size), 7),
+            shown.join(""),
+            left(ui.bar(blocks), 14),
             dim(size.about())
         ));
     }
     ui.blank();
-    ui.note(format!(
-        "{:<8} {:>8}   {}",
-        "local",
-        "$0",
-        dim("on this machine, in Docker")
-    ));
-    ui.note(format!(
-        "{:<8} {:>8}   {}",
-        "docker",
-        "$0",
-        dim("on a server you already pay for")
-    ));
+    for (name, about) in [
+        ("local", "on this machine, in Docker"),
+        ("docker", "on a server you already pay for"),
+    ] {
+        ui.note(format!(
+            "  {} {}   {}",
+            left(strong(name), 7),
+            right(accent("$0"), 8),
+            dim(about)
+        ));
+    }
     ui.blank();
-    ui.note(dim(format!("On-demand list prices, {}. Cheapest per row in blue. `skywake deploy plan --target aws --size small` itemizes one.", price::AS_OF)));
+    ui.quiet(format!(
+        "  cheapest in blue · on-demand list prices, {} · no tax or traffic",
+        price::AS_OF
+    ));
+    ui.quiet(format!(
+        "  itemized: {}",
+        accent("skywake deploy plan --target aws --size small")
+    ));
     let matrix: Vec<Value> = (rows.iter())
         .map(|(size, cells)| json!({ "size": size, "aws": cells[0], "gcp": cells[1], "azure": cells[2] }))
         .collect();
-    Ok(json!({ "data_gb": data.unwrap_or(50), "as_of": price::AS_OF, "monthly": matrix }))
+    Ok(json!({ "data_gb": data_gb, "as_of": price::AS_OF, "monthly": matrix }))
 }
 
 fn list(ui: &Ui) -> Result<Value> {
     let saved = settings::saved()?;
     if saved.is_empty() {
-        ui.note("Nothing deployed from here yet: `skywake deploy` sets one up.");
+        ui.quiet("Nothing deployed from here yet: `skywake deploy` sets one up.");
     }
     for (path, settings) in &saved {
         let monthly = price::estimate(settings).monthly;
@@ -521,7 +558,7 @@ fn list(ui: &Ui) -> Result<Value> {
             settings.target.to_string(),
             settings.size.to_string(),
             price::money(monthly),
-            dim(path.display())
+            dim(ui::tilde(path))
         ));
     }
     let items: Vec<Value> = (saved.iter())
@@ -539,9 +576,8 @@ async fn doctor(ui: &Ui, place: &Where) -> Result<Value> {
     if !ok {
         if ui.json {
             println!("{}", json!({ "result": value }));
-            std::process::exit(1);
         }
-        bail!("the doctor found problems");
+        std::process::exit(1);
     }
     Ok(value)
 }
@@ -557,7 +593,11 @@ async fn destroy(ui: &Ui, place: &Where, yes: bool) -> Result<Value> {
         ui.note(format!("{} {item}", ui::bad("−")));
     }
     if !in_folder(&path, &settings) {
-        ui.note(format!("{} {} stays: it's yours", dim("·"), path.display()));
+        ui.note(format!(
+            "{} {} stays: it's yours",
+            dim("·"),
+            ui::tilde(&path)
+        ));
     }
     ui.blank();
     if !ui.confirm(&format!("Destroy {}?", settings.name), yes)? {

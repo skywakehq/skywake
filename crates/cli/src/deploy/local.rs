@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use tokio::process::Command;
 
 use super::settings::{Database, Settings, folder};
-use super::ui::{Ui, accent, bad, caution, dim, good, strong};
+use super::ui::{Ui, accent, bad, caution, dim, good, strong, tilde};
 use crate::credentials;
 
 const COMPOSE: &str = include_str!("../../../../deploy/compose/compose.yaml");
@@ -364,7 +364,7 @@ pub(crate) async fn apply(ui: &Ui, settings: &mut Settings, settings_path: &Path
     std::fs::write(stack.dir.join("roles.sh"), ROLES)?;
     let env = render_env(settings, &stack.env())?;
     write_private(&stack.dir.join(".env"), &env)?;
-    step.done(dim(stack.dir.display()));
+    step.done(dim(tilde(&stack.dir)));
 
     let step = ui.step("start", "Starting services");
     step.message("first run downloads the images");
@@ -426,12 +426,12 @@ pub(crate) async fn apply(ui: &Ui, settings: &mut Settings, settings_path: &Path
         let entry = profiles.entry(profile.clone()).or_default();
         entry.insert("url".into(), api.clone());
         entry.insert("key".into(), key);
-        let path = credentials::store(&profiles)?;
+        credentials::store(&profiles)?;
         state.org = Some(org.clone());
         state.profile = Some(profile.clone());
         std::fs::write(&state_path, serde_json::to_vec_pretty(&state)?)?;
         key_made = true;
-        step.done(format!("{org}, key saved to {}", dim(path.display())));
+        step.done(format!("{org} · key saved to profile `{profile}`"));
     }
 
     Ok(json!({
@@ -540,7 +540,7 @@ pub(crate) async fn status(ui: &Ui, settings: &Settings) -> Result<Value> {
         ui.rows(&[
             ("console", accent(console_url(settings))),
             ("api", accent(&api)),
-            ("files", dim(stack.dir.display())),
+            ("files", dim(tilde(&stack.dir))),
         ]);
     }
     if state == "not deployed" {
@@ -645,7 +645,7 @@ pub(crate) fn doomed(settings: &Settings) -> Result<Vec<String>> {
     Ok(vec![
         format!("the containers of `{}`", stack.project),
         "its Postgres and S3 volumes: every disk, index and key in it".into(),
-        format!("{} (settings and secrets)", stack.dir.display()),
+        format!("{} (settings and secrets)", tilde(&stack.dir)),
         format!("the `{}` profile's saved key", settings.name),
     ])
 }

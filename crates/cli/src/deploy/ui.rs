@@ -62,6 +62,10 @@ impl Ui {
         self.blank();
     }
 
+    pub(crate) fn bar(&self, blocks: usize) -> String {
+        self.gradient(&"▰".repeat(blocks))
+    }
+
     fn gradient(&self, text: &str) -> String {
         if !self.color {
             return text.to_string();
@@ -99,19 +103,38 @@ impl Ui {
     }
 
     pub(crate) fn note(&self, text: impl AsRef<str>) {
+        self.line(format!("  {}", text.as_ref()));
+    }
+
+    pub(crate) fn quiet(&self, text: impl AsRef<str>) {
         self.line(format!("  {}", dim(text.as_ref())));
+    }
+
+    pub(crate) fn failure(&self, error: &anyhow::Error) {
+        let mut causes = error.chain().map(|cause| cause.to_string());
+        let first = causes.next().unwrap_or_default();
+        let mut lines = first.lines();
+        self.blank();
+        let head = lines.next().unwrap_or_default();
+        self.line(format!(
+            "  {} {}",
+            style("✘").red().bold(),
+            style(head).bold()
+        ));
+        let rest: Vec<String> = (lines.map(String::from))
+            .chain(causes.flat_map(|c| c.lines().map(String::from).collect::<Vec<_>>()))
+            .collect();
+        for line in rest {
+            match line.trim_start().strip_prefix("fix:") {
+                Some(fix) => self.line(format!("    {} {}", accent("fix"), fix.trim())),
+                None => self.line(format!("    {}", dim(line.trim_end()))),
+            }
+        }
+        self.blank();
     }
 
     pub(crate) fn hint(&self, text: impl AsRef<str>) {
         self.line(format!("  {} {}", accent("→"), text.as_ref()));
-    }
-
-    pub(crate) fn warn(&self, text: impl AsRef<str>) {
-        self.line(format!(
-            "  {} {}",
-            style("!").yellow().bold(),
-            text.as_ref()
-        ));
     }
 
     pub(crate) fn card(&self, title: &str, lines: &[String]) {
@@ -127,7 +150,7 @@ impl Ui {
         };
         let top_fill = format!(
             " {title} {}",
-            "─".repeat(width.saturating_sub(measure_text_width(title) + 1))
+            "─".repeat(width.saturating_sub(measure_text_width(title)))
         );
         self.line(edge("╭─", "─╮", top_fill));
         for line in lines {
@@ -255,6 +278,28 @@ fn theme() -> ColorfulTheme {
         active_item_style: Style::new().color256(117),
         success_prefix: style("✔".to_string()).green().bold(),
         ..ColorfulTheme::default()
+    }
+}
+
+pub(crate) fn left(text: impl std::fmt::Display, width: usize) -> String {
+    let text = text.to_string();
+    let pad = width.saturating_sub(measure_text_width(&text));
+    format!("{text}{}", " ".repeat(pad))
+}
+
+pub(crate) fn right(text: impl std::fmt::Display, width: usize) -> String {
+    let text = text.to_string();
+    let pad = width.saturating_sub(measure_text_width(&text));
+    format!("{}{text}", " ".repeat(pad))
+}
+
+pub(crate) fn tilde(path: &std::path::Path) -> String {
+    let text = path.display().to_string();
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && text.starts_with(&home) => {
+            format!("~{}", &text[home.len()..])
+        }
+        _ => text,
     }
 }
 
