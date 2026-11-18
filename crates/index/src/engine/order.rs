@@ -8,6 +8,7 @@ use futures::TryStreamExt;
 
 use crate::format::Version;
 use crate::format::columns::cached;
+use crate::format::columns::projection::Entry;
 use crate::format::columns::writer::covers;
 use crate::read::snapshot::{Order, Row};
 use crate::read::tail::{self, Tail};
@@ -206,29 +207,61 @@ async fn projected(
         return Ok(Some(BTreeMap::new()));
     };
     let directory = &projection.directory;
-    let (start, end) = futures::try_join!(
-        directory.position(storage, |c, _| c < code),
-        directory.position(storage, |c, _| c <= code),
-    )?;
-    let mut picked: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
-    let mut live = 0;
-    let mut last = None;
-    directory
-        .walk(storage, start..end, descending, |entry| {
-            if live >= wanted && last != Some(entry.key) {
-                return false;
-            }
-            let (page, row) = (entry.page as usize, entry.row as usize);
-            if !dead.holds(page, row) {
-                picked.entry(page).or_default().push(row);
-                live += 1;
-                last = Some(entry.key);
-            }
-            true
-        })
-        .await?;
-    let complete = live >= wanted || column.totals.missing == 0;
-    Ok(complete.then_some(picked))
+    let mut picker = Picker::new(dead, wanted);
+    let headed = match directory.head(code) {
+        Some(None) => true,
+        Some(Some(head)) => {
+            let side = if descending { &head.high } else { &head.low };
+            let stopped = !side.iter().all(|entry| picker.take(entry));
+            stopped || side.len() as u64 == head.rows
+        }
+        None => false,
+    };
+    if !headed {
+        picker = Picker::new(dead, wanted);
+        let (start, end) = futures::try_join!(
+            directory.position(storage, |c, _| c < code),
+            directory.position(storage, |c, _| c <= code),
+        )?;
+        directory
+            .walk(storage, start..end, descending, |entry| picker.take(entry))
+            .await?;
+    }
+    let complete = picker.live >= wanted || column.totals.missing == 0;
+    Ok(complete.then_some(picker.picked))
+}
+
+struct Picker<'d> {
+    dead: &'d Dead,
+    wanted: usize,
+    picked: BTreeMap<usize, Vec<usize>>,
+    live: usize,
+    last: Option<u64>,
+}
+
+impl<'d> Picker<'d> {
+    fn new(dead: &'d Dead, wanted: usize) -> Self {
+        Self {
+            dead,
+            wanted,
+            picked: BTreeMap::new(),
+            live: 0,
+            last: None,
+        }
+    }
+
+    fn take(&mut self, entry: &Entry) -> bool {
+        if self.live >= self.wanted && self.last != Some(entry.key) {
+            return false;
+        }
+        let (page, row) = (entry.page as usize, entry.row as usize);
+        if !self.dead.holds(page, row) {
+            self.picked.entry(page).or_default().push(row);
+            self.live += 1;
+            self.last = Some(entry.key);
+        }
+        true
+    }
 }
 
 fn has_nan(column: &Column) -> bool {

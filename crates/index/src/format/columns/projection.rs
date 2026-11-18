@@ -1,6 +1,7 @@
 //! Composite projections: a dictionary column's codes and a scalar sort key for every live row, sorted by
 //! (code, key) in blocks with running counts. A filtered order by reads one block, a filtered count two.
 
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -19,6 +20,8 @@ use crate::store::{PARALLELISM, Storage, Written};
 const BLOCK_ROWS: usize = 4096;
 const LOAD: usize = 64;
 const ENTRY_BYTES: usize = 24;
+const HEAD: usize = 32;
+const HEAD_ENTRIES: usize = 16_384;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ProjectionRef {
@@ -32,6 +35,89 @@ pub(crate) struct ProjectionRef {
 pub(crate) struct Directory {
     pub blocks: Vec<BlockRef>,
     pub rows: u64,
+    pub heads: Vec<Head>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub(crate) struct Head {
+    pub code: u32,
+    pub rows: u64,
+    pub low: Vec<Entry>,
+    pub high: Vec<Entry>,
+}
+
+struct Heads {
+    done: Vec<Head>,
+    open: Option<(Head, VecDeque<Entry>)>,
+    entries: usize,
+    over: bool,
+}
+
+impl Heads {
+    fn new() -> Self {
+        Self {
+            done: Vec::new(),
+            open: None,
+            entries: 0,
+            over: false,
+        }
+    }
+
+    fn add(&mut self, entry: Entry) {
+        if self.over {
+            return;
+        }
+        if self
+            .open
+            .as_ref()
+            .is_some_and(|(head, _)| head.code != entry.code)
+        {
+            self.close();
+        }
+        let (head, high) = self.open.get_or_insert_with(|| {
+            let head = Head {
+                code: entry.code,
+                ..Head::default()
+            };
+            (head, VecDeque::with_capacity(HEAD))
+        });
+        head.rows += 1;
+        if head.low.len() < HEAD {
+            head.low.push(entry);
+        }
+        if high.len() == HEAD {
+            high.pop_front();
+        }
+        high.push_back(entry);
+    }
+
+    fn close(&mut self) {
+        let Some((mut head, high)) = self.open.take() else {
+            return;
+        };
+        head.high = high.into_iter().rev().collect();
+        self.entries += head.low.len() + head.high.len();
+        self.over = self.entries > HEAD_ENTRIES;
+        match self.over {
+            true => self.done.clear(),
+            false => self.done.push(head),
+        }
+    }
+
+    fn finish(mut self) -> Vec<Head> {
+        self.close();
+        self.done
+    }
+}
+
+impl Directory {
+    pub(crate) fn head(&self, code: u32) -> Option<Option<&Head>> {
+        if self.heads.is_empty() && self.rows > 0 {
+            return None;
+        }
+        let at = self.heads.binary_search_by_key(&code, |head| head.code);
+        Some(at.ok().map(|at| &self.heads[at]))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -232,9 +318,13 @@ async fn store(
     let mut directory = Directory::default();
     let mut pending: Vec<Vec<Entry>> = Vec::new();
     let mut block = Vec::with_capacity(BLOCK_ROWS);
+    let mut heads = Heads::new();
     loop {
         let next = merged.next().await?;
         let done = next.is_none();
+        if let Some(entry) = next {
+            heads.add(entry);
+        }
         block.extend(next);
         if block.len() == BLOCK_ROWS || (done && !block.is_empty()) {
             pending.push(std::mem::replace(
@@ -255,6 +345,7 @@ async fn store(
             break;
         }
     }
+    directory.heads = heads.finish();
     let hash = storage.put(postcard::to_stdvec(&directory)?).await?;
     written.chunks([hash]);
     Ok(hash)

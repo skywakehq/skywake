@@ -230,6 +230,10 @@ fn sortable(schema: &Schema, name: &str) -> bool {
     )
 }
 
+pub(crate) fn sorts(storage: &Storage, schema: &Schema) -> bool {
+    storage.shapes().busiest(schema).is_some()
+}
+
 pub(crate) async fn key(
     storage: &Storage,
     schema: &Schema,

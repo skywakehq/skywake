@@ -805,10 +805,26 @@ the two filtered queries).
 - Per-page partial results: a page's selection for a filter is cached by (filter, the page's chunks), so a
   repeated filter and a fork that kept the page skip the predicates. `Options::partials`, off in benchmark runs.
 
-Kept: the filtered order by spends a fourth wave on its block (cold p90 +9% on the slow store, 82% fewer
-bytes). Not done: clustering for indexes with vectors (their rows are laid out by cluster), incremental
-projection blocks (a changed column rebuilds its projection), and a shape log that survives restarts (the
-current layout and projections are kept instead).
+Then the two gaps that cost speed (`phase8c-attrs-1m-*`):
+
+- Indexes with vectors: once a sort key is wanted (or the columns already carry their own row map), their
+  columns are laid out by the plain path, sorted on the key, instead of one page per cluster. Vector search
+  never reads column pages, so it is unchanged. On turbopuffer's attrs workload (1M rows, 64 dims), as built
+  → after one adapting rebuild, p90 in ms:
+
+| Query                                    | Hot        | Cold       | Cold read        |
+| ---------------------------------------- | ---------: | ---------: | ---------------: |
+| count, category and popularity > p       | 5.3 → 0.1  | 242 → 207  | 19.6 → 1.2 MB    |
+| count by group, popularity > p           | 3.8 → 0.9  | 237 → 206  | 19.6 → 1.1 MB    |
+| order by popularity, top 10, category    | 4.5 → 0.1  | 244 → 202  | 70.7 → 1.3 MB    |
+
+  Other rows within noise (cold count rechecked over 10 queries: 146 ms, as in phase 6). The rebuild took 15.4 s.
+- The projection directory holds each code's 32 lowest and highest rows (when that is at most 16,384 entries),
+  so a filtered order by goes from the hinted directory straight to its pages: cold 276 → 216 ms, 4 → 3 waves.
+  It reads a block only when dead rows or ties use up a code's head.
+
+Not done: incremental projection blocks (a changed column rebuilds its projection, a build-time cost), and a
+shape log that survives restarts or is kept per branch (the current layout and projections are kept instead).
 
 ## 9. Decisions for approval
 

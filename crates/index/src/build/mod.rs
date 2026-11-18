@@ -75,12 +75,16 @@ pub(crate) async fn build(
         }
     }
     let incremental = grown.is_some();
+    let sorted = vectors
+        && columns.is_some()
+        && (crate::layout::sorts(storage, &version.schema)
+            || (version.columns.as_ref()).is_some_and(|c| !c.rows.is_empty()));
     let mut filled = None;
     let mut ann = match (grown, vectors) {
         (Some(ann), _) => Some(ann),
         (None, true) => {
             let sizes = (budget, cluster_rows, spill);
-            let on = columns.is_some();
+            let on = columns.is_some() && !sorted;
             let (ann, pages) = full_build(storage, &version, sizes, on, &mut written).await?;
             filled = pages;
             Some(ann)
@@ -102,7 +106,7 @@ pub(crate) async fn build(
     }
     let columns = match (&ann, columns) {
         (Some(_), Some(_)) if filled.is_some() => filled,
-        (None, Some(page_rows)) => {
+        (ann, Some(page_rows)) if ann.is_none() || sorted => {
             let build = format::columns::plain::build(
                 storage,
                 &version,

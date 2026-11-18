@@ -267,10 +267,24 @@ async fn case(seed: u64) {
 
 #[tokio::test]
 async fn a_rebuild_sorts_pages_on_the_busiest_range() {
+    sorts_pages_on_the_busiest_range(false).await;
+}
+
+#[tokio::test]
+async fn a_rebuild_sorts_the_pages_of_an_index_with_vectors() {
+    sorts_pages_on_the_busiest_range(true).await;
+}
+
+async fn sorts_pages_on_the_busiest_range(vectors: bool) {
     let schema = Schema::new()
         .attribute("at", Kind::Datetime)
         .attribute("n", Kind::Int)
         .text("body", crate::TextOptions::default());
+    let schema = match vectors {
+        true => schema.vector("v", 8, Metric::Euclidean),
+        false => schema,
+    };
+    let points = clustered(64, 8, 3);
     let options = Options {
         columns: true,
         page_rows: 64,
@@ -283,7 +297,11 @@ async fn a_rebuild_sorts_pages_on_the_busiest_range() {
     let docs: Vec<Doc> = (0..2000u64)
         .map(|id| {
             let at = Value::Datetime(draw.below(1_000_000) as i64);
-            Doc::new(id).attribute("at", at).attribute("n", id as i64)
+            let doc = Doc::new(id).attribute("at", at).attribute("n", id as i64);
+            match vectors {
+                true => doc.vector("v", points[id as usize % points.len()].clone()),
+                false => doc,
+            }
         })
         .collect();
     index.upsert(docs).await.unwrap();
@@ -298,11 +316,16 @@ async fn a_rebuild_sorts_pages_on_the_busiest_range() {
         ..Aggregate::default()
     };
     let before = index.aggregate(&count).await.unwrap();
+    let mut latest = Order::new("at", 15);
+    latest.descending = true;
+    latest.filter = count.filter.clone();
+    let ordered = index.order(&latest).await.unwrap();
     for _ in 0..32 {
         index.aggregate(&count).await.unwrap();
     }
     index.rebuild().await.unwrap();
     assert!(same(&index.aggregate(&count).await.unwrap(), &before));
+    assert!(same_rows(&index.order(&latest).await.unwrap(), &ordered));
     let version = index.storage.current(&index.branch).await.unwrap();
     let columns = version.columns.as_ref().unwrap();
     let pages = crate::format::columns::pages(&index.storage, &columns.columns["at"])
