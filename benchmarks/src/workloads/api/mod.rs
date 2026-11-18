@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use futures::stream::{FuturesUnordered, StreamExt};
 use reqwest::{Client, Method};
 use serde_json::{Map, Value as Json, json};
@@ -58,6 +60,13 @@ pub struct Args {
         help = "Query vectors: `uniform` draws each number from [0, 1), as turbopuffer's benchmark does; `normal` from a standard normal; `dataset` asks the dataset's own held-out queries, query.fbin"
     )]
     probes: vectors::Probes,
+    #[arg(
+        long,
+        value_enum,
+        default_value = "base64",
+        help = "How loaded rows send vectors: `base64` as little-endian f32 bytes, or `float` as lists of numbers"
+    )]
+    vectors: Encoding,
     #[arg(long, default_value_t = 8.0, help = "Queries a second, open loop")]
     qps: f64,
     #[arg(long, default_value_t = 60, help = "Seconds of each family's pass")]
@@ -336,7 +345,11 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
         &format!("{} rows into {name}", progress::count(args.rows)),
     );
     let mut meter = Meter::new("load", args.rows, "rows");
-    let path = format!("/indexes/{name}/rows");
+    let path = match args.vectors {
+        Encoding::Float => format!("/indexes/{name}/rows"),
+        Encoding::Base64 => format!("/indexes/{name}/rows?vector_encoding=base64"),
+    };
+    let encoding = args.vectors;
     let mut writing = FuturesUnordered::new();
     loop {
         let docs = source.next_block(args.batch as usize)?;
@@ -345,7 +358,7 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
         }
         let path = &path;
         let count = docs.len() as u64;
-        let body = tokio::task::spawn_blocking(move || rows_body(&docs));
+        let body = tokio::task::spawn_blocking(move || rows_body(&docs, encoding));
         writing.push(async move {
             api.send(Method::POST, path, Some(body.await??)).await?;
             Ok::<_, anyhow::Error>(count)
@@ -479,7 +492,13 @@ fn schema(dims: usize) -> Json {
     })
 }
 
-fn rows_body(docs: &[Doc]) -> Result<Vec<u8>> {
+#[derive(Clone, Copy, Debug, PartialEq, clap::ValueEnum)]
+enum Encoding {
+    Float,
+    Base64,
+}
+
+fn rows_body(docs: &[Doc], encoding: Encoding) -> Result<Vec<u8>> {
     let dims: usize = docs
         .first()
         .map_or(0, |d| d.vectors.values().map(Vec::len).sum());
@@ -501,7 +520,15 @@ fn rows_body(docs: &[Doc]) -> Result<Vec<u8>> {
             out.push(b',');
             serde_json::to_writer(&mut out, name)?;
             out.push(b':');
-            serde_json::to_writer(&mut out, vector)?;
+            match encoding {
+                Encoding::Float => serde_json::to_writer(&mut out, vector)?,
+                Encoding::Base64 => {
+                    let bytes: Vec<u8> = vector.iter().flat_map(|x| x.to_le_bytes()).collect();
+                    out.push(b'"');
+                    out.extend_from_slice(STANDARD.encode(bytes).as_bytes());
+                    out.push(b'"');
+                }
+            }
         }
         out.push(b'}');
     }

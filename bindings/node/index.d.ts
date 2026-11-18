@@ -335,6 +335,7 @@ export type AttributeValue =
 export interface IndexRowsPlan {
   vectors: Record<string, number>;
   attributes: Record<string, string>;
+  base64: boolean;
 }
 
 export interface IndexRowsWritten {

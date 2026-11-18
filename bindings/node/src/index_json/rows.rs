@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use napi::Either;
 use napi_derive::napi;
 use serde_json::Value as Json;
@@ -16,6 +18,7 @@ const MAX_SAFE: u64 = 9_007_199_254_740_991;
 pub struct IndexRowsPlan {
     pub vectors: HashMap<String, u32>,
     pub attributes: HashMap<String, String>,
+    pub base64: bool,
 }
 
 #[napi(object)]
@@ -56,7 +59,10 @@ fn row_from(row: HashMap<&str, &RawValue>, plan: &IndexRowsPlan, bytes: &mut usi
             continue;
         }
         if let Some(&dims) = plan.vectors.get(name) {
-            let vector: Vec<f32> = serde_json::from_str(text).ok()?;
+            let vector = match text.as_bytes()[0] {
+                b'"' if plan.base64 => base64_floats(text)?,
+                _ => serde_json::from_str(text).ok()?,
+            };
             if vector.len() != dims as usize {
                 return None;
             }
@@ -73,6 +79,21 @@ fn row_from(row: HashMap<&str, &RawValue>, plan: &IndexRowsPlan, bytes: &mut usi
             .insert(name.to_string(), value_from(&json).ok()?);
     }
     (doc.vectors.len() == plan.vectors.len()).then_some(doc)
+}
+
+fn base64_floats(text: &str) -> Option<Vec<f32>> {
+    let bytes = STANDARD
+        .decode(text.strip_prefix('"')?.strip_suffix('"')?)
+        .ok()?;
+    if bytes.len() % 4 != 0 {
+        return None;
+    }
+    let floats = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f32::from_le_bytes(*b));
+    floats.map(|x| x.is_finite().then_some(x)).collect()
 }
 
 fn id_from(raw: &RawValue) -> Option<Id> {
@@ -110,7 +131,17 @@ mod tests {
                 ("tag".to_string(), "string".to_string()),
                 ("n".to_string(), "int".to_string()),
             ]),
+            base64: true,
         }
+    }
+
+    fn encoded(floats: &[f32]) -> String {
+        STANDARD.encode(
+            floats
+                .iter()
+                .flat_map(|x| x.to_le_bytes())
+                .collect::<Vec<_>>(),
+        )
     }
 
     fn rows(body: &str) -> Option<Rows> {
@@ -127,6 +158,36 @@ mod tests {
         assert_eq!(read.docs[0].attributes.len(), 2);
         assert!(read.docs[1].attributes.is_empty());
         assert_eq!(rows(r#"{"id": 2, "v": [1, 2]}"#).unwrap().docs.len(), 1);
+    }
+
+    #[test]
+    fn reads_base64_vectors_exactly() {
+        let exact = [0.1f32, -3.4028235e38];
+        let body = format!(r#"[{{"id": 1, "v": "{}"}}]"#, encoded(&exact));
+        let read = rows(&body).unwrap();
+        assert_eq!(read.docs[0].vectors["v"], exact.to_vec());
+        assert_eq!(read.bytes, 1 + 8);
+        let text = rows_from(
+            body.as_bytes(),
+            &IndexRowsPlan {
+                base64: false,
+                ..plan()
+            },
+        );
+        assert!(text.is_none());
+        for bad in [
+            encoded(&[1.0]),
+            encoded(&[1.0, f32::NAN]),
+            encoded(&[1.0, f32::INFINITY]),
+            format!("{}!", encoded(&[1.0, 2.0])),
+            encoded(&[1.0, 2.0]).trim_end_matches('=').to_string(),
+            "AAAAAAAAAA==".to_string(),
+        ] {
+            assert!(
+                rows(&format!(r#"[{{"id": 1, "v": "{bad}"}}]"#)).is_none(),
+                "{bad}"
+            );
+        }
     }
 
     #[test]

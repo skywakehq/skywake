@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
+import { decodeVectors } from "../src/v2/rows.ts";
 import { fakeEmbedder } from "./fake-embed.ts";
 import { server, skip, type Server } from "./helpers.ts";
 
@@ -225,6 +226,38 @@ test(
     assert.equal(inner.status, 404);
   },
 );
+
+const base64 = (floats: number[]) => Buffer.from(new Float32Array(floats).buffer).toString("base64");
+
+test("rows: base64 vectors are exact on both paths and checked", { skip }, async () => {
+  const { api } = await started(false);
+  const encoded = "/indexes/vecs/rows?vector_encoding=base64";
+  assert.equal((await api("POST", encoded, { id: 1, v: base64([1, 2]) })).status, 400);
+  const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [{ name: "tag", type: "string" }] };
+  ok(await api("POST", "/indexes", { name: "vecs", schema, embed: false }), 201);
+
+  const exact = [0.1, -3.4028234663852886e38];
+  assert.deepEqual(ok(await api("POST", encoded, [{ id: 1, v: base64(exact), tag: "a" }])), {
+    ids: [1],
+    count: 1,
+  });
+  ok(await api("POST", encoded, { id: 2, v: base64([0.5, 0.25]), fresh: 7 }));
+  assert.equal(ok(await api("GET", "/indexes/vecs/rows/2")).fresh, 7);
+  ok(await api("POST", encoded, { id: 3, v: [3, 4] }));
+
+  for (const v of [base64([1]), base64([1, NaN]), base64([1, Infinity]), "not base64!", "AAAA"]) {
+    const bad = await api("POST", encoded, { id: 9, v });
+    assert.equal(bad.status, 400, v);
+  }
+  assert.equal((await api("POST", "/indexes/vecs/rows", { id: 9, v: base64([1, 2]) })).status, 400);
+});
+
+test("rows: decoding base64 keeps every float32 bit", () => {
+  const floats = Float32Array.from([0.1, -0, 1e-45, 3.4028234663852886e38, -1.5]);
+  const text = Buffer.from(floats.buffer).toString("base64");
+  const [row] = decodeVectors([{ id: 1, v: text }], { vectors: [{ name: "v", dims: 5 } as any] });
+  assert.deepEqual(row!.v, Array.from(floats));
+});
 
 test("index settings: list, create, configure, copy and destroy", { skip }, async () => {
   const { s, key, api } = await started();

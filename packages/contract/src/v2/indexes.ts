@@ -76,6 +76,13 @@ export const NewIndex = z
   })
   .openapi("NewIndexV2");
 
+export const VectorEncoding = z.enum(["float", "base64"]).openapi("VectorEncoding", {
+  description:
+    "How rows give vectors. `float` (the default) takes lists of numbers. `base64` also takes " +
+    "each vector of an existing vector column as a string: its numbers as little-endian 32-bit " +
+    "floats, in standard base64 with padding. It is smaller and faster to send, and exact.",
+});
+
 export const Upserted = z
   .object({
     ids: z.array(RowId),
@@ -246,7 +253,7 @@ export const upsertRows = route({
     "and adds new fields to it.",
   request: {
     params: IndexParams,
-    query: z.object(BranchQuery),
+    query: z.object({ ...BranchQuery, vector_encoding: VectorEncoding.optional() }),
     body: body(z.union([NewRow, z.array(NewRow).min(1).max(10_000)])),
   },
   responses: { 200: json(Upserted, "The rows written."), ...errors(400, 402, 403, 404, 413) },

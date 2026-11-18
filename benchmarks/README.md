@@ -185,6 +185,10 @@ benchmark measures no recall, so it never shows this. `--probes dataset` asks th
 queries (query.fbin), and is the run to quote recall from; `--probes normal` asks in every direction. Without `--dataset` the
 rows are generated, with random vectors (`--dims`).
 
+Loading sends each vector in base64 (`?vector_encoding=base64`, little-endian f32 bytes), as a fast client
+would: the same floats, bit for bit, in half the bytes and with no number parsing. `--vectors float` sends
+lists of numbers instead.
+
 `--store local` is a temp folder; `slow` adds 60 ms before every request with at most 64 in flight, to act
 like object storage; `s3://bucket/folder` uses the `AWS_*` settings and refuses a non-local endpoint unless
 `--allow-remote`. `--tail 4` makes the slow store's wait vary, with a p99 four times its median, and

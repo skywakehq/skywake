@@ -9,13 +9,14 @@ import { writtenBytes } from "./usage.ts";
 
 const PLAIN = new Set(["string", "text", "number", "int", "bool", "strings", "numbers", "ints"]);
 
-function rowsPlan(schema: routes.IndexSchema): IndexRowsPlan | null {
+function rowsPlan(schema: routes.IndexSchema, base64: boolean): IndexRowsPlan | null {
   if (schema.id === "uuid" || schema.vectors.some((c) => c.element === "i8")) return null;
   return {
     vectors: Object.fromEntries(schema.vectors.map((c) => [c.name, c.dims])),
     attributes: Object.fromEntries(
       schema.attributes.filter((c) => PLAIN.has(c.type)).map((c) => [c.name, c.type]),
     ),
+    base64,
   };
 }
 
@@ -25,7 +26,7 @@ export const indexWritesFeature: Feature = {
       if (!(c.env as { skywake?: unknown } | undefined)?.skywake) return c.notFound();
       const { index: name, branch } = c.req.param();
       const { index } = await writable(c, name, branch);
-      const plan = rowsPlan(index.schema);
+      const plan = rowsPlan(index.schema, c.req.query("vector_encoding") === "base64");
       if (!plan) return c.body(null, 204);
       const bill = c.var.services.usage.bill(index);
       await bill.admit("writes");

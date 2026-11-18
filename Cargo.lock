@@ -2981,6 +2981,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "futures",
@@ -3174,6 +3175,7 @@ dependencies = [
 name = "skywake-node"
 version = "0.2.0"
 dependencies = [
+ "base64 0.22.1",
  "blake3",
  "futures",
  "napi",
