@@ -128,6 +128,12 @@ pub(crate) enum Command {
     #[command(about = "Show the profile's environment, or switch it to NAME.")]
     Env { name: Option<String> },
 
+    #[command(
+        about = "Run Skywake on your own machine or cloud: plan, cost, deploy and look after it.",
+        after_help = "Examples:\n  skywake deploy                      guided: finds where it can run, shows the plan and cost\n  skywake deploy plan --target aws    what it would make on AWS and the monthly cost\n  skywake deploy cost --data 500      every cloud and size side by side\n  skywake deploy --target local --yes --json   for scripts and agents"
+    )]
+    Deploy(Box<crate::deploy::Deploy>),
+
     #[command(about = "List disks.")]
     Disks,
     #[command(about = "List indexes.")]

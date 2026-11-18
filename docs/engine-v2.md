@@ -832,6 +832,28 @@ Then the two gaps that cost speed (`phase8c-attrs-1m-*`):
 Not done: a shape log that survives restarts or is kept per branch (the current layout and projections are kept
 instead).
 
+### Phase 9: self-hosting (in progress)
+
+`skywake deploy` lives in the existing `skywake` CLI (`crates/cli/src/deploy/`), with its conventions: `--json`
+turns every step into one JSON line on stdout (human output goes to stderr), `-y` skips prompts, and a finished
+deploy saves a profile, so `skywake --profile local indexes` works straight away.
+
+- `skywake deploy` with no flags is guided: it shows what it found (Docker, a kube context, cloud credentials),
+  asks where and how big with each size's monthly price, shows the plan and cost, and applies it after a yes.
+- `plan`, `cost`, `list`, `status`, `logs`, `doctor`, `upgrade`, `stop` and `destroy`. `destroy` names what it
+  deletes and refuses under `--json` without `--yes`.
+- `skywake.deploy.toml` (no secrets) is the one settings file. Secrets go to a private `.env` next to it.
+- Costs are itemized from on-demand list prices (2026-06) for AWS, GCP and Azure. The budget default is one
+  server plus the cloud's bucket (about $19 a month at `tiny`). Only `large` makes a Kubernetes cluster.
+- `local` runs end to end: about 10 s from nothing to a ready API with an organization and an admin key, picking
+  free ports by itself. The image version follows the CLI's own, so the two always match.
+- `doctor` checks Docker, Compose, images, ports, API readiness, API version against the CLI, clock skew, and the
+  Postgres version and `wal_level`, each with its fix. Known Docker errors (unshared folder, taken port, missing
+  image, full disk) come back with the fix too.
+
+Not done yet: applying to `docker` (SSH), `kubernetes`, `aws`, `gcp` and `azure` (they plan and cost today, and
+say so when asked to apply), `lite`, the one-click buttons, bucket checks in `doctor`, and the docs pages.
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.

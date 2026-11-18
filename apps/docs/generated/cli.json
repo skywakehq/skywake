@@ -694,6 +694,2098 @@
       "usage": "skywake env [OPTIONS] [NAME]"
     },
     {
+      "about": "Run Skywake on your own machine or cloud: plan, cost, deploy and look after it.",
+      "afterHelp": "Examples:\n  skywake deploy                      guided: finds where it can run, shows the plan and cost\n  skywake deploy plan --target aws    what it would make on AWS and the monthly cost\n  skywake deploy cost --data 500      every cloud and size side by side\n  skywake deploy --target local --yes --json   for scripts and agents",
+      "args": [
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The deployment's name (default: the only one, or `local`).",
+          "id": "name",
+          "long": "name",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "NAME"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+          "id": "config",
+          "long": "config",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "FILE"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Where it runs.",
+          "id": "target",
+          "long": "target",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "TARGET"
+          ],
+          "values": [
+            "local",
+            "docker",
+            "kubernetes",
+            "aws",
+            "gcp",
+            "azure"
+          ]
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "How big: tiny, small, medium or large.",
+          "id": "size",
+          "long": "size",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "SIZE"
+          ],
+          "values": [
+            "tiny",
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The cloud region, such as us-east-1.",
+          "id": "region",
+          "long": "region",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "REGION"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "A domain for HTTPS, such as search.example.com.",
+          "id": "domain",
+          "long": "domain",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "DOMAIN"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "How much data you expect, for the cost estimate (default 50).",
+          "id": "data",
+          "long": "data",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "GB"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Use this existing bucket instead of making one.",
+          "id": "bucket",
+          "long": "bucket",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "BUCKET"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "bundled (default), managed by the cloud, or external from SKYWAKE_DATABASE_URL.",
+          "id": "database",
+          "long": "database",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "DATABASE"
+          ],
+          "values": [
+            "bundled",
+            "managed",
+            "external"
+          ]
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "For the docker target: the server, as user@host.",
+          "id": "host",
+          "long": "host",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "HOST"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The image registry (default ghcr.io/skywakehq).",
+          "id": "registry",
+          "long": "registry",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "REGISTRY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "The release to run (default: this CLI's own version).",
+          "id": "version",
+          "long": "image-version",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "VERSION"
+          ],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": false,
+          "help": "Don't ask first.",
+          "id": "yes",
+          "long": "yes",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "y",
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [
+            "false"
+          ],
+          "env": null,
+          "global": true,
+          "help": "Print JSON instead of text, for scripts.",
+          "id": "json",
+          "long": "json",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_ENV",
+          "global": true,
+          "help": "The environment, for a key that may use every one.",
+          "id": "environment",
+          "long": "env",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "ENVIRONMENT"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_PROFILE",
+          "global": true,
+          "help": "Which saved profile to use (default `default`).",
+          "id": "profile",
+          "long": "profile",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "PROFILE"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_API_KEY",
+          "global": true,
+          "help": "An API key. Defaults to the one `skywake login` saved.",
+          "id": "key",
+          "long": "key",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "KEY"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_URL",
+          "global": true,
+          "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+          "id": "url",
+          "long": "url",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "URL"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": "SKYWAKE_STORE",
+          "global": true,
+          "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+          "id": "local",
+          "long": "local",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": null,
+          "valueNames": [
+            "DIR"
+          ],
+          "values": []
+        },
+        {
+          "default": [],
+          "env": null,
+          "global": false,
+          "help": "Print help",
+          "id": "help",
+          "long": "help",
+          "longHelp": null,
+          "multiple": false,
+          "positional": false,
+          "required": false,
+          "short": "h",
+          "valueNames": [],
+          "values": []
+        }
+      ],
+      "longAbout": null,
+      "name": "deploy",
+      "path": [
+        "deploy"
+      ],
+      "subcommands": [
+        {
+          "about": "Show what would be made and what it costs. Changes nothing.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Where it runs.",
+              "id": "target",
+              "long": "target",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "TARGET"
+              ],
+              "values": [
+                "local",
+                "docker",
+                "kubernetes",
+                "aws",
+                "gcp",
+                "azure"
+              ]
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "How big: tiny, small, medium or large.",
+              "id": "size",
+              "long": "size",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "SIZE"
+              ],
+              "values": [
+                "tiny",
+                "small",
+                "medium",
+                "large"
+              ]
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The cloud region, such as us-east-1.",
+              "id": "region",
+              "long": "region",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "REGION"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "A domain for HTTPS, such as search.example.com.",
+              "id": "domain",
+              "long": "domain",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DOMAIN"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "How much data you expect, for the cost estimate (default 50).",
+              "id": "data",
+              "long": "data",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "GB"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Use this existing bucket instead of making one.",
+              "id": "bucket",
+              "long": "bucket",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "BUCKET"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "bundled (default), managed by the cloud, or external from SKYWAKE_DATABASE_URL.",
+              "id": "database",
+              "long": "database",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DATABASE"
+              ],
+              "values": [
+                "bundled",
+                "managed",
+                "external"
+              ]
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "For the docker target: the server, as user@host.",
+              "id": "host",
+              "long": "host",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "HOST"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The image registry (default ghcr.io/skywakehq).",
+              "id": "registry",
+              "long": "registry",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "REGISTRY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The release to run (default: this CLI's own version).",
+              "id": "version",
+              "long": "image-version",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "VERSION"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": false,
+              "help": "Don't ask first.",
+              "id": "yes",
+              "long": "yes",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "y",
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "plan",
+          "path": [
+            "deploy",
+            "plan"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy plan [OPTIONS]"
+        },
+        {
+          "about": "Compare monthly costs across clouds and sizes.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "How much data you expect (default 50).",
+              "id": "data",
+              "long": "data",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "GB"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "cost",
+          "path": [
+            "deploy",
+            "cost"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy cost [OPTIONS]"
+        },
+        {
+          "about": "List the deployments set up from this machine.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "list",
+          "path": [
+            "deploy",
+            "list"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy list [OPTIONS]"
+        },
+        {
+          "about": "Show whether it's running, and where.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "status",
+          "path": [
+            "deploy",
+            "status"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy status [OPTIONS]"
+        },
+        {
+          "about": "Print the services' logs.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "One service: api, console, zero, postgres or s3.",
+              "id": "service",
+              "long": null,
+              "longHelp": null,
+              "multiple": false,
+              "positional": true,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "SERVICE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": false,
+              "help": "Keep printing as new lines come.",
+              "id": "follow",
+              "long": "follow",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "f",
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "200"
+              ],
+              "env": null,
+              "global": false,
+              "help": "How many lines back to start.",
+              "id": "lines",
+              "long": "lines",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "LINES"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "logs",
+          "path": [
+            "deploy",
+            "logs"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy logs [OPTIONS] [SERVICE]"
+        },
+        {
+          "about": "Check the deployment and what it needs, with a fix for each problem.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "doctor",
+          "path": [
+            "deploy",
+            "doctor"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy doctor [OPTIONS]"
+        },
+        {
+          "about": "Move to a new release: fetch it, then restart service by service.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The release (default: the one in the settings).",
+              "id": "version",
+              "long": "image-version",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "VERSION"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "upgrade",
+          "path": [
+            "deploy",
+            "upgrade"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy upgrade [OPTIONS]"
+        },
+        {
+          "about": "Stop the services. Keeps the data; `skywake deploy` starts them again.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "stop",
+          "path": [
+            "deploy",
+            "stop"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy stop [OPTIONS]"
+        },
+        {
+          "about": "Delete the deployment and all its data. Names everything first.",
+          "afterHelp": null,
+          "args": [
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "The deployment's name (default: the only one, or `local`).",
+              "id": "name",
+              "long": "name",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "NAME"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Read and write the settings here instead (default ./skywake.deploy.toml if present).",
+              "id": "config",
+              "long": "config",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "FILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": false,
+              "help": "Don't ask first.",
+              "id": "yes",
+              "long": "yes",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "y",
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [
+                "false"
+              ],
+              "env": null,
+              "global": true,
+              "help": "Print JSON instead of text, for scripts.",
+              "id": "json",
+              "long": "json",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_ENV",
+              "global": true,
+              "help": "The environment, for a key that may use every one.",
+              "id": "environment",
+              "long": "env",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "ENVIRONMENT"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_PROFILE",
+              "global": true,
+              "help": "Which saved profile to use (default `default`).",
+              "id": "profile",
+              "long": "profile",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "PROFILE"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_API_KEY",
+              "global": true,
+              "help": "An API key. Defaults to the one `skywake login` saved.",
+              "id": "key",
+              "long": "key",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "KEY"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_URL",
+              "global": true,
+              "help": "Where the API is. Defaults to the profile's, then https://api.skywake.dev.",
+              "id": "url",
+              "long": "url",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "URL"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": "SKYWAKE_STORE",
+              "global": true,
+              "help": "Work on a store with no server, as --local or --local=DIR: `s3://bucket`, `gs://bucket`, `az://container` or a folder (default `.skywake`, or skywaked's store when it runs). The store is one disk; only the branch in NAME@BRANCH is used.",
+              "id": "local",
+              "long": "local",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": null,
+              "valueNames": [
+                "DIR"
+              ],
+              "values": []
+            },
+            {
+              "default": [],
+              "env": null,
+              "global": false,
+              "help": "Print help",
+              "id": "help",
+              "long": "help",
+              "longHelp": null,
+              "multiple": false,
+              "positional": false,
+              "required": false,
+              "short": "h",
+              "valueNames": [],
+              "values": []
+            }
+          ],
+          "longAbout": null,
+          "name": "destroy",
+          "path": [
+            "deploy",
+            "destroy"
+          ],
+          "subcommands": [],
+          "usage": "skywake deploy destroy [OPTIONS]"
+        }
+      ],
+      "usage": "skywake deploy [OPTIONS]\n       skywake deploy <COMMAND>"
+    },
+    {
       "about": "List disks.",
       "afterHelp": null,
       "args": [
