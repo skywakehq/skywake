@@ -46,6 +46,55 @@ pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
     sums.iter().sum::<f32>() + tail
 }
 
+pub(crate) const TILE: usize = 4;
+
+pub(crate) fn distances(metric: Metric, one: &[f32], many: [&[f32]; TILE]) -> [f32; TILE] {
+    match metric {
+        Metric::Cosine => dots(one, many).map(|d| 1.0 - d),
+        Metric::Euclidean => squared_distances(one, many),
+        Metric::Dot => dots(one, many).map(|d| -d),
+    }
+}
+
+fn dots(one: &[f32], many: [&[f32]; TILE]) -> [f32; TILE] {
+    let (one8, one_rest) = one.as_chunks::<8>();
+    let many8 = many.map(|m| m.as_chunks::<8>());
+    let mut sums = [[0.0f32; 8]; TILE];
+    for (j, y) in one8.iter().enumerate() {
+        for (sum, (m8, _)) in sums.iter_mut().zip(&many8) {
+            let x = &m8[j];
+            for i in 0..8 {
+                sum[i] += x[i] * y[i];
+            }
+        }
+    }
+    std::array::from_fn(|t| {
+        let tail: f32 = many8[t].1.iter().zip(one_rest).map(|(x, y)| x * y).sum();
+        sums[t].iter().sum::<f32>() + tail
+    })
+}
+
+fn squared_distances(one: &[f32], many: [&[f32]; TILE]) -> [f32; TILE] {
+    let (one8, one_rest) = one.as_chunks::<8>();
+    let many8 = many.map(|m| m.as_chunks::<8>());
+    let mut sums = [[0.0f32; 8]; TILE];
+    for (j, y) in one8.iter().enumerate() {
+        for (sum, (m8, _)) in sums.iter_mut().zip(&many8) {
+            let x = &m8[j];
+            for i in 0..8 {
+                let d = x[i] - y[i];
+                sum[i] += d * d;
+            }
+        }
+    }
+    std::array::from_fn(|t| {
+        let tail: f32 = (many8[t].1.iter().zip(one_rest))
+            .map(|(x, y)| (x - y) * (x - y))
+            .sum();
+        sums[t].iter().sum::<f32>() + tail
+    })
+}
+
 pub(crate) fn squared_distance(a: &[f32], b: &[f32]) -> f32 {
     let ((a8, a_rest), (b8, b_rest)) = (a.as_chunks::<8>(), b.as_chunks::<8>());
     let mut sums = [0.0f32; 8];
@@ -147,13 +196,38 @@ pub(crate) fn train(sample: &[f32], dims: usize, k: usize, metric: Metric) -> Ve
 
 pub(crate) fn assign(data: &[f32], dims: usize, centroids: &[f32], metric: Metric) -> Vec<u32> {
     parallel(data.len() / dims, |range| {
-        range
-            .map(|row| {
-                nearest(metric, &data[row * dims..(row + 1) * dims], centroids, dims).0 as u32
-            })
-            .collect::<Vec<_>>()
+        let rows: Vec<&[f32]> = range
+            .map(|row| &data[row * dims..(row + 1) * dims])
+            .collect();
+        let (tiles, rest) = rows.as_chunks::<TILE>();
+        let mut out = Vec::with_capacity(rows.len());
+        for tile in tiles {
+            out.extend(nearest_tile(metric, *tile, centroids, dims).map(|c| c as u32));
+        }
+        out.extend(
+            rest.iter()
+                .map(|row| nearest(metric, row, centroids, dims).0 as u32),
+        );
+        out
     })
     .concat()
+}
+
+fn nearest_tile(
+    metric: Metric,
+    rows: [&[f32]; TILE],
+    centroids: &[f32],
+    dims: usize,
+) -> [usize; TILE] {
+    let mut best = [(0usize, f32::NAN); TILE];
+    for (c, centroid) in centroids.chunks_exact(dims).enumerate() {
+        for (best, d) in best.iter_mut().zip(distances(metric, centroid, rows)) {
+            if c == 0 || d.total_cmp(&best.1).is_lt() {
+                *best = (c, d);
+            }
+        }
+    }
+    best.map(|(c, _)| c)
 }
 
 fn nearest(metric: Metric, point: &[f32], centroids: &[f32], dims: usize) -> (usize, f32) {
@@ -204,5 +278,49 @@ impl Random {
         }
         all.truncate(count);
         all
+    }
+}
+
+#[cfg(test)]
+mod tiles {
+    use super::*;
+
+    fn random(n: usize, seed: u64) -> Vec<f32> {
+        let mut random = Random(seed);
+        (0..n)
+            .map(|_| (random.next() % 2001) as f32 / 1000.0 - 1.0)
+            .collect()
+    }
+
+    #[test]
+    fn tiled_distances_match_one_at_a_time_exactly() {
+        for dims in [1, 7, 8, 13, 64, 1024] {
+            let one = random(dims, 1);
+            let many = random(TILE * dims, 2);
+            let rows: [&[f32]; TILE] = std::array::from_fn(|t| &many[t * dims..(t + 1) * dims]);
+            for metric in [Metric::Cosine, Metric::Euclidean, Metric::Dot] {
+                let tiled = distances(metric, &one, rows);
+                for (t, row) in rows.iter().enumerate() {
+                    assert_eq!(tiled[t].to_bits(), distance(metric, row, &one).to_bits());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn tiled_assign_matches_nearest_with_ties() {
+        for (dims, k) in [(13, 9), (64, 40), (1024, 30)] {
+            let mut centroids = random(k * dims, 3);
+            let copy = centroids[..dims].to_vec();
+            centroids[(k - 1) * dims..].copy_from_slice(&copy);
+            let mut data = random(103 * dims, 4);
+            data[..dims].copy_from_slice(&copy);
+            for metric in [Metric::Cosine, Metric::Euclidean, Metric::Dot] {
+                let want: Vec<u32> = (data.chunks_exact(dims))
+                    .map(|row| nearest(metric, row, &centroids, dims).0 as u32)
+                    .collect();
+                assert_eq!(assign(&data, dims, &centroids, metric), want);
+            }
+        }
     }
 }

@@ -5,7 +5,7 @@ use std::collections::BinaryHeap;
 
 use serde::{Deserialize, Serialize};
 
-use super::ivf;
+use super::ivf::{self, TILE};
 use crate::Column;
 
 const RECALLS: [f32; 8] = [0.5, 0.8, 0.9, 0.95, 0.97, 0.99, 0.995, 0.999];
@@ -53,6 +53,15 @@ pub(crate) struct Calibrator {
 #[derive(PartialEq)]
 struct Near(f32, u32);
 
+fn offer(best: &mut BinaryHeap<Near>, keep: usize, near: Near) {
+    if best.len() < keep {
+        best.push(near);
+    } else if best.peek().is_some_and(|worst| near.0 < worst.0) {
+        best.pop();
+        best.push(near);
+    }
+}
+
 impl Eq for Near {}
 
 impl PartialOrd for Near {
@@ -94,19 +103,32 @@ impl Calibrator {
                 .zip(self.best.chunks_mut(size));
             for ((queries, own), best) in parts {
                 scope.spawn(move || {
-                    for ((query, own), best) in queries.chunks_exact(dims).zip(own).zip(best) {
-                        for ((row, seq), &cluster) in
-                            vectors.chunks_exact(dims).zip(seqs).zip(clusters)
-                        {
-                            if seq == own {
-                                continue;
+                    let rows = || vectors.chunks_exact(dims).zip(seqs).zip(clusters);
+                    let tiles = (queries.chunks(TILE * dims))
+                        .zip(own.chunks(TILE))
+                        .zip(best.chunks_mut(TILE));
+                    for ((queries, own), best) in tiles {
+                        if best.len() < TILE {
+                            for ((query, own), best) in
+                                queries.chunks_exact(dims).zip(own).zip(best)
+                            {
+                                for ((row, seq), &cluster) in rows() {
+                                    if seq != own {
+                                        let d = ivf::distance(column.metric, query, row);
+                                        offer(best, keep, Near(d, cluster));
+                                    }
+                                }
                             }
-                            let d = ivf::distance(column.metric, query, row);
-                            if best.len() < keep {
-                                best.push(Near(d, cluster));
-                            } else if best.peek().is_some_and(|worst| d < worst.0) {
-                                best.pop();
-                                best.push(Near(d, cluster));
+                            continue;
+                        }
+                        let tile: [&[f32]; TILE] =
+                            std::array::from_fn(|t| &queries[t * dims..(t + 1) * dims]);
+                        for ((row, seq), &cluster) in rows() {
+                            let found = ivf::distances(column.metric, row, tile);
+                            for t in 0..TILE {
+                                if *seq != own[t] {
+                                    offer(&mut best[t], keep, Near(found[t], cluster));
+                                }
                             }
                         }
                     }
@@ -166,6 +188,58 @@ impl Calibrator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Element, Metric};
+
+    #[test]
+    fn tiled_calibration_finds_the_same_neighbours() {
+        let mut random = ivf::Random(9);
+        let mut numbers = |n: usize| -> Vec<f32> {
+            (0..n)
+                .map(|_| (random.next() % 2001) as f32 / 1000.0 - 1.0)
+                .collect()
+        };
+        for (dims, queries, rows) in [(13, 203, 900), (1024, 37, 300)] {
+            for metric in [Metric::Cosine, Metric::Euclidean, Metric::Dot] {
+                let column = Column {
+                    dims,
+                    metric,
+                    element: Element::F32,
+                };
+                let asked = numbers(queries * dims);
+                let own: Vec<u64> = (0..queries as u64).map(|q| q * 3).collect();
+                let vectors = numbers(rows * dims);
+                let seqs: Vec<u64> = (0..rows as u64).collect();
+                let clusters: Vec<u32> = (0..rows as u32).map(|r| r % 17).collect();
+                let mut tiled = Calibrator::new(column, asked.clone(), own.clone(), rows);
+                tiled.add(&vectors, &seqs, &clusters);
+                let keep = tiled.keep;
+                for (q, query) in asked.chunks_exact(dims).enumerate() {
+                    let mut best = BinaryHeap::new();
+                    for ((row, seq), &cluster) in
+                        vectors.chunks_exact(dims).zip(&seqs).zip(&clusters)
+                    {
+                        if *seq != own[q] {
+                            offer(
+                                &mut best,
+                                keep,
+                                Near(ivf::distance(metric, query, row), cluster),
+                            );
+                        }
+                    }
+                    let want: Vec<(u32, u32)> = best
+                        .into_sorted_vec()
+                        .iter()
+                        .map(|n| (n.0.to_bits(), n.1))
+                        .collect();
+                    let got: Vec<(u32, u32)> =
+                        (std::mem::take(&mut tiled.best[q]).into_sorted_vec().iter())
+                            .map(|n| (n.0.to_bits(), n.1))
+                            .collect();
+                    assert_eq!(got, want);
+                }
+            }
+        }
+    }
 
     #[test]
     fn a_share_past_the_largest_k_goes_on_along_the_last_line() {
