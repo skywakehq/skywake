@@ -178,6 +178,7 @@ pub async fn run(mut args: Args) -> Result<()> {
         Some(name) => name.clone(),
         None => load(&api, &args, source).await?,
     };
+    run.settings["index"] = json!(name);
     let truth = exact(&families, &args, &asker).await?;
     let mut rows = Vec::new();
     let mut report = format!(

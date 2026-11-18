@@ -69,7 +69,10 @@ trap finish EXIT
 (while sleep 60; do save >/dev/null 2>&1 || true; done) &
 
 FILESYSTEM=${FILESYSTEM:-0}
-if [ "$FILESYSTEM" = 1 ]; then
+TPUF=${TPUF:-0}
+if [ "$TPUF" = 1 ]; then
+  say run start "$INSTANCE in $AWS_REGION · turbopuffer's vector-10m through the API"
+elif [ "$FILESYSTEM" = 1 ]; then
   say run start "$INSTANCE in $AWS_REGION · filesystem only${FS_ARGS:+ · $FS_ARGS}"
 else
   say run start "$INSTANCE in $AWS_REGION · sets: $SETS${INDEX_ARGS:+ · $INDEX_ARGS}"
@@ -90,7 +93,7 @@ packages() {
     python3.11 python3.11-pip nodejs npm tar fio &&
     { [ "$FILESYSTEM" = 1 ] || python3.11 -m pip install -q h5py numpy pyarrow; }
 }
-rust() { curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain 1.92; }
+rust() { curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain 1.99; }
 source_tree() {
   cd /data/skywake &&
     aws s3 cp --quiet "s3://$BUCKET/source.tar.gz" - | tar -xz &&
@@ -144,6 +147,55 @@ if [ "$FILESYSTEM" = 1 ]; then
   exit
 fi
 
+postgres() {
+  dnf install -y -q postgresql16-server &&
+    postgresql-setup --initdb &&
+    sed -i 's/ident$/scram-sha-256/' /var/lib/pgsql/data/pg_hba.conf &&
+    systemctl start postgresql &&
+    sudo -u postgres psql -qc "CREATE ROLE bench LOGIN PASSWORD 'bench'" -c "CREATE DATABASE bench OWNER bench"
+}
+api() {
+  curl -sSf https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz | tar -xJ -C /data &&
+    export PATH=/data/node-v22.20.0-linux-x64/bin:$PATH &&
+    corepack enable && pnpm install --frozen-lockfile --filter @skywake/api... &&
+    cargo build --release -p skywake-node &&
+    cp "$CARGO_TARGET_DIR/release/libskywake_node.so" bindings/node/engine.node
+}
+
+# turbopuffer's vector-10m: one API server on the bucket, the client on the same machine.
+if [ "$TPUF" = 1 ]; then
+  step postgres "a local Postgres for the API" postgres &
+  setup=$!
+  step api "the API and its engine binding" api
+  wait "$setup"
+  export PATH=/data/node-v22.20.0-linux-x64/bin:$PATH
+  export SKYWAKE_API_ADMIN_TOKEN=bench-admin-$RANDOM$RANDOM$RANDOM SKYWAKE_API_RATE_LIMIT=0
+  SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$STORE/tpuf \
+    SKYWAKE_API_LISTEN=127.0.0.1:8080 SKYWAKE_API_PEER_URL=http://127.0.0.1:8080 \
+    SKYWAKE_API_PEER_TOKEN=bench-peer-$RANDOM$RANDOM SKYWAKE_INDEX_CACHE_GB=200 \
+    node apps/api/src/main.ts >"$LOGS/api-server.log" 2>&1 &
+  until curl -sf http://127.0.0.1:8080/health >/dev/null; do sleep 1; done
+  SKYWAKE_API_KEY=$(curl -sf -X POST http://127.0.0.1:8080/v1/orgs -H "authorization: Bearer $SKYWAKE_API_ADMIN_TOKEN" \
+    -H 'content-type: application/json' -d '{"name":"bench-tpuf"}' |
+    python3.11 -c 'import json,sys; print(json.load(sys.stdin)["key"])')
+  export SKYWAKE_API_KEY
+  set=cohere-wiki-10m
+  say "$set" wait "waiting for the dataset"
+  until [ -e "/data/datasets/$set.ready" ] || [ -e "/data/datasets/$set.failed" ]; do sleep 5; done
+  [ -e "/data/datasets/$set.ready" ] || { say "$set" failed "the dataset did not download"; exit 1; }
+  bench() { "$CARGO_TARGET_DIR/release/index-bench" api --url http://127.0.0.1:8080 --dataset "/data/datasets/$set" "$@"; }
+  step tpuf "load 10M x 1024 over HTTP, then top 10 at 8 QPS, uniform queries" \
+    bench --rows 10000000 --batch 1000 --writers 8 --settle 60 --families vector --probes uniform \
+    --qps 8 --warm 300 --seconds 600 --recall 100 --out "$RESULTS/tpuf-uniform"
+  save
+  index=$(python3.11 -c 'import json,sys; print(json.load(open(sys.argv[1]))["settings"]["index"])' \
+    "$RESULTS/tpuf-uniform/results.json")
+  step recall "real held-out queries on the same index, unfiltered and at 1%" \
+    bench --index "$index" --families vector,vector-filtered --probes dataset \
+    --qps 8 --warm 60 --seconds 120 --recall 1000 --out "$RESULTS/tpuf-dataset"
+  exit
+fi
+
 # 1. Customer-managed keys.
 cmek() {
   SKYWAKE_TEST_BUCKET=$STORE/cmek SKYWAKE_TEST_KMS_KEY=$KMS_KEY \
@@ -181,20 +233,6 @@ save
 
 # 5. Pinned indexes with read replicas: three API servers on this machine,
 # each with its own disk cache, over the bucket and a local Postgres.
-postgres() {
-  dnf install -y -q postgresql16-server &&
-    postgresql-setup --initdb &&
-    sed -i 's/ident$/scram-sha-256/' /var/lib/pgsql/data/pg_hba.conf &&
-    systemctl start postgresql &&
-    sudo -u postgres psql -qc "CREATE ROLE bench LOGIN PASSWORD 'bench'" -c "CREATE DATABASE bench OWNER bench"
-}
-api() {
-  curl -sSf https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz | tar -xJ -C /data &&
-    export PATH=/data/node-v22.20.0-linux-x64/bin:$PATH &&
-    corepack enable && pnpm install --frozen-lockfile --filter @skywake/api... &&
-    cargo build --release -p skywake-node &&
-    cp "$CARGO_TARGET_DIR/release/libskywake_node.so" bindings/node/engine.node
-}
 pinning() {
   SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$STORE/pinning \
     SKYWAKE_INDEX_CACHE_GB=20 ROWS=1000000 LOAD_SECONDS=60 RESULTS=$RESULTS/pinning \

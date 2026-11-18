@@ -15,7 +15,10 @@
 # only the keys check and the index, on SETS (sift-1m cohere-1m), with
 # INDEX_ARGS added to each index run (such as --filters none,1).
 # FILESYSTEM=1 runs only the filesystem suites, latency included, with
-# FS_ARGS added (such as --repeat 3 or --quick).
+# FS_ARGS added (such as --repeat 3 or --quick). TPUF=1 runs only turbopuffer's
+# vector-10m benchmark through one API server on the bucket: Cohere 10M x 1024
+# loaded over HTTP, top 10 at 8 QPS timed at the client, then recall on real
+# held-out queries.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
@@ -24,10 +27,23 @@ REGION=${REGION:-us-west-2}
 INSTANCE=${INSTANCE:-i4i.4xlarge}
 MINI=${MINI:-0}
 FILESYSTEM=${FILESYSTEM:-0}
+TPUF=${TPUF:-0}
 FS_ARGS=${FS_ARGS:-}
-SETS=${SETS:-$([ "$MINI" = 1 ] && echo "sift-1m cohere-1m" || echo "sift-1m cohere-10m")}
+if [ "$TPUF" = 1 ]; then
+  SETS=${SETS:-cohere-wiki-10m}
+elif [ "$MINI" = 1 ]; then
+  SETS=${SETS:-sift-1m cohere-1m}
+else
+  SETS=${SETS:-sift-1m cohere-10m}
+fi
 INDEX_ARGS=${INDEX_ARGS:-}
-HOURS=${HOURS:-$([ "$MINI" = 1 ] || [ "$FILESYSTEM" = 1 ] && echo 2 || echo 8)}
+if [ "$MINI" = 1 ] || [ "$FILESYSTEM" = 1 ]; then
+  HOURS=${HOURS:-2}
+elif [ "$TPUF" = 1 ]; then
+  HOURS=${HOURS:-4}
+else
+  HOURS=${HOURS:-8}
+fi
 export AWS_REGION=$REGION AWS_DEFAULT_REGION=$REGION
 
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
@@ -56,6 +72,28 @@ pack_source() {
 }
 
 plan() {
+  if [ "$TPUF" = 1 ]; then
+    cat <<EOF
+Account $ACCOUNT, region $REGION. turbopuffer's vector-10m benchmark, through the API.
+
+Creates:
+  bucket        s3://$BUCKET
+  KMS key       $ALIAS (this run doesn't use it)
+  IAM role      $NAME, with an instance profile: this bucket and this key only
+  machine       $INSTANCE (Amazon Linux 2023), turns itself off and is
+                deleted when the run ends, or after $HOURS hours at most
+
+Runs one API server on the bucket with a local Postgres, then:
+  1. loads Cohere Wikipedia 10M x 1024 over HTTP, 8 writers
+  2. top 10 at 8 QPS for 10 minutes after 5 of warm-up, uniform query vectors
+     as turbopuffer asks, timed at the client
+  3. recall@10 on 1,000 real held-out queries, unfiltered and at 1%
+
+Cost: the machine bills by the second, about \$1.40-1.90/hour for an
+i4i.4xlarge, for at most $HOURS hours. Storage and requests are a few cents.
+EOF
+    return
+  fi
   if [ "$FILESYSTEM" = 1 ]; then
     cat <<EOF
 Account $ACCOUNT, region $REGION. A filesystem run.
@@ -182,7 +220,7 @@ up() {
   userdata=$(mktemp)
   cat >"$userdata" <<EOF
 #!/bin/bash
-export HOME=/root BUCKET=$BUCKET KMS_KEY=$key INSTANCE=$INSTANCE HOURS=$HOURS MINI=$MINI FILESYSTEM=$FILESYSTEM FS_ARGS="$FS_ARGS" SETS="$SETS" INDEX_ARGS="$INDEX_ARGS" NOTE="$note"
+export HOME=/root BUCKET=$BUCKET KMS_KEY=$key INSTANCE=$INSTANCE HOURS=$HOURS MINI=$MINI FILESYSTEM=$FILESYSTEM TPUF=$TPUF FS_ARGS="$FS_ARGS" SETS="$SETS" INDEX_ARGS="$INDEX_ARGS" NOTE="$note"
 export AWS_REGION=$REGION AWS_DEFAULT_REGION=$REGION
 aws s3 cp s3://$BUCKET/instance.sh /root/instance.sh && bash /root/instance.sh
 EOF
