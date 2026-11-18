@@ -9,6 +9,7 @@ import { indexFor, signedIn } from "../../http/request.ts";
 import { Texts } from "../indexes/embeddings.ts";
 import { MAIN, makeIndex } from "../indexes/lifecycle.ts";
 import * as rules from "../indexes/rules/index.ts";
+import { writtenBytes } from "../indexes/usage.ts";
 import { kindsOf } from "../indexes/rules/kinds.ts";
 import { addAttributes, dropAttributes, engineSchema, newAttributes } from "../indexes/schemas.ts";
 import { reembedded, sized } from "./embeds.ts";
@@ -87,7 +88,7 @@ export async function write(c: Ctx, name: string, body: Body) {
   bill.count("writes", exact.upserted + exact.patched);
   bill.count("deletes", exact.deleted);
   const counts = { ...exact, deleted: exact.deleted + missing };
-  const written = Buffer.byteLength(JSON.stringify(ours));
+  const written = writtenBytes(ours);
   bill.wrote(written);
   const affected = counts.upserted + counts.patched + counts.deleted;
   const ids = { upserted_ids: upsertedIds, patched_ids: patchedIds, deleted_ids: deletedIds };

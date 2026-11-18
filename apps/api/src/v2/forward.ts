@@ -27,6 +27,12 @@ export interface Forwarded {
   body: unknown;
 }
 
+interface Passed {
+  requestId: string;
+  again: boolean;
+  json?: unknown;
+}
+
 export interface Inner {
   fetch(request: Request, env: unknown): Response | Promise<Response>;
 }
@@ -34,8 +40,12 @@ export interface Inner {
 export function innerApp(services: Services, api: Api): Inner {
   const inner = new Hono<AppEnv>();
   inner.use(async (c, next) => {
-    const from = (c.env as { skywake?: { requestId: string; again: boolean } } | undefined)
-      ?.skywake;
+    const from = (c.env as { skywake?: Passed } | undefined)?.skywake;
+    if (from?.json !== undefined) {
+      const json = from.json;
+      c.req.json = <T>() => Promise.resolve(json as T);
+      c.req.text = () => Promise.resolve(JSON.stringify(json));
+    }
     c.set("requestId", from?.requestId ?? crypto.randomUUID());
     c.set("fromPeer", false);
     c.set("again", from?.again ?? false);
@@ -71,15 +81,16 @@ export class V1 {
     let body: BodyInit | undefined;
     if (call.json !== undefined) {
       headers.set("content-type", "application/json");
-      body = JSON.stringify(call.json);
     } else if (call.bytes !== undefined) {
       headers.set("content-type", "application/octet-stream");
       body = call.bytes as BodyInit;
     }
-    const env = {
-      ...(this.#c.env as object),
-      skywake: { requestId: this.#c.get("requestId"), again: this.#calls++ > 0 },
+    const skywake: Passed = {
+      requestId: this.#c.get("requestId"),
+      again: this.#calls++ > 0,
+      json: call.json,
     };
+    const env = { ...(this.#c.env as object), skywake };
     return this.#inner.fetch(new Request(url, { method, headers, body }), env);
   }
 

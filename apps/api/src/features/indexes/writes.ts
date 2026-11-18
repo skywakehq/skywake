@@ -5,6 +5,7 @@ import type { Feature } from "../../http/context.ts";
 import { Texts } from "./embeddings.ts";
 import { writable } from "./lifecycle.ts";
 import * as rules from "./rules/index.ts";
+import { writtenBytes } from "./usage.ts";
 
 export const indexWritesFeature: Feature = {
   register(api) {
@@ -29,7 +30,7 @@ export const indexWritesFeature: Feature = {
         await index.store.upsert(branch, documents);
       }
       bill.count("writes", documents.length);
-      bill.wrote(Buffer.byteLength(JSON.stringify(docs)));
+      bill.wrote(writtenBytes(docs));
       const count = documents.length;
       return c.json({ count, upserted_ids: upserted, billing: bill.counts }, 200);
     });
@@ -81,7 +82,7 @@ export const indexWritesFeature: Feature = {
       void missing;
       bill.count("writes", counts.upserted + counts.patched);
       bill.count("deletes", counts.deleted);
-      bill.wrote(Buffer.byteLength(JSON.stringify(body)));
+      bill.wrote(writtenBytes(body));
       const ids = { upserted_ids: upsertedIds, patched_ids: patchedIds, deleted_ids: deletedIds };
       return c.json({ ...counts, ...ids, billing: bill.counts }, 200);
     });
