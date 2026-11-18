@@ -13,10 +13,16 @@ index or how unusual the query is. Inside that bound it spends effort where the 
    Rows whose lower bound cannot beat the k-th upper bound are dropped.
 3. **Refine.** Four-bit extended RaBitQ codes (Gao et al., SIGMOD 2025) give the remaining rows, nearest
    first by their one-bit estimate, a distance about ten times tighter: at most `512 × max(4k, 40)` rows,
-   read in one pass and scored on every core. Rows whose refined lower bound cannot beat the refined k-th
-   upper bound are dropped.
+   in growing batches scored on every core, until no remaining one-bit lower bound can beat the refined
+   k-th upper bound. Only that many survivors of the estimate stage are ever kept. Each group's records are
+   read and checked once as a whole and then held in memory next to its one-bit codes, so a query never
+   reads them piece by piece.
 4. **Rerank.** Full vectors are read for the best `max(4k, 40)` rows by refined estimate, then in doubling
    batches while a refined lower bound still beats the exact k-th distance, up to eight times that.
+
+The memory cache defaults to a quarter of the machine's memory. At 10M rows of 1024 dimensions the
+one-bit codes take about 2 GB and the four-bit records about 5 GB; with the old 1 GiB default every
+query read its codes from disk again.
 
 Each stage's reads and memory are bounded: codes for the probed rows, `528` bytes per refined row (1024
 dimensions), and `8 × max(4k, 40)` full vectors.

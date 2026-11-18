@@ -3,7 +3,7 @@
 mod known;
 mod top;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
@@ -205,8 +205,9 @@ impl Search<'_> {
             self.exact(&self.known.order[visited..], top).await?;
         }
         let limit = kth(found.rows.iter().map(|e| e.upper), top);
-        let kept = (found.rows.iter())
-            .filter(|e| e.lower <= limit)
+        found.rows.retain(|e| e.lower <= limit);
+        nearest(&mut found.rows, self.budget());
+        let kept: Vec<Candidate> = (found.rows.iter())
             .map(|e| {
                 let codes = &found.codes[&e.cluster];
                 let [norm, _, to_anchor, _] = codes.factors[e.row];
@@ -331,6 +332,18 @@ impl Search<'_> {
 
     fn capped(&self) -> bool {
         !self.exact_recall() && extended::wanted(self.column.dims)
+    }
+
+    fn base(&self) -> usize {
+        (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST)
+    }
+
+    fn budget(&self) -> usize {
+        match (self.capped(), self.clusters.extended) {
+            (false, _) => usize::MAX,
+            (true, true) => REFINE_MOST * self.base(),
+            (true, false) => RERANK_MOST * self.base(),
+        }
     }
 
     fn groups(&self) -> usize {
@@ -498,7 +511,7 @@ impl Search<'_> {
             return self.rerank(candidates, top).await;
         }
         by_middle(&mut candidates);
-        let base = (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST);
+        let base = self.base();
         if self.clusters.extended {
             candidates = self.refine(candidates, base).await?;
             by_middle(&mut candidates);
@@ -519,78 +532,70 @@ impl Search<'_> {
 
     async fn refine(&self, mut rough: Vec<Candidate>, base: usize) -> Result<Vec<Candidate>> {
         rough.truncate(REFINE_MOST * base);
-        let read = self.records(rough).await?;
         let estimator = Estimator::new(self.column.metric, self.column.dims);
         let query = extended::Prepared::new(self.rotated());
-        let mut anchors: HashMap<usize, Anchor> = HashMap::new();
-        for (candidate, _, _) in &read {
-            (anchors.entry(candidate.cluster)).or_insert_with(|| self.anchor(candidate.cluster));
-        }
-        let size = extended::record(self.column.dims);
-        let estimates = ivf::parallel(read.len().div_ceil(REFINE_PER_THREAD), |chunks| {
-            let rows =
-                chunks.start * REFINE_PER_THREAD..(chunks.end * REFINE_PER_THREAD).min(read.len());
-            (read[rows].iter())
-                .map(|(candidate, bytes, at)| {
-                    let record = &bytes[*at..*at + size];
-                    let anchor = &anchors[&candidate.cluster];
-                    let (norm, to_anchor) = (candidate.norm, candidate.to_anchor);
-                    let estimate =
-                        extended::estimate(&estimator, &query, anchor, record, norm, to_anchor);
-                    extended::intact(record).then_some(estimate)
-                })
-                .collect::<Vec<_>>()
-        });
+        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+        let mut batch = REFINE_PER_THREAD * cores;
         let mut best = Kth::new(self.query.top_k, f32::INFINITY);
-        let mut fine = Vec::with_capacity(read.len());
-        for ((mut candidate, _, _), estimate) in
-            read.into_iter().zip(estimates.into_iter().flatten())
-        {
-            let Some((d, error)) = estimate else {
-                let hash = self.known.get(candidate.cluster).hash;
-                return Err(Error::Corrupt(format!(
-                    "an extended code of blob {hash} is damaged"
-                )));
-            };
-            (candidate.lower, candidate.upper) = (d - error, d + error);
-            best.offer(candidate.upper);
-            fine.push(candidate);
+        let mut fine = Vec::new();
+        let mut rough = rough.into_iter();
+        loop {
+            let bound = best.get();
+            let now: Vec<Candidate> = rough
+                .by_ref()
+                .filter(|c| c.lower <= bound)
+                .take(batch)
+                .collect();
+            if now.is_empty() {
+                break;
+            }
+            for candidate in self.refined(now, &estimator, &query).await? {
+                best.offer(candidate.upper);
+                fine.push(candidate);
+            }
+            batch *= 2;
         }
         let bound = best.get();
         fine.retain(|c| c.lower <= bound);
         Ok(fine)
     }
 
-    async fn records(
+    async fn refined(
         &self,
-        mut candidates: Vec<Candidate>,
-    ) -> Result<Vec<(Candidate, Arc<Vec<u8>>, usize)>> {
+        rough: Vec<Candidate>,
+        estimator: &Estimator,
+        query: &extended::Prepared,
+    ) -> Result<Vec<Candidate>> {
         let dims = self.column.dims;
-        let size = extended::record(dims);
-        let runs = runs(&mut candidates, size);
-        let mut read = stream::iter(runs)
-            .map(|run| async move {
-                let cluster = self.known.get(run[0].cluster);
-                let range = cluster.extended(run[0].row..run[run.len() - 1].row + 1, dims);
-                let bytes = self.storage.range_cached(cluster.hash, range).await?;
-                Ok::<_, Error>((run, bytes))
+        let clusters: HashSet<usize> = rough.iter().map(|c| c.cluster).collect();
+        let sections: HashMap<usize, (Arc<Vec<u8>>, Anchor)> = stream::iter(clusters)
+            .map(|c| async move {
+                let section = self.storage.extended(self.known.get(c), dims).await?;
+                Ok::<_, Error>((c, (section, self.anchor(c))))
             })
-            .buffer_unordered(FAN_OUT);
-        let mut out = Vec::new();
-        while let Some((run, bytes)) = read.try_next().await? {
-            let first = run[0].row;
-            for candidate in run {
-                let at = (candidate.row - first) * size;
-                if bytes.len() < at + size {
-                    let hash = self.known.get(candidate.cluster).hash;
-                    return Err(Error::Corrupt(format!(
-                        "the extended codes of blob {hash} are cut short"
-                    )));
-                }
-                out.push((candidate, bytes.clone(), at));
-            }
-        }
-        Ok(out)
+            .buffer_unordered(FAN_OUT)
+            .try_collect()
+            .await?;
+        let size = extended::record(dims);
+        let estimates = ivf::parallel(rough.len().div_ceil(REFINE_PER_THREAD), |chunks| {
+            let rows =
+                chunks.start * REFINE_PER_THREAD..(chunks.end * REFINE_PER_THREAD).min(rough.len());
+            (rough[rows].iter())
+                .map(|candidate| {
+                    let (section, anchor) = &sections[&candidate.cluster];
+                    let record = &section[candidate.row * size..(candidate.row + 1) * size];
+                    let (norm, to_anchor) = (candidate.norm, candidate.to_anchor);
+                    extended::estimate(estimator, query, anchor, record, norm, to_anchor)
+                })
+                .collect::<Vec<_>>()
+        });
+        Ok((rough.into_iter())
+            .zip(estimates.into_iter().flatten())
+            .map(|(mut candidate, (d, error))| {
+                (candidate.lower, candidate.upper) = (d - error, d + error);
+                candidate
+            })
+            .collect())
     }
 
     async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
@@ -681,6 +686,15 @@ struct Candidate {
     norm: f32,
     to_anchor: f32,
     id: Id,
+}
+
+fn nearest(rows: &mut Vec<Estimate>, most: usize) {
+    if rows.len() > most {
+        rows.select_nth_unstable_by(most, |a, b| {
+            (a.lower + a.upper).total_cmp(&(b.lower + b.upper))
+        });
+        rows.truncate(most);
+    }
 }
 
 fn by_middle(candidates: &mut [Candidate]) {

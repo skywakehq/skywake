@@ -74,7 +74,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Self {
-            cache_bytes: 1 << 30,
+            cache_bytes: memory_share(),
             build_bytes: 1 << 30,
             commit_rows: 10_000,
             queued_rows: 100_000,
@@ -88,6 +88,19 @@ impl Default for Options {
             postings: false,
             partials: true,
         }
+    }
+}
+
+fn memory_share() -> usize {
+    let (pages, size) = unsafe {
+        (
+            libc::sysconf(libc::_SC_PHYS_PAGES),
+            libc::sysconf(libc::_SC_PAGESIZE),
+        )
+    };
+    match pages > 0 && size > 0 {
+        true => ((pages as usize).saturating_mul(size as usize) / 4).max(1 << 30),
+        false => 1 << 30,
     }
 }
 

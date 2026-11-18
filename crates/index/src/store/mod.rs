@@ -36,7 +36,7 @@ use crate::format::directory;
 use crate::format::legacy::{V10, V11, V12, V13, V14, V15};
 use crate::format::segment_ids::SegmentIds;
 use crate::format::{Clusters, Segment, Version, decode_version};
-use crate::vector::ivf;
+use crate::vector::{extended, ivf};
 use crate::{Error, Result, text};
 
 const SAVE_ATTEMPTS: u32 = 30;
@@ -405,6 +405,27 @@ impl Storage {
         let codes = Arc::new(self.read_codes(cluster, dims).await?);
         self.cache.insert(key, codes.clone(), codes.weight());
         Ok(codes)
+    }
+
+    pub(crate) async fn extended(&self, cluster: &ClusterRef, dims: usize) -> Result<Arc<Vec<u8>>> {
+        let key = part(cluster.hash, "extended");
+        if let Some(found) = self.cache.get(key) {
+            return Ok(found);
+        }
+        let range = cluster.extended(0..cluster.rows as usize, dims);
+        let bytes = self.range(cluster.hash, range.clone()).await?;
+        let size = extended::record(dims);
+        if bytes.len() as u64 != range.end - range.start
+            || !bytes.chunks_exact(size).all(extended::intact)
+        {
+            return Err(Error::Corrupt(format!(
+                "the extended codes of blob {} are damaged",
+                cluster.hash
+            )));
+        }
+        let bytes = Arc::new(bytes);
+        self.cache.insert(key, bytes.clone(), bytes.len());
+        Ok(bytes)
     }
 
     pub(crate) async fn read_codes(&self, cluster: &ClusterRef, dims: usize) -> Result<Codes> {
