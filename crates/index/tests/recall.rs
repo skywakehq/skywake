@@ -43,8 +43,9 @@ fn clustered(rows: usize, dims: usize, centers: usize, seed: u64) -> Vec<Vec<f32
 }
 
 /// A built index of `rows` rows; one in ten has `ten`, one in a hundred
-/// `hundred`.
-async fn built(rows: usize, dims: usize, metric: Metric) -> (TempDir, Index) {
+/// `hundred`. Built once at the end, or after every `step` rows and
+/// recalibrated when stale, as the builder does.
+async fn built(rows: usize, dims: usize, metric: Metric, step: usize) -> (TempDir, Index) {
     let dir = tempfile::tempdir().unwrap();
     let store = skywake_core::open_store(dir.path().to_str().unwrap()).unwrap();
     let schema = Schema::new()
@@ -65,6 +66,10 @@ async fn built(rows: usize, dims: usize, metric: Metric) -> (TempDir, Index) {
             })
             .collect();
         index.upsert(docs).await.unwrap();
+        if (start + batch.len()) % step == 0 {
+            index.build().await.unwrap();
+            index.recalibrate().await.unwrap();
+        }
     }
     index.build().await.unwrap();
     (dir, index)
@@ -87,8 +92,8 @@ async fn recall(index: &Index, queries: &[Vec<f32>], shape: impl Fn(Query) -> Qu
 /// Turns a plain query into the one a case measures.
 type Shape = fn(Query) -> Query;
 
-async fn check(rows: usize, dims: usize, metric: Metric) {
-    let (_dir, index) = built(rows, dims, metric).await;
+async fn check(rows: usize, dims: usize, metric: Metric, step: usize) {
+    let (_dir, index) = built(rows, dims, metric, step).await;
     let queries = clustered(100, dims, rows / 100, 2);
     let cases: [(&str, f64, Shape); 4] = [
         ("default", 0.95, |q| q),
@@ -108,11 +113,17 @@ async fn check(rows: usize, dims: usize, metric: Metric) {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn recall_at_100k_rows_of_128_dims() {
-    check(100_000, 128, Metric::Euclidean).await;
+    check(100_000, 128, Metric::Euclidean, usize::MAX).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn recall_at_300k_rows_of_128_dims_built_as_they_load() {
+    check(300_000, 128, Metric::Euclidean, 10_000).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn recall_at_50k_rows_of_768_dims() {
-    check(50_000, 768, Metric::Cosine).await;
+    check(50_000, 768, Metric::Cosine, usize::MAX).await;
 }

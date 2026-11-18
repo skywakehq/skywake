@@ -18,9 +18,13 @@ const UNBALANCED: u64 = 4;
 
 const REMOVED: u64 = 5;
 
+const REORGANIZE: u64 = 4;
+
+const LEAST_REORGANIZED: u64 = 64 << 20;
+
 fn still_good(sizes: &[u64], live: u64, removed: u64, full_rows: u64) -> bool {
     let largest = sizes.iter().copied().max().unwrap_or(0);
-    largest * sizes.len() as u64 <= UNBALANCED * live && removed * REMOVED <= full_rows
+    largest * sizes.len() as u64 <= UNBALANCED * live && removed * REMOVED <= full_rows.max(live)
 }
 
 pub(super) struct Sizes {
@@ -79,13 +83,25 @@ pub(super) async fn grow(
         if !still_good(&plan.sizes(&layout.sizes), new_live, removed, ann.full_rows) {
             return Ok(None);
         }
-        layouts.push((layout, plan));
+        let new_bytes = (live.len() * column.dims * column.element.bytes()) as u64;
+        let budget = (REORGANIZE * new_bytes)
+            .max(LEAST_REORGANIZED)
+            .min(sizes.budget as u64);
+        let cost = |g: usize| -> u64 {
+            let members = &layout.groups.members[g];
+            members
+                .iter()
+                .map(|&e| layout.table[e as usize].bytes())
+                .sum()
+        };
+        let (plan, left) = plan.within(cost, budget);
+        layouts.push((layout, plan, left));
     }
 
     let mut placed = vec![u32::MAX; live.len() * width];
     let mut moved: Vec<HashMap<Id, u32>> = vec![HashMap::new(); width];
     let mut built = BTreeMap::new();
-    for (c, ((name, column), (layout, plan))) in columns.iter().zip(layouts).enumerate() {
+    for (c, ((name, column), (layout, plan, left))) in columns.iter().zip(layouts).enumerate() {
         let clusters = &ann.columns[*name];
         let source = Source {
             storage,
@@ -98,7 +114,7 @@ pub(super) async fn grow(
         let old = layout.centroids.clone();
         let origin = storage.origin(clusters, column.dims).await?;
         let mut coding = Coding::new(version, column, clusters.seed, old.clone().into(), origin);
-        let fold_bytes = sizes.budget as u64;
+        let fold_bytes = left;
         let done = pieces::apply(
             &source,
             layout,

@@ -90,7 +90,7 @@ enum Job {
     },
     Split {
         stay: usize,
-        go: usize,
+        go: Vec<usize>,
         sources: Vec<usize>,
         joins: Vec<usize>,
     },
@@ -211,24 +211,28 @@ impl<'l> Decisions<'l> {
             });
         }
         let groups = self.layout.groups.len();
-        for &(from, to) in &plan.splits {
+        for (from, to) in &plan.splits {
+            let from = *from;
             let stay = self.base(from);
-            let go = match freed.remove(&to) {
-                Some(e) => {
-                    self.emptied.retain(|&(dest, _)| dest != e);
-                    e
-                }
-                None if to < groups => self.base(to),
-                None => self.spare(),
-            };
+            let go: Vec<usize> = (to.iter())
+                .map(|&to| match freed.remove(&to) {
+                    Some(e) => {
+                        self.emptied.retain(|&(dest, _)| dest != e);
+                        e
+                    }
+                    None if to < groups => self.base(to),
+                    None => self.spare(),
+                })
+                .collect();
             let sources = self.members[from].clone();
             for &e in &sources {
-                if e != stay && e != go {
+                if e != stay && !go.contains(&e) {
                     self.empty(e, stay);
                 }
             }
-            self.rows.insert(stay, 0);
-            self.rows.insert(go, 0);
+            for &e in std::iter::once(&stay).chain(&go) {
+                self.rows.insert(e, 0);
+            }
             let joins = self.layout.joins[from].clone();
             self.jobs.push(Job::Split {
                 stay,
@@ -243,6 +247,15 @@ impl<'l> Decisions<'l> {
         (self.members[g].iter().copied())
             .max_by_key(|&e| (self.left(e), std::cmp::Reverse(e)))
             .expect("a cluster group has a piece")
+    }
+
+    fn overdue(&self, g: usize) -> u64 {
+        let base = self.base(g);
+        let pending: u64 = (self.members[g].iter())
+            .filter(|&&e| e != base)
+            .map(|&e| self.left(e))
+            .sum();
+        (pending + self.layout.joins[g].len() as u64) * 1024 / self.left(base).max(1)
     }
 
     fn append(&mut self, g: usize) {
@@ -363,25 +376,22 @@ impl Rows {
         self.from.extend(other.from);
     }
 
-    fn split(self, sides: &[u32], dims: usize) -> (Rows, Rows) {
-        let mut halves = (Rows::default(), Rows::default());
+    fn split(self, sides: &[u32], parts: usize, dims: usize) -> Vec<Rows> {
+        let mut out: Vec<Rows> = (0..parts).map(|_| Rows::default()).collect();
         let cluster = self.cluster;
         let rows = (cluster.ids.into_iter())
             .zip(cluster.seqs)
             .zip(cluster.attributes)
             .zip(self.from);
         for (row, (((id, seq), attributes), from)) in rows.enumerate() {
-            let half = match sides[row] {
-                0 => &mut halves.0,
-                _ => &mut halves.1,
-            };
-            half.cluster.ids.push(id);
-            half.cluster.seqs.push(seq);
-            half.cluster.attributes.push(attributes);
-            (half.cluster.vectors).extend(&cluster.vectors[row * dims..(row + 1) * dims]);
-            half.from.push(from);
+            let part = &mut out[sides[row] as usize];
+            part.cluster.ids.push(id);
+            part.cluster.seqs.push(seq);
+            part.cluster.attributes.push(attributes);
+            (part.cluster.vectors).extend(&cluster.vectors[row * dims..(row + 1) * dims]);
+            part.from.push(from);
         }
-        halves
+        out
     }
 }
 
@@ -406,10 +416,12 @@ pub(super) async fn apply(
         .chain(plan.splits.iter().map(|&(from, _)| from))
         .collect();
     let groups = layout.groups.len();
-    for g in (0..groups).filter(|g| !planned.contains(g)) {
-        if !layout.joins[g].is_empty() {
-            decisions.append(g);
-        }
+    let mut appended: Vec<usize> = (0..groups)
+        .filter(|g| !planned.contains(g) && !layout.joins[*g].is_empty())
+        .collect();
+    appended.sort_by_cached_key(|&g| std::cmp::Reverse(decisions.overdue(g)));
+    for g in appended {
+        decisions.append(g);
     }
     for g in (0..groups).filter(|g| !planned.contains(g)) {
         if layout.joins[g].is_empty() {
@@ -417,7 +429,8 @@ pub(super) async fn apply(
             decisions.rewrite_leaving(&members);
         }
     }
-    let (jobs, emptied, next) = (decisions.jobs, decisions.emptied, decisions.next);
+    let (jobs, mut emptied, next) = (decisions.jobs, decisions.emptied, decisions.next);
+    let mut late = Vec::new();
     let dims = source.spec.dims;
     layout.centroids.resize(next * dims, 0.0);
     let mut out = Built {
@@ -451,17 +464,21 @@ pub(super) async fn apply(
                     filled.push(place(&mut out, *dest, rows));
                 }
                 Job::Split { stay, go, .. } => {
-                    let spec = source.spec;
+                    let (spec, parts) = (source.spec, go.len() + 1);
                     let (rows, sides) = blocking(move || {
-                        let sides = reshape::sides(&rows.cluster, &spec);
+                        let sides = reshape::sides(&rows.cluster, &spec, parts);
                         (rows, sides)
                     })
                     .await?;
-                    let (kept, gone) = rows.split(&sides, dims);
-                    for (dest, half) in [(*stay, kept), (*go, gone)] {
-                        let centroid = reshape::centroid(&half.cluster, &source.spec);
+                    let dests = std::iter::once(*stay).chain(go.iter().copied());
+                    for (dest, part) in dests.zip(rows.split(&sides, parts, dims)) {
+                        if part.cluster.ids.is_empty() {
+                            late.push((dest, *stay));
+                            continue;
+                        }
+                        let centroid = reshape::centroid(&part.cluster, &source.spec);
                         layout.centroids[dest * dims..(dest + 1) * dims].copy_from_slice(&centroid);
-                        filled.push(place(&mut out, dest, half));
+                        filled.push(place(&mut out, dest, part));
                     }
                 }
             }
@@ -471,6 +488,7 @@ pub(super) async fn apply(
         let stored = store_clusters(source.storage, filled, coding, written).await?;
         out.changes.extend(places.into_iter().zip(stored));
     }
+    emptied.extend(late);
     let mut empty = Vec::new();
     for &(dest, like) in &emptied {
         if dest != like {

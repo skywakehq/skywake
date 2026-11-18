@@ -1,8 +1,10 @@
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use object_store::memory::InMemory;
 
+use super::pause;
 use crate::testing::{Gate, doc, ids, schema};
 use crate::{Error, Id, Index, Kind, Options, Schema};
 
@@ -99,6 +101,15 @@ async fn writes_wait_for_a_build_past_the_unbuilt_cap() {
     assert!(matches!(refused, Err(Error::Busy(_))), "{refused:?}");
     index.build().await.unwrap();
     index.delete(vec![Id::from(0u64)]).await.unwrap();
+}
+
+#[test]
+fn writes_slow_down_past_the_unbuilt_limit_before_they_are_turned_away() {
+    let soft = 1000;
+    assert_eq!(pause(soft, soft), Some(Duration::ZERO));
+    assert_eq!(pause(2500, soft), Some(Duration::from_secs(1)));
+    assert_eq!(pause(4 * soft, soft), Some(Duration::from_secs(2)));
+    assert_eq!(pause(4 * soft + 1, soft), None);
 }
 
 #[tokio::test]

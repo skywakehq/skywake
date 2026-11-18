@@ -78,7 +78,7 @@ impl Default for Options {
             build_bytes: 1 << 30,
             commit_rows: 10_000,
             queued_rows: 100_000,
-            unbuilt_bytes: 2 << 30,
+            unbuilt_bytes: 4 << 30,
             cluster_rows: 2000,
             disk: None,
             shared: None,
@@ -378,6 +378,15 @@ impl Index {
         build::build(&self.storage, &self.branch, settings, full).await
     }
 
+    pub async fn recalibrate(&self) -> Result<bool> {
+        let budget = self.options.build_bytes;
+        build::calibrate::recalibrate(&self.storage, &self.branch, budget).await
+    }
+
+    async fn calibration_wanted(&self) -> bool {
+        (self.version().await).is_ok_and(|version| build::calibrate::wanted(&version))
+    }
+
     pub async fn stats(&self) -> Result<Stats> {
         let version = self.version().await?;
         read::stats::stats(&self.storage, &version).await
@@ -390,12 +399,15 @@ impl Index {
     async fn writable(&self) -> Result<Schema> {
         let version = self.version().await?;
         let unbuilt: u64 = version.tail().iter().map(|segment| segment.bytes).sum();
-        if unbuilt > self.options.unbuilt_bytes {
+        let Some(pause) = write::pause(unbuilt, self.options.unbuilt_bytes) else {
             return Err(Error::Busy(format!(
                 "index branch `{}` has {} MiB waiting for a build; try again soon",
                 self.branch,
                 unbuilt >> 20
             )));
+        };
+        if !pause.is_zero() {
+            tokio::time::sleep(pause).await;
         }
         Ok(version.schema.clone())
     }

@@ -1,6 +1,7 @@
 //! Building the cluster index.
 
 mod builder;
+pub(crate) mod calibrate;
 pub(crate) mod directory;
 pub(crate) mod full;
 mod grow;
@@ -177,7 +178,8 @@ pub(crate) async fn build(
 
 fn retrain(ann: &Ann, version: &Version) -> bool {
     let tail: u64 = version.tail.iter().map(|segment| segment.rows).sum();
-    ann.live == 0 || (ann.full_rows < TRAINED && ann.live + tail >= GROWN * ann.full_rows)
+    let total = ann.live + tail;
+    ann.live == 0 || (total <= TRAINED && total >= GROWN * ann.full_rows)
 }
 
 fn same_clusters(current: Option<&Ann>, base: Option<&Ann>) -> bool {
@@ -308,5 +310,7 @@ fn groups<T>(items: &[T], budget: usize, size: impl Fn(&T) -> usize) -> Vec<&[T]
     groups
 }
 
+#[cfg(test)]
+mod append_tests;
 #[cfg(test)]
 mod tests;

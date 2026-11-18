@@ -27,6 +27,7 @@ pub(crate) struct Gate {
     open: Semaphore,
     pub(crate) chunk_puts: AtomicUsize,
     pub(crate) reads: Mutex<Vec<(String, Option<GetRange>)>>,
+    puts_left: AtomicUsize,
 }
 
 impl Gate {
@@ -38,7 +39,23 @@ impl Gate {
             open: Semaphore::new(0),
             chunk_puts: AtomicUsize::new(0),
             reads: Mutex::default(),
+            puts_left: AtomicUsize::new(usize::MAX),
         })
+    }
+
+    pub(crate) fn fail_after(&self, puts: usize) {
+        self.puts_left.store(puts, Ordering::SeqCst);
+    }
+
+    fn crashed(&self) -> bool {
+        if self.puts_left.load(Ordering::SeqCst) == usize::MAX {
+            return false;
+        }
+        (self.puts_left)
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_err()
     }
 
     pub(crate) fn hold_next(&self, prefix: &str, write: bool) {
@@ -80,6 +97,12 @@ impl ObjectStore for Gate {
     ) -> object_store::Result<PutResult> {
         if at.as_ref().starts_with("chunks/") {
             self.chunk_puts.fetch_add(1, Ordering::SeqCst);
+        }
+        if self.crashed() {
+            return Err(object_store::Error::Generic {
+                store: "Gate",
+                source: "the writer crashed".into(),
+            });
         }
         self.pass(at, true).await;
         self.inner.put_opts(at, payload, opts).await

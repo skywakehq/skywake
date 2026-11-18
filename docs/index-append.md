@@ -18,11 +18,13 @@ rows is spare and can be handed to any group.
   rows. The base is not read.
 - Rows leaving a piece (deletes, and upserts of ids already built) rewrite only that piece.
 - Deltas of about the same size merge once four pile up (size tiers of 4×), which bounds how many a group has.
-- A group folds back into one base once its deltas hold half as many rows as the base. Folds are limited to the
-  build's memory budget and the rest wait for a later build.
-- Groups that grow past twice `cluster_rows` split in two, and small groups merge into their neighbour to free
-  a place, using the same `Plan` as before. Splitting on an absolute size lets the number of clusters grow with
-  the data instead of retraining.
+- A group folds back into one base once its deltas hold half as many rows as the base.
+- Groups that grow past twice `cluster_rows` split into parts of about half that, and small groups merge into
+  their neighbour to free a place, using the same `Plan` as before. Splitting on an absolute size lets the
+  number of clusters grow with the data instead of retraining.
+- Each build gets a reorganisation budget of four times the bytes of its new rows (at least 64 MiB, at most
+  the build's memory budget). Splits take it biggest first, then folds take what is left, most overdue first;
+  the rest waits for a later build. This keeps one build from rewriting a large share of the index at once.
 
 Queries need no new read path: `known.get(c)`, `cluster.vectors()` and `exact` already read any table entry.
 The planner counts groups, not entries. Equal centroids give equal scores, so a group's pieces sit next to each
@@ -34,20 +36,20 @@ With many clusters, new rows are assigned through a coarse level: the group cent
 ## When a full build still runs
 
 - There is no index yet.
-- Training early: while the index was last trained on under 100k rows and has grown fourfold since. After that
-  the clusters stay trained and grow by splits.
+- Training early: while the whole index holds at most 100k rows and has grown fourfold since its last training.
+  After that the clusters stay trained and grow by splits.
 - Quality falls: groups are badly unbalanced after the local plan, or deletes removed more than a fifth of the
-  rows trained on (as before).
+  live rows.
 - `rebuild()` asks for one.
 
 ## Calibration
 
 Calibration says what share of clusters a query reads for a recall. It is measured against the groups that
-exist, so it goes stale as splits add groups: a stale share reads more clusters than needed, never fewer, so
-recall holds and latency drifts up. Once the groups have grown by half since the last measurement, the builder
-measures again in the background: 200 sample rows as queries, exact neighbours over every row, the same
-`Calibrator`. It saves only the calibration, with the same compare-and-swap as a build, and does not hold up
-appends.
+exist, so it goes stale as splits add groups, and a stale share loses recall (300k rows grown from 40k by
+splits: 0.927 at the default target before measuring again, 0.974 after). Once the groups have grown by half
+since the last measurement, the builder measures again in the background: 200 sample rows as queries, exact
+neighbours over every row, the same `Calibrator`. It saves only the calibration, with the same compare-and-swap
+as a build, and does not hold up appends. `Index::recalibrate` runs the same step for callers that build by hand.
 
 ## Format
 

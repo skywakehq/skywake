@@ -219,6 +219,11 @@ impl Storage {
         Ok(version)
     }
 
+    #[cfg(test)]
+    pub(crate) async fn raw_version(&self, hash: Hash) -> Result<Vec<u8>> {
+        Ok(self.chunks.objects.get_raw(hash).await?)
+    }
+
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
         let objects = &self.chunks.objects;
         let columns = version.columns.as_ref();
