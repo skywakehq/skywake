@@ -1,11 +1,12 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::thread;
 
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use serde_json::{Value as Json, json};
 use skywake_index::{Doc, Id, Value};
 
-use crate::datasets::files::Vectors;
+use crate::datasets::files::{Vectors, read_vectors};
 use crate::datasets::random::{Random, mix};
 use crate::workloads::attrs::data::{CATEGORIES, CATEGORY, VECTOR, category_name, doc};
 
@@ -16,6 +17,47 @@ const BLOCK: usize = 20_000;
 pub(super) enum Probes {
     Uniform,
     Normal,
+    Dataset,
+}
+
+#[derive(Clone)]
+pub(super) struct Asker {
+    probes: Probes,
+    dims: usize,
+    held: Arc<Vec<Vec<f32>>>,
+}
+
+impl Asker {
+    pub(super) fn open(probes: Probes, dataset: Option<&Path>, dims: usize) -> Result<Self> {
+        let held = match probes {
+            Probes::Dataset => {
+                let dir = dataset.context("--probes dataset needs --dataset")?;
+                let path = dir.join("query.fbin");
+                let held = read_vectors(&path, None)?;
+                ensure!(
+                    held.first().is_some_and(|v| v.len() == dims),
+                    "{} needs {dims}-d queries",
+                    path.display()
+                );
+                held
+            }
+            _ => Vec::new(),
+        };
+        Ok(Self {
+            probes,
+            dims,
+            held: Arc::new(held),
+        })
+    }
+
+    fn vector(&self, n: u64) -> Vec<f32> {
+        let mut random = Random(mix(n ^ PROBES));
+        match self.probes {
+            Probes::Uniform => (0..self.dims).map(|_| random.unit() as f32).collect(),
+            Probes::Normal => (0..self.dims).map(|_| random.normal()).collect(),
+            Probes::Dataset => self.held[n as usize % self.held.len()].clone(),
+        }
+    }
 }
 
 pub(super) struct Source {
@@ -72,8 +114,8 @@ pub(super) struct Truth {
     pub filtered: Vec<Vec<u64>>,
 }
 
-pub(super) fn body(n: u64, dims: usize, k: usize, filtered: bool, probes: Probes) -> Json {
-    let mut body = json!({ "vector": probe(n, dims, probes), "limit": k, "fields": [] });
+pub(super) fn body(n: u64, k: usize, filtered: bool, asker: &Asker) -> Json {
+    let mut body = json!({ "vector": asker.vector(n), "limit": k, "fields": [] });
     if filtered {
         body["filter"] = json!({ CATEGORY: { "eq": wanted(n) } });
     }
@@ -93,9 +135,8 @@ pub(super) fn recall(found: &[u64], truth: &[u64]) -> f64 {
     }
 }
 
-pub(super) fn truth(mut source: Source, k: usize, queries: u64, probes: Probes) -> Result<Truth> {
-    let dims = source.dims;
-    let probes: Vec<Vec<f32>> = (0..queries).map(|n| unit(probe(n, dims, probes))).collect();
+pub(super) fn truth(mut source: Source, k: usize, queries: u64, asker: &Asker) -> Result<Truth> {
+    let probes: Vec<Vec<f32>> = (0..queries).map(|n| unit(asker.vector(n))).collect();
     let categories: Vec<String> = (0..queries).map(wanted).collect();
     let mut all = vec![Best::new(k); probes.len()];
     let mut filtered = vec![Best::new(k); probes.len()];
@@ -144,14 +185,6 @@ fn scanned(row: &Doc) -> (u64, Vec<f32>, &str) {
         _ => "",
     };
     (id, vector, category)
-}
-
-fn probe(n: u64, dims: usize, probes: Probes) -> Vec<f32> {
-    let mut random = Random(mix(n ^ PROBES));
-    match probes {
-        Probes::Uniform => (0..dims).map(|_| random.unit() as f32).collect(),
-        Probes::Normal => (0..dims).map(|_| random.normal()).collect(),
-    }
 }
 
 fn wanted(n: u64) -> String {
@@ -206,7 +239,8 @@ mod tests {
     #[test]
     fn exact_search_finds_the_nearest_rows() {
         let source = Source::open(None, 2_000, 16).unwrap();
-        let truth = truth(source, 5, 3, Probes::Normal).unwrap();
+        let asker = Asker::open(Probes::Normal, None, 16).unwrap();
+        let truth = truth(source, 5, 3, &asker).unwrap();
         assert_eq!(truth.all.len(), 3);
         assert!(truth.all.iter().all(|ids| ids.len() == 5));
         assert!(truth.filtered.iter().all(|ids| ids.len() <= 5));
@@ -231,7 +265,15 @@ mod tests {
         assert!(rows[1].attributes.contains_key(CATEGORY));
         assert_eq!(source.next_block(5).unwrap().len(), 1);
         let source = Source::open(Some(dir.path()), 10, 0).unwrap();
-        let truth = truth(source, 1, 2, Probes::Uniform).unwrap();
-        assert!(truth.all.iter().all(|ids| ids == &vec![2]));
+        let asker = Asker::open(Probes::Uniform, None, 2).unwrap();
+        let found = truth(source, 1, 2, &asker).unwrap();
+        assert!(found.all.iter().all(|ids| ids == &vec![2]));
+        let mut writer = Writer::create(&dir.path().join("query.fbin"), 1, 2).unwrap();
+        writer.f32s(&[0.0, 1.0]).unwrap();
+        writer.finish().unwrap();
+        let asker = Asker::open(Probes::Dataset, Some(dir.path()), 2).unwrap();
+        let source = Source::open(Some(dir.path()), 10, 0).unwrap();
+        assert_eq!(truth(source, 1, 1, &asker).unwrap().all, vec![vec![1]]);
+        assert!(Asker::open(Probes::Dataset, None, 2).is_err());
     }
 }

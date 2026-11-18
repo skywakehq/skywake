@@ -178,7 +178,11 @@ SKYWAKE_API_ADMIN_TOKEN=… target/release/index-bench api --url http://api:8080
 ```
 
 Uniform queries have only positive numbers, so under cosine they all point nearly the same way and touch the
-same few clusters; that flatters a cache. `--probes normal` asks in every direction. Without `--dataset` the
+same few clusters; that flatters a cache. Random queries also sit far from any real embedding, where an
+approximate index misses most true neighbours: on 30k Cohere rows, recall@10 at the default probe is 0.95 to 0.98
+for real queries and 0.27 to 0.30 for uniform ones, in process and through the API alike. turbopuffer's
+benchmark measures no recall, so it never shows this. `--probes dataset` asks the set's own 1,000 held-out
+queries (query.fbin), and is the run to quote recall from; `--probes normal` asks in every direction. Without `--dataset` the
 rows are generated, with random vectors (`--dims`).
 
 `--store local` is a temp folder; `slow` adds 60 ms before every request with at most 64 in flight, to act

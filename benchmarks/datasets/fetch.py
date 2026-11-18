@@ -32,18 +32,19 @@ size, and the download is deleted after converting.
         https://assets.zilliz.com/benchmark/cohere_large_10m/test.parquet            3 MB
         https://assets.zilliz.com/benchmark/cohere_large_10m/neighbors.parquet       39 MB
 
-    cohere-wiki-1m   1M x 1024, cosine, no queries     2.2 GB  (Cohere embed-multilingual-v3 of English Wikipedia)
-    cohere-wiki-10m  10M x 1024, cosine, no queries   22 GB   (the same, the set turbopuffer's 10M benchmark loads)
+    cohere-wiki-1m   1M x 1024, cosine, 1k queries     2.2 GB  (Cohere embed-multilingual-v3 of English Wikipedia)
+    cohere-wiki-10m  10M x 1024, cosine, 1k queries   22 GB   (the same, the set turbopuffer's 10M benchmark loads)
         https://huggingface.co/datasets/Cohere/wikipedia-2023-11-embed-multilingual-v3/resolve/main/en/0000.parquet
-        217 MB each, 0000 to 0009 for 1M and to 0099 for 10M, the rows taken in file order
+        217 MB each, 0000 to 0009 for 1M and to 0099 for 10M, the rows taken in file order; the
+        queries are the first 1,000 rows of the next file, so none is a base row
 
     msmarco      8.8M passages, 6,980 dev small and 43 judged DL19 queries   1.06 GB download, 2.9 GB unpacked
         https://msmarco.z22.web.core.windows.net/msmarcoranking/collectionandqueries.tar.gz
         https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-test2019-queries.tsv.gz
         https://trec.nist.gov/data/deep/2019qrels-pass.txt
 
-The two parquet sets are VectorDBBench's public ones. The cohere-wiki sets come with no queries or ground truth:
-`index-bench api --dataset` makes its query vectors and checks recall with its own exact search. Sizes were checked
+The two parquet sets are VectorDBBench's public ones. The cohere-wiki sets come with no ground truth:
+`index-bench api --dataset` checks recall with its own exact search. Sizes were checked
 with HEAD requests on 2026-11-08.
 """
 
@@ -173,7 +174,7 @@ def write_plain_vectors(paths, target, limit=None):
 
 
 def file_urls(spec):
-    return [f"{spec['files']}/{i:04d}.parquet" for i in range(spec["count"])]
+    return [f"{spec['files']}/{i:04d}.parquet" for i in range(spec["count"] + 1)]
 
 
 def train_parts(spec):
@@ -255,7 +256,9 @@ def get(name, root):
         download_all(urls, raw)
         log("converting to the bench's format")
         out.mkdir(parents=True, exist_ok=True)
-        write_plain_vectors([raw / Path(url).name for url in urls], out / "base.fbin", spec["count"] * 100_000)
+        paths = [raw / Path(url).name for url in urls]
+        write_plain_vectors(paths[:-1], out / "base.fbin", spec["count"] * 100_000)
+        write_plain_vectors(paths[-1:], out / "query.fbin", 1_000)
         (out / "metric").write_text(spec["metric"] + "\n")
     elif "parquet" in spec:
         urls = [f"{spec['parquet']}/{part}.parquet" for part in (*train_parts(spec), "test", "neighbors")]

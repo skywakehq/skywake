@@ -55,7 +55,7 @@ pub struct Args {
         long,
         value_enum,
         default_value = "uniform",
-        help = "Query vectors: `uniform` draws each number from [0, 1), as turbopuffer's benchmark does; `normal` from a standard normal"
+        help = "Query vectors: `uniform` draws each number from [0, 1), as turbopuffer's benchmark does; `normal` from a standard normal; `dataset` asks the dataset's own held-out queries, query.fbin"
     )]
     probes: vectors::Probes,
     #[arg(long, default_value_t = 8.0, help = "Queries a second, open loop")]
@@ -154,6 +154,7 @@ pub async fn run(mut args: Args) -> Result<()> {
         .collect::<Result<Vec<_>>>()?;
     let source = vectors::Source::open(args.dataset.as_deref(), args.rows, args.dims)?;
     (args.rows, args.dims) = (source.rows, source.dims);
+    let asker = vectors::Asker::open(args.probes, args.dataset.as_deref(), args.dims)?;
     let api = Arc::new(Api::connect(&args.url).await?);
     let mut run = Run::new(
         "attrs-api",
@@ -177,7 +178,7 @@ pub async fn run(mut args: Args) -> Result<()> {
         Some(name) => name.clone(),
         None => load(&api, &args, source).await?,
     };
-    let truth = exact(&families, &args).await?;
+    let truth = exact(&families, &args, &asker).await?;
     let mut rows = Vec::new();
     let mut report = format!(
         "# Through the API: {} rows, {}-d vectors\n\nTimed at the client, over HTTP. Open loop at {} QPS for {} s a family, after {} s of warm-up · commit {}\n\n| Query | n | errors | p50 ms | p90 ms | p99 ms | recall@k |\n|---|--:|--:|--:|--:|--:|--:|\n",
@@ -192,19 +193,18 @@ pub async fn run(mut args: Args) -> Result<()> {
         let step = progress::start("query", family.name());
         let shape = Shape {
             family,
-            dims: args.dims,
             k: args.k,
-            probes: args.probes,
+            asker: asker.clone(),
         };
-        pass(&api, &name, shape, args.qps, args.warm).await?;
-        let (times, errors) = pass(&api, &name, shape, args.qps, args.seconds).await?;
+        pass(&api, &name, &shape, args.qps, args.warm).await?;
+        let (times, errors) = pass(&api, &name, &shape, args.qps, args.seconds).await?;
         let recall = match (&truth, family) {
             (Some(truth), Kind::Vector { filtered }) => {
                 let truth = match filtered {
                     true => &truth.filtered,
                     false => &truth.all,
                 };
-                Some(recall(&api, &name, shape, truth).await?)
+                Some(recall(&api, &name, &shape, truth).await?)
             }
             _ => None,
         };
@@ -257,28 +257,31 @@ impl Kind {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Shape {
     family: Kind,
-    dims: usize,
     k: usize,
-    probes: vectors::Probes,
+    asker: vectors::Asker,
 }
 
 impl Shape {
-    fn request(self, name: &str, n: u64) -> (Method, String, Json) {
+    fn request(&self, name: &str, n: u64) -> (Method, String, Json) {
         match self.family {
             Kind::Attrs(family) => request(name, family.ask(n)),
             Kind::Vector { filtered } => (
                 Method::POST,
                 format!("/indexes/{name}/query"),
-                vectors::body(n, self.dims, self.k, filtered, self.probes),
+                vectors::body(n, self.k, filtered, &self.asker),
             ),
         }
     }
 }
 
-async fn exact(families: &[Kind], args: &Args) -> Result<Option<vectors::Truth>> {
+async fn exact(
+    families: &[Kind],
+    args: &Args,
+    asker: &vectors::Asker,
+) -> Result<Option<vectors::Truth>> {
     let searched = families.iter().any(|f| matches!(f, Kind::Vector { .. }));
     if !searched || args.recall == 0 {
         return Ok(None);
@@ -288,14 +291,14 @@ async fn exact(families: &[Kind], args: &Args) -> Result<Option<vectors::Truth>>
         &format!("exact search for {} queries", args.recall),
     );
     let source = vectors::Source::open(args.dataset.as_deref(), args.rows, args.dims)?;
-    let (k, queries, probes) = (args.k, args.recall, args.probes);
+    let (k, queries, asker) = (args.k, args.recall, asker.clone());
     let truth =
-        tokio::task::spawn_blocking(move || vectors::truth(source, k, queries, probes)).await??;
+        tokio::task::spawn_blocking(move || vectors::truth(source, k, queries, &asker)).await??;
     step.done("");
     Ok(Some(truth))
 }
 
-async fn recall(api: &Api, name: &str, shape: Shape, truth: &[Vec<u64>]) -> Result<f64> {
+async fn recall(api: &Api, name: &str, shape: &Shape, truth: &[Vec<u64>]) -> Result<f64> {
     let mut total = 0.0;
     for (n, truth) in truth.iter().enumerate() {
         let (method, path, body) = shape.request(name, n as u64);
@@ -362,7 +365,7 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
 async fn pass(
     api: &Arc<Api>,
     name: &str,
-    shape: Shape,
+    shape: &Shape,
     qps: f64,
     seconds: u64,
 ) -> Result<(Vec<Duration>, usize)> {
@@ -371,7 +374,7 @@ async fn pass(
     let start = tokio::time::Instant::now();
     let asked: Vec<_> = (0..total)
         .map(|n| {
-            let (api, name) = (api.clone(), name.to_string());
+            let (api, name, shape) = (api.clone(), name.to_string(), shape.clone());
             let due = start + interval * n as u32;
             tokio::spawn(async move {
                 tokio::time::sleep_until(due).await;
