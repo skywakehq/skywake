@@ -315,9 +315,18 @@ async fn exact(
         &format!("exact search for {} queries", args.recall),
     );
     let source = vectors::Source::open(args.dataset.as_deref(), args.rows, args.dims)?;
+    let saved = (args.dataset.as_deref())
+        .map(|dir| vectors::saved(dir, asker, source.rows, args.k, args.recall));
+    if let Some(truth) = saved.as_deref().and_then(vectors::Truth::read) {
+        step.done("saved earlier");
+        return Ok(Some(truth));
+    }
     let (k, queries, asker) = (args.k, args.recall, asker.clone());
     let truth =
         tokio::task::spawn_blocking(move || vectors::truth(source, k, queries, &asker)).await??;
+    if let Some(path) = saved {
+        truth.write(&path)?;
+    }
     step.done("");
     Ok(Some(truth))
 }

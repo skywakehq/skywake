@@ -109,9 +109,28 @@ pub(super) fn base(dir: &Path) -> PathBuf {
     dir.join("base.fbin")
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub(super) struct Truth {
     pub all: Vec<Vec<u64>>,
     pub filtered: Vec<Vec<u64>>,
+}
+
+impl Truth {
+    pub(super) fn read(path: &Path) -> Option<Self> {
+        serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+    }
+
+    pub(super) fn write(&self, path: &Path) -> Result<()> {
+        let temporary = path.with_extension("partial");
+        std::fs::write(&temporary, serde_json::to_vec(self)?)?;
+        std::fs::rename(&temporary, path)?;
+        Ok(())
+    }
+}
+
+pub(super) fn saved(dir: &Path, asker: &Asker, rows: u64, k: usize, queries: u64) -> PathBuf {
+    let probes = format!("{:?}", asker.probes).to_lowercase();
+    dir.join(format!("truth.api.{probes}.{rows}r.{queries}q.k{k}.json"))
 }
 
 pub(super) fn body(n: u64, k: usize, filtered: bool, asker: &Asker) -> Json {
@@ -200,7 +219,16 @@ fn unit(mut vector: Vec<f32>) -> Vec<f32> {
 }
 
 fn dot(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b).map(|(x, y)| x * y).sum()
+    let (a_lanes, a_rest) = a.as_chunks::<16>();
+    let (b_lanes, b_rest) = b.as_chunks::<16>();
+    let mut sums = [0.0f32; 16];
+    for (x, y) in a_lanes.iter().zip(b_lanes) {
+        for i in 0..16 {
+            sums[i] += x[i] * y[i];
+        }
+    }
+    let rest: f32 = a_rest.iter().zip(b_rest).map(|(x, y)| x * y).sum();
+    sums.iter().sum::<f32>() + rest
 }
 
 #[derive(Clone)]
