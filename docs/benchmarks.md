@@ -81,7 +81,9 @@ Runs of November 10, 2026: an i4i.4xlarge in ap-southeast-2 against a bucket in 
 [SIFT-1M](../benchmarks/published/20261110-index-sift-1m.md),
 [Cohere-1M](../benchmarks/published/20261110-index-cohere-1m.md),
 [Cohere-10M](../benchmarks/published/20261110-index-cohere-10m.md). _Warm_ below keeps the index head in
-memory and its clusters on local disk (`warm+disk+head` in the reports).
+memory and its clusters on local disk (`warm+disk+head` in the reports). These runs time the index inside the
+benchmark's process, so they leave out the API, HTTP and JSON a client goes through; `index-bench api` measures
+that path.
 
 | Set                           | Result                                                                                   |
 | ----------------------------- | ---------------------------------------------------------------------------------------- |

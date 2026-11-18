@@ -1,3 +1,5 @@
+mod vectors;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -29,9 +31,21 @@ pub struct Args {
         long,
         default_value = "count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered",
         value_delimiter = ',',
-        help = "Query families to run"
+        help = "Query families to run; `vector` and `vector-filtered` search the vector column"
     )]
     families: Vec<String>,
+    #[arg(
+        long,
+        default_value_t = 10,
+        help = "Nearest neighbors a vector search returns"
+    )]
+    k: usize,
+    #[arg(
+        long,
+        default_value_t = 100,
+        help = "Vector queries checked against exact search for recall, 0 for none"
+    )]
+    recall: u64,
     #[arg(long, default_value_t = 8.0, help = "Queries a second, open loop")]
     qps: f64,
     #[arg(long, default_value_t = 60, help = "Seconds of each family's pass")]
@@ -124,7 +138,7 @@ pub async fn run(args: Args) -> Result<()> {
         progress::record_to(&out.join("events.jsonl"))?;
     }
     let families = (args.families.iter())
-        .map(|f| Family::parse(f).ok_or_else(|| anyhow!("no query family `{f}`")))
+        .map(|f| Kind::parse(f).ok_or_else(|| anyhow!("no query family `{f}`")))
         .collect::<Result<Vec<_>>>()?;
     let api = Arc::new(Api::connect(&args.url).await?);
     let mut run = Run::new(
@@ -133,6 +147,8 @@ pub async fn run(args: Args) -> Result<()> {
             "rows": args.rows,
             "dims": args.dims,
             "families": args.families,
+            "k": args.k,
+            "recall": args.recall,
             "qps": args.qps,
             "seconds": args.seconds,
             "warm": args.warm,
@@ -145,9 +161,10 @@ pub async fn run(args: Args) -> Result<()> {
         Some(name) => name.clone(),
         None => load(&api, &args).await?,
     };
+    let truth = exact(&families, &args).await?;
     let mut rows = Vec::new();
     let mut report = format!(
-        "# Attributes through the API: {} rows, {}-d vectors\n\nOpen loop at {} QPS for {} s a family, after {} s of warm-up · commit {}\n\n| Query | n | errors | p50 ms | p90 ms | p99 ms |\n|---|--:|--:|--:|--:|--:|\n",
+        "# Through the API: {} rows, {}-d vectors\n\nTimed at the client, over HTTP. Open loop at {} QPS for {} s a family, after {} s of warm-up · commit {}\n\n| Query | n | errors | p50 ms | p90 ms | p99 ms | recall@k |\n|---|--:|--:|--:|--:|--:|--:|\n",
         progress::count(args.rows),
         args.dims,
         args.qps,
@@ -157,8 +174,24 @@ pub async fn run(args: Args) -> Result<()> {
     );
     for family in families {
         let step = progress::start("query", family.name());
-        pass(&api, &name, family, args.qps, args.warm).await?;
-        let (times, errors) = pass(&api, &name, family, args.qps, args.seconds).await?;
+        let shape = Shape {
+            family,
+            dims: args.dims,
+            k: args.k,
+        };
+        pass(&api, &name, shape, args.qps, args.warm).await?;
+        let (times, errors) = pass(&api, &name, shape, args.qps, args.seconds).await?;
+        let recall = match (&truth, family) {
+            (Some(truth), Kind::Vector { filtered }) => {
+                let truth = match filtered {
+                    true => &truth.filtered,
+                    false => &truth.all,
+                };
+                Some(recall(&api, &name, shape, truth).await?)
+            }
+            _ => None,
+        };
+        let shown = recall.map_or("–".to_string(), |r| format!("{r:.3}"));
         let ms = millis(&times);
         let (p50, p90, p99) = (
             nearest_rank(&ms, 0.5),
@@ -166,21 +199,90 @@ pub async fn run(args: Args) -> Result<()> {
             nearest_rank(&ms, 0.99),
         );
         step.done(&format!(
-            "p50 {p50:.1} ms · p90 {p90:.1} ms · {errors} errors"
+            "p50 {p50:.1} ms · p90 {p90:.1} ms · recall {shown} · {errors} errors"
         ));
         report.push_str(&format!(
-            "| {} | {} | {errors} | {p50:.1} | {p90:.1} | {p99:.1} |\n",
+            "| {} | {} | {errors} | {p50:.1} | {p90:.1} | {p99:.1} | {shown} |\n",
             family.name(),
             ms.len()
         ));
         rows.push(Row::new(
             format!("{} · api", family.name()),
-            json!({ "queries": ms.len(), "errors": errors, "p50_ms": p50, "p90_ms": p90, "p99_ms": p99 }),
+            json!({ "queries": ms.len(), "errors": errors, "p50_ms": p50, "p90_ms": p90, "p99_ms": p99, "recall": recall }),
         ));
     }
     println!("{report}");
     run.tables = vec![Table::new("attrs api queries", rows)];
     run.save(args.out, &report)
+}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Attrs(Family),
+    Vector { filtered: bool },
+}
+
+impl Kind {
+    fn parse(text: &str) -> Option<Kind> {
+        match text {
+            "vector" => Some(Kind::Vector { filtered: false }),
+            "vector-filtered" => Some(Kind::Vector { filtered: true }),
+            other => Family::parse(other).map(Kind::Attrs),
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Kind::Attrs(family) => family.name(),
+            Kind::Vector { filtered: false } => "vector search, top k",
+            Kind::Vector { filtered: true } => "vector search, top k, category = c (1%)",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Shape {
+    family: Kind,
+    dims: usize,
+    k: usize,
+}
+
+impl Shape {
+    fn request(self, name: &str, n: u64) -> (Method, String, Json) {
+        match self.family {
+            Kind::Attrs(family) => request(name, family.ask(n)),
+            Kind::Vector { filtered } => (
+                Method::POST,
+                format!("/indexes/{name}/query"),
+                vectors::body(n, self.dims, self.k, filtered),
+            ),
+        }
+    }
+}
+
+async fn exact(families: &[Kind], args: &Args) -> Result<Option<vectors::Truth>> {
+    let searched = families.iter().any(|f| matches!(f, Kind::Vector { .. }));
+    if !searched || args.recall == 0 {
+        return Ok(None);
+    }
+    let step = progress::start(
+        "truth",
+        &format!("exact search for {} queries", args.recall),
+    );
+    let (rows, dims, k, queries) = (args.rows, args.dims, args.k, args.recall);
+    let truth = tokio::task::spawn_blocking(move || vectors::truth(rows, dims, k, queries)).await?;
+    step.done("");
+    Ok(Some(truth))
+}
+
+async fn recall(api: &Api, name: &str, shape: Shape, truth: &[Vec<u64>]) -> Result<f64> {
+    let mut total = 0.0;
+    for (n, truth) in truth.iter().enumerate() {
+        let (method, path, body) = shape.request(name, n as u64);
+        let answer = api.call(method, &path, Some(&body)).await?;
+        total += vectors::recall(&vectors::ids(&answer), truth);
+    }
+    Ok(total / truth.len().max(1) as f64)
 }
 
 async fn load(api: &Api, args: &Args) -> Result<String> {
@@ -237,7 +339,7 @@ async fn load(api: &Api, args: &Args) -> Result<String> {
 async fn pass(
     api: &Arc<Api>,
     name: &str,
-    family: Family,
+    shape: Shape,
     qps: f64,
     seconds: u64,
 ) -> Result<(Vec<Duration>, usize)> {
@@ -250,12 +352,12 @@ async fn pass(
             let due = start + interval * n as u32;
             tokio::spawn(async move {
                 tokio::time::sleep_until(due).await;
-                let (method, path, body) = request(&name, family.ask(n));
+                let (method, path, body) = shape.request(&name, n);
                 let sent = Instant::now();
                 let answer = api.call(method, &path, Some(&body)).await;
                 (
                     sent.elapsed(),
-                    answer.and_then(|answer| check(family, &answer)),
+                    answer.and_then(|answer| check(shape.family, &answer)),
                 )
             })
         })
@@ -268,7 +370,7 @@ async fn pass(
             Err(e) => {
                 errors += 1;
                 if errors == 1 {
-                    progress::note("query", &format!("{}: {e}", family.name()));
+                    progress::note("query", &format!("{}: {e}", shape.family.name()));
                 }
             }
         }
@@ -313,9 +415,9 @@ fn request(name: &str, ask: Ask) -> (Method, String, Json) {
     }
 }
 
-fn check(family: Family, answer: &Json) -> Result<()> {
+fn check(family: Kind, answer: &Json) -> Result<()> {
     let found = match family {
-        Family::Count | Family::CountEq | Family::CountAnd => {
+        Kind::Attrs(Family::Count | Family::CountEq | Family::CountAnd) => {
             answer["count"].as_u64().map_or(0, |n| n as usize)
         }
         _ => answer["data"].as_array().map_or(0, Vec::len),
