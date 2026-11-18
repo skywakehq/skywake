@@ -164,16 +164,22 @@ target/release/index-bench attrs --rows 10000000 --store slow
 `api` times what a client sees instead. It loads rows through a running API, then times every query at the
 client, open loop at `--qps`. `vector` and `vector-filtered` search the vector column for the top `--k`
 (10), unfiltered and at 1%, and `--recall` (100) queries are checked against an exact search the benchmark
-runs itself over the same generated rows. The other families are the `attrs` ones. The turbopuffer-shaped
-run is 10M rows of 1024-d vectors, from a client in the bucket's region:
+runs itself over the same rows. The other families are the `attrs` ones.
+
+The turbopuffer-shaped run matches their `vector-10m` benchmark: the first 10M rows of Cohere's 1024-d English
+Wikipedia embeddings, loaded in file order, and query vectors whose numbers are each drawn from [0, 1)
+(`--probes uniform`, the default), top 10 at 8 QPS, from a client in the bucket's region:
 
 ```bash
+uv run --script benchmarks/datasets/fetch.py get cohere-wiki-10m
 SKYWAKE_API_ADMIN_TOKEN=… target/release/index-bench api --url http://api:8080 \
-  --rows 10000000 --dims 1024 --batch 500 --families vector,vector-filtered --qps 20
+  --dataset benchmarks/datasets/data/cohere-wiki-10m --rows 10000000 --batch 500 \
+  --families vector,vector-filtered --qps 8
 ```
 
-The generated vectors are random, which is harder for an approximate index than real embeddings, so its
-recall is a floor.
+Uniform queries have only positive numbers, so under cosine they all point nearly the same way and touch the
+same few clusters; that flatters a cache. `--probes normal` asks in every direction. Without `--dataset` the
+rows are generated, with random vectors (`--dims`).
 
 `--store local` is a temp folder; `slow` adds 60 ms before every request with at most 64 in flight, to act
 like object storage; `s3://bucket/folder` uses the `AWS_*` settings and refuses a non-local endpoint unless

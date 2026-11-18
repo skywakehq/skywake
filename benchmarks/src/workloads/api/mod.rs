@@ -10,7 +10,7 @@ use reqwest::{Client, Method};
 use serde_json::{Map, Value as Json, json};
 use skywake_index::{Doc, Filter, Id, Value};
 
-use super::attrs::data::{Ask, CATEGORY, CREATED, Family, GROUP, POPULARITY, VECTOR, doc};
+use super::attrs::data::{Ask, CATEGORY, CREATED, Family, GROUP, POPULARITY, VECTOR};
 use crate::metrics::{millis, nearest_rank};
 use crate::progress::{self, Meter};
 use crate::results::{Row, Run, Table};
@@ -46,6 +46,18 @@ pub struct Args {
         help = "Vector queries checked against exact search for recall, 0 for none"
     )]
     recall: u64,
+    #[arg(
+        long,
+        help = "Load vectors from this dataset folder's base.fbin instead of generating them; --rows caps them and --dims follows the file"
+    )]
+    dataset: Option<PathBuf>,
+    #[arg(
+        long,
+        value_enum,
+        default_value = "uniform",
+        help = "Query vectors: `uniform` draws each number from [0, 1), as turbopuffer's benchmark does; `normal` from a standard normal"
+    )]
+    probes: vectors::Probes,
     #[arg(long, default_value_t = 8.0, help = "Queries a second, open loop")]
     qps: f64,
     #[arg(long, default_value_t = 60, help = "Seconds of each family's pass")]
@@ -133,13 +145,15 @@ impl Api {
     }
 }
 
-pub async fn run(args: Args) -> Result<()> {
+pub async fn run(mut args: Args) -> Result<()> {
     if let Some(out) = &args.out {
         progress::record_to(&out.join("events.jsonl"))?;
     }
     let families = (args.families.iter())
         .map(|f| Kind::parse(f).ok_or_else(|| anyhow!("no query family `{f}`")))
         .collect::<Result<Vec<_>>>()?;
+    let source = vectors::Source::open(args.dataset.as_deref(), args.rows, args.dims)?;
+    (args.rows, args.dims) = (source.rows, source.dims);
     let api = Arc::new(Api::connect(&args.url).await?);
     let mut run = Run::new(
         "attrs-api",
@@ -149,6 +163,8 @@ pub async fn run(args: Args) -> Result<()> {
             "families": args.families,
             "k": args.k,
             "recall": args.recall,
+            "dataset": args.dataset,
+            "probes": format!("{:?}", args.probes).to_lowercase(),
             "qps": args.qps,
             "seconds": args.seconds,
             "warm": args.warm,
@@ -159,7 +175,7 @@ pub async fn run(args: Args) -> Result<()> {
     );
     let name = match &args.index {
         Some(name) => name.clone(),
-        None => load(&api, &args).await?,
+        None => load(&api, &args, source).await?,
     };
     let truth = exact(&families, &args).await?;
     let mut rows = Vec::new();
@@ -178,6 +194,7 @@ pub async fn run(args: Args) -> Result<()> {
             family,
             dims: args.dims,
             k: args.k,
+            probes: args.probes,
         };
         pass(&api, &name, shape, args.qps, args.warm).await?;
         let (times, errors) = pass(&api, &name, shape, args.qps, args.seconds).await?;
@@ -245,6 +262,7 @@ struct Shape {
     family: Kind,
     dims: usize,
     k: usize,
+    probes: vectors::Probes,
 }
 
 impl Shape {
@@ -254,7 +272,7 @@ impl Shape {
             Kind::Vector { filtered } => (
                 Method::POST,
                 format!("/indexes/{name}/query"),
-                vectors::body(n, self.dims, self.k, filtered),
+                vectors::body(n, self.dims, self.k, filtered, self.probes),
             ),
         }
     }
@@ -269,8 +287,10 @@ async fn exact(families: &[Kind], args: &Args) -> Result<Option<vectors::Truth>>
         "truth",
         &format!("exact search for {} queries", args.recall),
     );
-    let (rows, dims, k, queries) = (args.rows, args.dims, args.k, args.recall);
-    let truth = tokio::task::spawn_blocking(move || vectors::truth(rows, dims, k, queries)).await?;
+    let source = vectors::Source::open(args.dataset.as_deref(), args.rows, args.dims)?;
+    let (k, queries, probes) = (args.k, args.recall, args.probes);
+    let truth =
+        tokio::task::spawn_blocking(move || vectors::truth(source, k, queries, probes)).await??;
     step.done("");
     Ok(Some(truth))
 }
@@ -285,7 +305,7 @@ async fn recall(api: &Api, name: &str, shape: Shape, truth: &[Vec<u64>]) -> Resu
     Ok(total / truth.len().max(1) as f64)
 }
 
-async fn load(api: &Api, args: &Args) -> Result<String> {
+async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<String> {
     let name = format!("bench-{}", stamp());
     api.call(
         Method::POST,
@@ -300,14 +320,17 @@ async fn load(api: &Api, args: &Args) -> Result<String> {
     let mut meter = Meter::new("load", args.rows, "rows");
     let path = format!("/indexes/{name}/rows");
     let mut writing = FuturesUnordered::new();
-    for start in (0..args.rows).step_by(args.batch as usize) {
-        let end = (start + args.batch).min(args.rows);
+    loop {
+        let docs = source.next_block(args.batch as usize)?;
+        if docs.is_empty() {
+            break;
+        }
         let path = &path;
         writing.push(async move {
-            let rows: Vec<Json> = (start..end).map(|id| row(&doc(id, args.dims))).collect();
+            let rows: Vec<Json> = docs.iter().map(row).collect();
             api.call(Method::POST, path, Some(&Json::Array(rows)))
                 .await?;
-            Ok::<_, anyhow::Error>(end - start)
+            Ok::<_, anyhow::Error>(docs.len() as u64)
         });
         if writing.len() >= args.writers.max(1) {
             meter.add(writing.next().await.expect("an upsert is in flight")?);

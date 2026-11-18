@@ -32,12 +32,18 @@ size, and the download is deleted after converting.
         https://assets.zilliz.com/benchmark/cohere_large_10m/test.parquet            3 MB
         https://assets.zilliz.com/benchmark/cohere_large_10m/neighbors.parquet       39 MB
 
+    cohere-wiki-1m   1M x 1024, cosine, no queries     2.2 GB  (Cohere embed-multilingual-v3 of English Wikipedia)
+    cohere-wiki-10m  10M x 1024, cosine, no queries   22 GB   (the same, the set turbopuffer's 10M benchmark loads)
+        https://huggingface.co/datasets/Cohere/wikipedia-2023-11-embed-multilingual-v3/resolve/main/en/0000.parquet
+        217 MB each, 0000 to 0009 for 1M and to 0099 for 10M, the rows taken in file order
+
     msmarco      8.8M passages, 6,980 dev small and 43 judged DL19 queries   1.06 GB download, 2.9 GB unpacked
         https://msmarco.z22.web.core.windows.net/msmarcoranking/collectionandqueries.tar.gz
         https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-test2019-queries.tsv.gz
         https://trec.nist.gov/data/deep/2019qrels-pass.txt
 
-The two parquet sets are VectorDBBench's public ones. Sizes were checked
+The two parquet sets are VectorDBBench's public ones. The cohere-wiki sets come with no queries or ground truth:
+`index-bench api --dataset` makes its query vectors and checks recall with its own exact search. Sizes were checked
 with HEAD requests on 2026-11-08.
 """
 
@@ -60,6 +66,7 @@ import pyarrow.parquet as pq
 
 ANN = "http://ann-benchmarks.com"
 ZILLIZ = "https://assets.zilliz.com/benchmark"
+COHERE_WIKI = "https://huggingface.co/datasets/Cohere/wikipedia-2023-11-embed-multilingual-v3/resolve/main/en"
 MSMARCO = "https://msmarco.z22.web.core.windows.net/msmarcoranking"
 DATA = Path(__file__).resolve().parent / "data"
 
@@ -69,6 +76,8 @@ SETS = {
     "cohere-1m": {"parquet": f"{ZILLIZ}/cohere_medium_1m", "metric": "cosine"},
     "openai-500k": {"parquet": f"{ZILLIZ}/openai_medium_500k", "metric": "cosine"},
     "cohere-10m": {"parquet": f"{ZILLIZ}/cohere_large_10m", "metric": "cosine", "parts": 10},
+    "cohere-wiki-1m": {"files": f"{COHERE_WIKI}", "count": 10, "metric": "cosine"},
+    "cohere-wiki-10m": {"files": f"{COHERE_WIKI}", "count": 100, "metric": "cosine"},
     "msmarco": {
         "text": [
             f"{MSMARCO}/collectionandqueries.tar.gz",
@@ -140,6 +149,31 @@ def write_parquet_vectors(paths, target):
                 ids.append(batch.column("id").to_numpy())
             source.close()
     return np.concatenate(ids)
+
+
+def write_plain_vectors(paths, target, limit=None):
+    """The vectors of `paths` in file order, at most `limit` of them, for sets whose rows have no numeric id."""
+    rows = sum(pq.read_metadata(path).num_rows for path in paths)
+    rows = min(rows, limit) if limit else rows
+    written = 0
+    with open(target, "wb") as file:
+        for path in paths:
+            source = pq.ParquetFile(path, buffer_size=1 << 20, pre_buffer=False)
+            column = vector_column(source.schema_arrow)
+            for batch in source.iter_batches(batch_size=BLOCK, columns=[column]):
+                block = vectors(batch, column)[: rows - written]
+                if written == 0:
+                    write_header(file, rows, block.shape[1])
+                block.tofile(file)
+                written += len(block)
+                if written == rows:
+                    source.close()
+                    return
+            source.close()
+
+
+def file_urls(spec):
+    return [f"{spec['files']}/{i:04d}.parquet" for i in range(spec["count"])]
 
 
 def train_parts(spec):
@@ -216,6 +250,13 @@ def get(name, root):
         urls = [spec["hdf5"]]
         download_all(urls, raw)
         convert_hdf5(raw / Path(urls[0]).name, out)
+    elif "files" in spec:
+        urls = file_urls(spec)
+        download_all(urls, raw)
+        log("converting to the bench's format")
+        out.mkdir(parents=True, exist_ok=True)
+        write_plain_vectors([raw / Path(url).name for url in urls], out / "base.fbin", spec["count"] * 100_000)
+        (out / "metric").write_text(spec["metric"] + "\n")
     elif "parquet" in spec:
         urls = [f"{spec['parquet']}/{part}.parquet" for part in (*train_parts(spec), "test", "neighbors")]
         download_all(urls, raw)
@@ -248,9 +289,10 @@ def write_manifest(name, urls, out):
     manifest = {"source": name, "urls": urls}
     if (out / "base.fbin").exists():
         rows, dims = (int(x) for x in np.fromfile(out / "base.fbin", dtype="<u4", count=2))
-        queries = int(np.fromfile(out / "query.fbin", dtype="<u4", count=1)[0])
         metric = (out / "metric").read_text().strip()
-        manifest |= {"rows": rows, "dims": dims, "queries": queries, "metric": metric}
+        manifest |= {"rows": rows, "dims": dims, "metric": metric}
+        if (out / "query.fbin").exists():
+            manifest["queries"] = int(np.fromfile(out / "query.fbin", dtype="<u4", count=1)[0])
     (out / "dataset.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 
@@ -301,6 +343,13 @@ def self_test():
             assert np.allclose(read_bin(tmp / "p/query.fbin", "<f4"), test)
             truth_rows = read_bin(tmp / "p/groundtruth.ibin", "<u4")
             assert np.array_equal(truth_rows, neighbors[:, :DEPTH])
+
+        # A set with string ids, in two files, cut short.
+        for i, rows in enumerate((slice(0, 100), slice(100, 250))):
+            part = pa.table({"_id": [f"r{j}" for j in range(250)][rows], "emb": emb[rows]})
+            pq.write_table(part, tmp / f"{i:04d}.parquet")
+        write_plain_vectors([tmp / "0000.parquet", tmp / "0001.parquet"], tmp / "plain.fbin", 180)
+        assert np.array_equal(read_bin(tmp / "plain.fbin", "<f4"), train[:180])
     print("ok")
 
 
