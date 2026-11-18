@@ -195,22 +195,20 @@ impl Search<'_> {
             self.exact(&self.known.order[visited..], top).await?;
         }
         let limit = kth(found.rows.iter().map(|e| e.upper), top);
-        let mut kept: Vec<&Estimate> = found.rows.iter().filter(|e| e.lower <= limit).collect();
-        if self.capped() {
-            keep_nearest(&mut kept, |e| e.lower + e.upper, k);
-        }
-        let candidates = (kept.into_iter())
+        let kept = (found.rows.iter())
+            .filter(|e| e.lower <= limit)
             .map(|e| {
                 let codes = &found.codes[&e.cluster];
-                Candidate {
+                let candidate = Candidate {
                     cluster: e.cluster,
                     row: e.row,
                     check: codes.checks[e.row],
                     id: codes.ids[e.row].clone(),
-                }
+                };
+                (e.lower, e.upper, candidate)
             })
             .collect();
-        self.rerank(candidates, top).await
+        self.rerank_within(kept, top).await
     }
 
     async fn filter_first(&mut self, top: &mut Top) -> Result<bool> {
@@ -278,22 +276,20 @@ impl Search<'_> {
             }
         }
         let limit = kth(rows.iter().map(|r| r.1), top);
-        rows.retain(|r| r.0 <= limit);
-        if self.capped() {
-            keep_nearest(&mut rows, |r| r.0 + r.1, self.query.top_k);
-        }
-        let candidates = (rows.into_iter())
-            .map(|(_, _, b, i)| {
+        let kept = (rows.into_iter())
+            .filter(|r| r.0 <= limit)
+            .map(|(lower, upper, b, i)| {
                 let located = &blocks[b].columns[self.pos];
-                Candidate {
+                let candidate = Candidate {
                     cluster: located.clusters[i] as usize,
                     row: located.rows[i] as usize,
                     check: located.codes.checks[i],
                     id: located.codes.ids[i].clone(),
-                }
+                };
+                (lower, upper, candidate)
             })
             .collect();
-        self.rerank(candidates, top).await?;
+        self.rerank_within(kept, top).await?;
         Ok(true)
     }
 
@@ -470,6 +466,28 @@ impl Search<'_> {
         }
     }
 
+    async fn rerank_within(
+        &self,
+        mut rows: Vec<(f32, f32, Candidate)>,
+        top: &mut Top,
+    ) -> Result<()> {
+        if !self.capped() {
+            return self
+                .rerank(rows.into_iter().map(|r| r.2).collect(), top)
+                .await;
+        }
+        rows.sort_unstable_by(|a, b| (a.0 + a.1).total_cmp(&(b.0 + b.1)));
+        let mut batch = (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST);
+        while !rows.is_empty() {
+            let now = rows.drain(..batch.min(rows.len())).map(|r| r.2).collect();
+            self.rerank(now, top).await?;
+            let bound = top.kth();
+            rows.retain(|r| r.0 <= bound);
+            batch *= 2;
+        }
+        Ok(())
+    }
+
     async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
         candidates.sort_unstable_by_key(|c| (c.cluster, c.row));
         let size = self.column.dims * self.column.element.bytes();
@@ -532,14 +550,6 @@ impl Search<'_> {
             }
         }
         Ok(())
-    }
-}
-
-fn keep_nearest<T>(rows: &mut Vec<T>, middle: impl Fn(&T) -> f32, k: usize) {
-    let most = (RERANK_PER_HIT * k).max(RERANK_LEAST);
-    if rows.len() > most {
-        rows.select_nth_unstable_by(most, |a, b| middle(a).total_cmp(&middle(b)));
-        rows.truncate(most);
     }
 }
 
