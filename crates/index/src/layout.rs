@@ -1,5 +1,3 @@
-//! Adaptive layout: what queries range over, order by and group by, and how a rebuild lays rows out for it.
-
 use std::cmp::{Ordering, Reverse};
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash as _, Hasher};

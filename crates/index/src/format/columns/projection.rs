@@ -1,6 +1,3 @@
-//! Composite projections: a dictionary column's codes and a scalar sort key for every live row, sorted by
-//! (code, key) in blocks with running counts. A filtered order by reads one block, a filtered count two.
-
 use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;

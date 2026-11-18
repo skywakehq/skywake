@@ -68,7 +68,6 @@ pub struct Options {
     pub columns: bool,
     pub page_rows: usize,
     pub postings: bool,
-    /// Caches each page's rows for a filter, so a repeated filter skips its predicates.
     pub partials: bool,
 }
 
