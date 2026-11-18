@@ -17,6 +17,8 @@ type Branch = { name: string; forked_from: string | null; created: string };
 type Version = { version: string; time: string; rows: number };
 
 const MAIN = "main";
+const SCHEMA_MS = 10_000;
+const SCHEMAS = new Map<string, { at: number; schema: Schema }>();
 const VERSION = /^[0-9a-f]{64}$/;
 
 export const branchOf = (branch: {
@@ -53,7 +55,28 @@ export class Indexes {
   }
 
   async index(): Promise<Index> {
-    return orMissing(this.scope, "index", this.name, this.scope.v1.get<Index>(this.path));
+    const index = await orMissing(
+      this.scope,
+      "index",
+      this.name,
+      this.scope.v1.get<Index>(this.path),
+    );
+    SCHEMAS.set(this.key, { at: Date.now(), schema: index.schema });
+    return index;
+  }
+
+  async schema(): Promise<Schema> {
+    const kept = SCHEMAS.get(this.key);
+    if (kept && Date.now() - kept.at < SCHEMA_MS) return kept.schema;
+    return (await this.index()).schema;
+  }
+
+  forget() {
+    SCHEMAS.delete(this.key);
+  }
+
+  private get key() {
+    return `${this.scope.org}\u0000${this.path}`;
   }
 
   async read<T>(path: string, body: unknown): Promise<T> {
@@ -97,9 +120,11 @@ export class Indexes {
       if (!(error instanceof Failure && error.status === 404)) throw error;
       if (branch !== MAIN) throw await this.scope.notFound("index", this.name);
       await this.create(firstSchema(rows, await this.embedding())).catch((error: unknown) => {
-        if (
-          !(error instanceof Failure && error.status === 409 && error.details.hint === undefined)
-        ) {
+        if (!(
+          error instanceof Failure &&
+          error.status === 409 &&
+          error.details.hint === undefined
+        )) {
           throw error;
         }
       });
@@ -133,6 +158,7 @@ export class Indexes {
     }
     if (found.attributes.length === 0) return schema;
     await this.scope.v1.patch(this.path, { attributes: found.attributes });
+    this.forget();
     return { ...schema, attributes: [...schema.attributes, ...found.attributes] };
   }
 
@@ -244,10 +270,12 @@ export function registerIndexes(api: V2) {
     const path = `${index.branch(c.req.query("branch") ?? MAIN)}/rows`;
     const bytes = await c.req.arrayBuffer();
     const query = { vector_encoding: c.req.query("vector_encoding") };
-    const done = await index.scope.v1.send("POST", path, { bytes, query }).catch((error: unknown) => {
-      if (error instanceof Failure && error.status === 404) return null;
-      throw error;
-    });
+    const done = await index.scope.v1
+      .send("POST", path, { bytes, query })
+      .catch((error: unknown) => {
+        if (error instanceof Failure && error.status === 404) return null;
+        throw error;
+      });
     if (done?.status === 200) return c.json(done.body as object, 200);
     await next();
   });

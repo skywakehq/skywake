@@ -39,6 +39,7 @@ const hitOf = (hit: Hit, score: number) => ({ id: hit.id, score, ...hit.attribut
 
 export async function query(index: Indexes, asked: Query) {
   const schema = async () => (await index.index()).schema;
+  const known = () => index.schema();
   const branch = index.branch(asked.branch);
   const limit = asked.limit ?? 10;
   const filter = filterOf(asked.filter);
@@ -47,7 +48,9 @@ export async function query(index: Indexes, asked: Query) {
   const mode = asked.mode ?? "auto";
 
   if (asked.vector) {
-    const column = vectorColumn(await schema(), asked.vector.length);
+    const column =
+      vectorColumn(await known(), asked.vector.length) ??
+      vectorColumn(await schema(), asked.vector.length);
     if (!column)
       throw invalid(
         `has ${asked.vector.length} numbers; no vector field of the index has that many`,

@@ -482,8 +482,9 @@ impl Search<'_> {
         let (c, codes) = (cluster.c, cluster.codes);
         let words = rabitq::words(self.column.dims);
         let anchor = self.anchor(c);
+        let replaced = !self.newest.is_empty();
         for (row, id) in codes.ids.iter().enumerate() {
-            if self.newest.contains_key(id) {
+            if replaced && self.newest.contains_key(id) {
                 continue;
             }
             found.seen += 1;
@@ -534,27 +535,9 @@ impl Search<'_> {
         rough.truncate(REFINE_MOST * base);
         let estimator = Estimator::new(self.column.metric, self.column.dims);
         let query = extended::Prepared::new(self.rotated());
-        let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-        let mut batch = REFINE_PER_THREAD * cores;
+        let mut fine = self.refined(rough, &estimator, &query).await?;
         let mut best = Kth::new(self.query.top_k, f32::INFINITY);
-        let mut fine = Vec::new();
-        let mut rough = rough.into_iter();
-        loop {
-            let bound = best.get();
-            let now: Vec<Candidate> = rough
-                .by_ref()
-                .filter(|c| c.lower <= bound)
-                .take(batch)
-                .collect();
-            if now.is_empty() {
-                break;
-            }
-            for candidate in self.refined(now, &estimator, &query).await? {
-                best.offer(candidate.upper);
-                fine.push(candidate);
-            }
-            batch *= 2;
-        }
+        fine.iter().for_each(|c| best.offer(c.upper));
         let bound = best.get();
         fine.retain(|c| c.lower <= bound);
         Ok(fine)

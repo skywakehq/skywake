@@ -9,11 +9,15 @@ use crate::format::Clusters;
 use crate::format::cluster::ClusterRef;
 use crate::format::directory::{Directory, Page, Slot};
 use crate::format::pages::{PAGE, Paged};
-use crate::store::{PARALLELISM, Storage};
+use crate::store::{PARALLELISM, Storage, part};
 use crate::vector::ivf;
 use crate::{Error, Metric, Result};
 
 const BATCH: usize = 8;
+
+const WHOLE_MOST_BYTES: usize = 256 << 20;
+
+const SCORED_PER_THREAD: usize = 256;
 
 pub(super) struct Known {
     metric: Metric,
@@ -28,6 +32,7 @@ enum Source {
         table: Paged<ClusterRef>,
         centroids: Arc<Vec<f32>>,
     },
+    Whole(Arc<Whole>),
     Paged {
         directory: Arc<Directory>,
         queue: Vec<(f32, usize)>,
@@ -59,23 +64,28 @@ impl Known {
             }
             Some(hash) => {
                 let directory: Arc<Directory> = storage.get(hash).await?;
-                let mut queue: Vec<(f32, usize)> = (directory.tops.chunks_exact(dims))
-                    .zip(&directory.radii)
-                    .map(|(top, &radius)| {
-                        let score = ivf::distance(metric, vector, top);
-                        reach(metric, vector, score, radius).0
-                    })
-                    .zip(0..)
-                    .collect();
-                nearest_first(&mut queue);
-                let source = Source::Paged {
-                    directory,
-                    queue,
-                    next: 0,
-                    read: HashMap::new(),
-                    at: HashMap::new(),
-                };
-                (source, Vec::new())
+                if let Some(whole) = Whole::open(storage, hash, &directory, dims) {
+                    let order = scored(metric, vector, &whole.centroids, &whole.clusters);
+                    (Source::Whole(whole), order)
+                } else {
+                    let mut queue: Vec<(f32, usize)> = (directory.tops.chunks_exact(dims))
+                        .zip(&directory.radii)
+                        .map(|(top, &radius)| {
+                            let score = ivf::distance(metric, vector, top);
+                            reach(metric, vector, score, radius).0
+                        })
+                        .zip(0..)
+                        .collect();
+                    nearest_first(&mut queue);
+                    let source = Source::Paged {
+                        directory,
+                        queue,
+                        next: 0,
+                        read: HashMap::new(),
+                        at: HashMap::new(),
+                    };
+                    (source, Vec::new())
+                }
             }
         };
         let mut known = Self {
@@ -92,6 +102,7 @@ impl Known {
     pub(super) fn get(&self, c: usize) -> &ClusterRef {
         match &self.source {
             Source::Flat { table, .. } => table.get(c),
+            Source::Whole(whole) => &whole.table[whole.at[&c]],
             Source::Paged { at, .. } => {
                 let (page, place) = &at[&c];
                 &page.table[*place]
@@ -103,6 +114,10 @@ impl Known {
         let dims = self.dims;
         match &self.source {
             Source::Flat { centroids, .. } => &centroids[c * dims..(c + 1) * dims],
+            Source::Whole(whole) => {
+                let at = whole.at[&c];
+                &whole.centroids[at * dims..(at + 1) * dims]
+            }
             Source::Paged { at, .. } => {
                 let (page, place) = &at[&c];
                 &page.centroids[place * dims..(place + 1) * dims]
@@ -241,6 +256,80 @@ impl Known {
         nearest_first(&mut self.order);
         Ok(())
     }
+}
+
+struct Whole {
+    clusters: Vec<u32>,
+    centroids: Vec<f32>,
+    table: Vec<ClusterRef>,
+    at: HashMap<usize, usize>,
+}
+
+impl Whole {
+    fn open(
+        storage: &Storage,
+        hash: skywake_core::Hash,
+        directory: &Directory,
+        dims: usize,
+    ) -> Option<Arc<Self>> {
+        let rows = directory.pages.len() * directory.per_page as usize;
+        if rows * dims * 4 > WHOLE_MOST_BYTES {
+            return None;
+        }
+        let key = part(hash, "whole");
+        if let Some(found) = storage.cache().get(key) {
+            return Some(found);
+        }
+        let Some(pages) = (directory.pages.iter())
+            .map(|&page| storage.cache().get::<Page>(page))
+            .collect::<Option<Vec<Arc<Page>>>>()
+        else {
+            return None;
+        };
+        let mut whole = Self {
+            clusters: Vec::new(),
+            centroids: Vec::new(),
+            table: Vec::new(),
+            at: HashMap::new(),
+        };
+        for page in pages {
+            for (&c, entry) in page.clusters.iter().zip(&page.table) {
+                whole.at.insert(c as usize, whole.clusters.len());
+                whole.clusters.push(c);
+                whole.table.push(entry.clone());
+            }
+            whole.centroids.extend_from_slice(&page.centroids);
+        }
+        let weight = 4 * whole.centroids.len() + 160 * whole.clusters.len();
+        let whole = Arc::new(whole);
+        storage.cache().insert(key, whole.clone(), weight);
+        Some(whole)
+    }
+}
+
+fn scored(
+    metric: Metric,
+    vector: &[f32],
+    centroids: &[f32],
+    clusters: &[u32],
+) -> Vec<(f32, usize)> {
+    let dims = vector.len();
+    let parts = clusters.len().div_ceil(SCORED_PER_THREAD);
+    ivf::parallel(parts, |chunks| {
+        let rows =
+            chunks.start * SCORED_PER_THREAD..(chunks.end * SCORED_PER_THREAD).min(clusters.len());
+        (rows.map(|i| {
+            let centroid = &centroids[i * dims..(i + 1) * dims];
+            (
+                ivf::distance(metric, vector, centroid),
+                clusters[i] as usize,
+            )
+        }))
+        .collect::<Vec<_>>()
+    })
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn nearest_first(order: &mut [(f32, usize)]) {
