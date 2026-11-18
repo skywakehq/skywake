@@ -118,6 +118,19 @@ pub(crate) fn plan(settings: &Settings) -> Plan {
             );
         }
     }
+    let images = &settings.images;
+    match &images.source {
+        Some(source) => add(
+            "images",
+            "built here".into(),
+            format!("from {}", super::ui::tilde(source)),
+        ),
+        None => add(
+            "images",
+            "published".into(),
+            format!("{}/… {}", images.registry, images.version),
+        ),
+    }
     if let Some(domain) = &settings.domain {
         add(
             "domain",

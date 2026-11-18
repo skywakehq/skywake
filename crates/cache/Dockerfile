@@ -1,6 +1,6 @@
 # A node of the shared chunk cache. Build from the repository root:
 #   docker build -f crates/cache/Dockerfile -t skywake-cache .
-FROM rust:1.92-bookworm AS build
+FROM rust:1.99-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates

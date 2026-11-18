@@ -2,7 +2,7 @@
 #   docker build -f apps/api/Dockerfile -t skywake-api .
 
 # The engine, compiled for Node.
-FROM rust:1.92-bookworm AS engine
+FROM rust:1.99-bookworm AS engine
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates crates

@@ -366,6 +366,16 @@ pub(crate) async fn apply(ui: &Ui, settings: &mut Settings, settings_path: &Path
     write_private(&stack.dir.join(".env"), &env)?;
     step.done(dim(tilde(&stack.dir)));
 
+    if let Some(source) = settings.images.source.clone() {
+        let built = super::build::build(ui, &source, &stack.dir.join("build.log")).await?;
+        let mut running = settings.clone();
+        running.images = built;
+        write_private(
+            &stack.dir.join(".env"),
+            &render_env(&running, &stack.env())?,
+        )?;
+    }
+
     let step = ui.step("start", "Starting services");
     step.message("first run downloads the images");
     if let Err(error) = stack

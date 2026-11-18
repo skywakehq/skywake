@@ -847,6 +847,10 @@ deploy saves a profile, so `skywake --profile local indexes` works straight away
   server plus the cloud's bucket (about $19 a month at `tiny`). Only `large` makes a Kubernetes cluster.
 - `local` runs end to end: about 10 s from nothing to a ready API with an organization and an admin key, picking
   free ports by itself. The image version follows the CLI's own, so the two always match.
+- Run inside a Skywake checkout, `local` builds the API and console images from that source, tagged with the
+  commit (`dev-<commit>`, with `-changed` when the tree is dirty), and `upgrade` rebuilds them. Anywhere else it
+  pulls the published images. `--build` and `--pull` choose explicitly. `scripts/start.sh` stays as it is, since
+  it needs only Docker and no Rust on the host.
 - `doctor` checks Docker, Compose, images, ports, API readiness, API version against the CLI, clock skew, and the
   Postgres version and `wal_level`, each with its fix. Known Docker errors (unshared folder, taken port, missing
   image, full disk) come back with the fix too.

@@ -207,6 +207,34 @@ async fn version(api: &str) -> Check {
 
 async fn images(settings: &Settings) -> Check {
     let images = &settings.images;
+    if let Some(source) = &images.source {
+        let memory: u64 = (quiet("docker", &["info", "--format", "{{.MemTotal}}"]).await)
+            .and_then(|m| m.parse().ok())
+            .unwrap_or(0);
+        let gb = memory as f64 / 1e9;
+        return match (super::build::is_checkout(source), gb >= 5.5 || memory == 0) {
+            (false, _) => check(
+                "images",
+                Status::Fail,
+                format!("{} isn't a Skywake checkout", source.display()),
+                Some(
+                    "run `skywake deploy --build` inside one, or `--pull` for the published images",
+                ),
+            ),
+            (true, false) => check(
+                "images",
+                Status::Warn,
+                format!("built from source, but Docker has only {gb:.1} GB of memory"),
+                Some("give Docker 6 GB or more to build (Docker Desktop → Settings → Resources)"),
+            ),
+            (true, true) => check(
+                "images",
+                Status::Ok,
+                format!("built from {}", super::ui::tilde(source)),
+                None,
+            ),
+        };
+    }
     let mut missing = Vec::new();
     for name in ["skywake-api", "skywake-console"] {
         let image = format!("{}/{name}:{}", images.registry, images.version);

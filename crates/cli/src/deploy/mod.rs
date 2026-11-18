@@ -1,3 +1,4 @@
+mod build;
 mod detect;
 mod doctor;
 mod local;
@@ -78,6 +79,14 @@ pub(crate) struct Choice {
         help = "The release to run (default: this CLI's own version)."
     )]
     version: Option<String>,
+    #[arg(
+        long,
+        conflicts_with = "pull",
+        help = "Build the images from this Skywake checkout (the default inside one)."
+    )]
+    build: bool,
+    #[arg(long, help = "Use the published images, even inside a checkout.")]
+    pull: bool,
     #[arg(long, short = 'y', help = "Don't ask first.")]
     yes: bool,
 }
@@ -281,6 +290,19 @@ async fn resolve(ui: &Ui, choice: &Choice, guided: bool) -> Result<(PathBuf, Set
     }
     if let Some(version) = &choice.version {
         settings.images.version.clone_from(version);
+    }
+    let here = build::checkout();
+    match (choice.build, choice.pull) {
+        (true, _) => match here {
+            Some(root) => settings.images.source = Some(root),
+            None => bail!("--build needs a Skywake checkout: run it inside one"),
+        },
+        (_, true) => settings.images.source = None,
+        _ if fresh && settings.target == Target::Local => settings.images.source = here,
+        _ => {}
+    }
+    if settings.target != Target::Local {
+        settings.images.source = None;
     }
     settings.check()?;
     Ok((path, settings, fresh))

@@ -131,6 +131,8 @@ pub(crate) struct Settings {
 pub(crate) struct Images {
     pub registry: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<PathBuf>,
 }
 
 impl Default for Images {
@@ -138,6 +140,7 @@ impl Default for Images {
         Self {
             registry: "ghcr.io/skywakehq".into(),
             version: env!("CARGO_PKG_VERSION").into(),
+            source: None,
         }
     }
 }
