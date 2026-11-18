@@ -22,7 +22,7 @@ use crate::{Attributes, Id, Result, Schema, invalid};
 use columns::Columns;
 use pages::Pages;
 
-pub(crate) const FORMAT: u32 = 15;
+pub(crate) const FORMAT: u32 = 16;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 
@@ -60,6 +60,10 @@ impl Version {
 
     pub(crate) fn has_postings(&self) -> bool {
         (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
+    }
+
+    pub(crate) fn has_extended(&self) -> bool {
+        (self.ann.iter().flat_map(|ann| ann.columns.values())).any(|c| c.extended)
     }
 
     pub(crate) fn has_pieces(&self) -> bool {
@@ -111,6 +115,7 @@ pub(crate) struct Clusters {
     pub directory: Option<Hash>,
     pub groups: u64,
     pub calibrated: u64,
+    pub extended: bool,
 }
 
 impl Clusters {

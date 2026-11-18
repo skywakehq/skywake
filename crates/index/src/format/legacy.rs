@@ -100,6 +100,7 @@ impl From<ClustersV9> for Clusters {
             seed: c.seed,
             calibration: c.calibration,
             directory: None,
+            extended: false,
         }
     }
 }
@@ -920,6 +921,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V15_FORMAT => postcard::from_bytes::<V15>(raw)?.into(),
         V14_FORMAT => postcard::from_bytes::<V14>(raw)?.into(),
         V13_FORMAT => postcard::from_bytes::<V13>(raw)?.into(),
         V12_FORMAT => postcard::from_bytes::<V12>(raw)?.into(),
@@ -962,6 +964,7 @@ impl From<ClustersV14> for Clusters {
             seed: c.seed,
             calibration: c.calibration,
             directory: c.directory,
+            extended: false,
         }
     }
 }
@@ -1065,6 +1068,142 @@ impl From<&Version> for V14 {
             built: version.built.clone(),
             tail: version.tail.clone(),
             ann: version.ann.as_ref().map(AnnV14::from),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
+            columns: version.columns.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct ClustersV15 {
+    centroids: Hash,
+    origin: Option<Hash>,
+    table: Pages,
+    seed: u64,
+    calibration: Calibration,
+    directory: Option<Hash>,
+    groups: u64,
+    calibrated: u64,
+}
+
+impl From<ClustersV15> for Clusters {
+    fn from(c: ClustersV15) -> Self {
+        Self {
+            centroids: c.centroids,
+            origin: c.origin,
+            table: c.table,
+            seed: c.seed,
+            calibration: c.calibration,
+            directory: c.directory,
+            groups: c.groups,
+            calibrated: c.calibrated,
+            extended: false,
+        }
+    }
+}
+
+impl From<&Clusters> for ClustersV15 {
+    fn from(c: &Clusters) -> Self {
+        Self {
+            centroids: c.centroids,
+            origin: c.origin,
+            table: c.table.clone(),
+            seed: c.seed,
+            calibration: c.calibration.clone(),
+            directory: c.directory,
+            groups: c.groups,
+            calibrated: c.calibrated,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct AnnV15 {
+    columns: BTreeMap<String, ClustersV15>,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    live: u64,
+    full_rows: u64,
+    removed: u64,
+    filters: Hash,
+    parts: BTreeMap<String, FilterPart>,
+}
+
+impl From<AnnV15> for Ann {
+    fn from(old: AnnV15) -> Self {
+        Self {
+            columns: (old.columns.into_iter())
+                .map(|(name, c)| (name, c.into()))
+                .collect(),
+            rows: old.rows,
+            rows_bytes: old.rows_bytes,
+            live: old.live,
+            full_rows: old.full_rows,
+            removed: old.removed,
+            filters: old.filters,
+            parts: old.parts,
+        }
+    }
+}
+
+impl From<&Ann> for AnnV15 {
+    fn from(ann: &Ann) -> Self {
+        Self {
+            columns: (ann.columns.iter())
+                .map(|(name, c)| (name.clone(), c.into()))
+                .collect(),
+            rows: ann.rows.clone(),
+            rows_bytes: ann.rows_bytes,
+            live: ann.live,
+            full_rows: ann.full_rows,
+            removed: ann.removed,
+            filters: ann.filters,
+            parts: ann.parts.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V15 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<AnnV15>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+    columns: Option<Columns>,
+}
+
+pub(crate) const V15_FORMAT: u32 = 15;
+
+impl From<V15> for Version {
+    fn from(old: V15) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann.map(Ann::from),
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: old.columns,
+        }
+    }
+}
+
+impl From<&Version> for V15 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V15_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.as_ref().map(AnnV15::from),
             next_seq: version.next_seq,
             text: version.text.clone(),
             columns: version.columns.clone(),

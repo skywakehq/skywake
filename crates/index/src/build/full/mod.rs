@@ -18,7 +18,7 @@ use crate::format::pages::Pages;
 use crate::format::{Ann, Clusters, SegmentRef, Version};
 use crate::store::{Storage, Written};
 use crate::vector::groups::Groups;
-use crate::vector::ivf;
+use crate::vector::{extended, ivf};
 use crate::{Column, Result};
 use assign::Assignment;
 use live::Live;
@@ -104,6 +104,7 @@ pub(super) async fn full_build(
             directory: None,
             groups,
             calibrated: groups,
+            extended: extended::wanted(column.dims),
         };
         built.insert(name.clone(), clusters);
     }

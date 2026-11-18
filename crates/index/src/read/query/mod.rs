@@ -16,8 +16,8 @@ use crate::format::cluster::{self, Codes};
 use crate::format::{Clusters, Version};
 use crate::read::tail::{Row, Tail};
 use crate::store::{PARALLELISM, Storage};
-use crate::vector::ivf;
 use crate::vector::rabitq::{self, Anchor, Estimator, Prepared, Rotation};
+use crate::vector::{extended, ivf};
 use crate::{Column, Error, Hit, Id, Metric, Query, Result, invalid};
 use known::{Known, reach};
 use skywake_core::Hash;
@@ -31,7 +31,15 @@ const RERANK_PER_HIT: usize = 4;
 
 const RERANK_LEAST: usize = 40;
 
-const RERANK_CAPPED_DIMS: usize = 256;
+const RERANK_MOST: usize = 8;
+
+const REFINE_MOST: usize = 512;
+
+const REFINE_PER_THREAD: usize = 256;
+
+const PROBE_MOST_ROWS: u64 = 1 << 20;
+
+const EXACT_MOST_ROWS: u64 = 1 << 16;
 
 const FILTER_FIRST_SHARE: f64 = 0.02;
 
@@ -108,6 +116,7 @@ pub(crate) async fn run(storage: &Storage, version: &Version, query: &Query) -> 
             known,
             origin: &origin,
             newest: &newest,
+            rows: ann.live,
             filters: ann.filters,
             parts: &ann.parts,
             pos,
@@ -128,6 +137,7 @@ struct Search<'a> {
     known: Known,
     origin: &'a [f32],
     newest: &'a HashMap<&'a Id, Option<Row>>,
+    rows: u64,
     filters: Hash,
     parts: &'a BTreeMap<String, FilterPart>,
     pos: usize,
@@ -157,7 +167,7 @@ impl Search<'_> {
         let storage = self.storage;
         let (groups, count) = (self.groups(), self.clusters.table.len as usize);
         let k = self.query.top_k;
-        if self.plan(k as f64) >= groups {
+        if self.plan(k as f64) >= groups && self.exact_allowed() {
             self.known.settle(storage, count).await?;
             return self.exact(&self.known.order, top).await;
         }
@@ -199,16 +209,20 @@ impl Search<'_> {
             .filter(|e| e.lower <= limit)
             .map(|e| {
                 let codes = &found.codes[&e.cluster];
-                let candidate = Candidate {
+                let [norm, _, to_anchor, _] = codes.factors[e.row];
+                Candidate {
+                    lower: e.lower,
+                    upper: e.upper,
                     cluster: e.cluster,
                     row: e.row,
                     check: codes.checks[e.row],
+                    norm,
+                    to_anchor,
                     id: codes.ids[e.row].clone(),
-                };
-                (e.lower, e.upper, candidate)
+                }
             })
             .collect();
-        self.rerank_within(kept, top).await
+        self.settle(kept, top).await
     }
 
     async fn filter_first(&mut self, top: &mut Top) -> Result<bool> {
@@ -280,16 +294,20 @@ impl Search<'_> {
             .filter(|r| r.0 <= limit)
             .map(|(lower, upper, b, i)| {
                 let located = &blocks[b].columns[self.pos];
-                let candidate = Candidate {
+                let [norm, _, to_anchor, _] = located.codes.factors[i];
+                Candidate {
+                    lower,
+                    upper,
                     cluster: located.clusters[i] as usize,
                     row: located.rows[i] as usize,
                     check: located.codes.checks[i],
+                    norm,
+                    to_anchor,
                     id: located.codes.ids[i].clone(),
-                };
-                (lower, upper, candidate)
+                }
             })
             .collect();
-        self.rerank_within(kept, top).await?;
+        self.settle(kept, top).await?;
         Ok(true)
     }
 
@@ -312,11 +330,15 @@ impl Search<'_> {
     }
 
     fn capped(&self) -> bool {
-        !self.exact_recall() && self.column.dims >= RERANK_CAPPED_DIMS
+        !self.exact_recall() && extended::wanted(self.column.dims)
     }
 
     fn groups(&self) -> usize {
         (self.clusters.groups as usize).max(1)
+    }
+
+    fn exact_allowed(&self) -> bool {
+        self.exact_recall() || self.query.probe.is_some() || self.rows <= EXACT_MOST_ROWS
     }
 
     fn plan(&self, k: f64) -> usize {
@@ -327,7 +349,9 @@ impl Search<'_> {
             None if recall >= 1.0 => count,
             None => {
                 let share = self.clusters.calibration.share(k, recall);
-                ((share * count as f32).ceil() as usize).clamp(1, count)
+                let most =
+                    (PROBE_MOST_ROWS as f64 * count as f64 / self.rows.max(1) as f64) as usize;
+                ((share * count as f32).ceil() as usize).clamp(1, most.clamp(1, count))
             }
         }
     }
@@ -409,11 +433,14 @@ impl Search<'_> {
         Ok(())
     }
 
+    fn rotated(&self) -> Vec<f32> {
+        let rotation = Rotation::new(self.column.dims, self.clusters.seed);
+        rotation.difference(self.vector, self.origin)
+    }
+
     fn prepared(&self) -> (Estimator, Prepared) {
-        let dims = self.column.dims;
-        let rotation = Rotation::new(dims, self.clusters.seed);
-        let estimator = Estimator::new(self.column.metric, dims);
-        let query = estimator.prepare(&rotation.difference(self.vector, self.origin));
+        let estimator = Estimator::new(self.column.metric, self.column.dims);
+        let query = estimator.prepare(&self.rotated());
         (estimator, query)
     }
 
@@ -466,38 +493,109 @@ impl Search<'_> {
         }
     }
 
-    async fn rerank_within(
-        &self,
-        mut rows: Vec<(f32, f32, Candidate)>,
-        top: &mut Top,
-    ) -> Result<()> {
+    async fn settle(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
         if !self.capped() {
-            return self
-                .rerank(rows.into_iter().map(|r| r.2).collect(), top)
-                .await;
+            return self.rerank(candidates, top).await;
         }
-        rows.sort_unstable_by(|a, b| (a.0 + a.1).total_cmp(&(b.0 + b.1)));
-        let mut batch = (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST);
-        while !rows.is_empty() {
-            let now = rows.drain(..batch.min(rows.len())).map(|r| r.2).collect();
+        by_middle(&mut candidates);
+        let base = (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST);
+        if self.clusters.extended {
+            candidates = self.refine(candidates, base).await?;
+            by_middle(&mut candidates);
+        }
+        let mut budget = RERANK_MOST * base;
+        let mut batch = base;
+        while !candidates.is_empty() && budget > 0 {
+            let take = batch.min(candidates.len()).min(budget);
+            let now: Vec<Candidate> = candidates.drain(..take).collect();
             self.rerank(now, top).await?;
+            budget -= take;
             let bound = top.kth();
-            rows.retain(|r| r.0 <= bound);
+            candidates.retain(|c| c.lower <= bound);
             batch *= 2;
         }
         Ok(())
     }
 
-    async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
-        candidates.sort_unstable_by_key(|c| (c.cluster, c.row));
-        let size = self.column.dims * self.column.element.bytes();
-        let mut runs: Vec<Vec<Candidate>> = Vec::new();
-        for candidate in candidates {
-            match runs.last_mut() {
-                Some(run) if near(&run[run.len() - 1], &candidate, size) => run.push(candidate),
-                _ => runs.push(vec![candidate]),
+    async fn refine(&self, mut rough: Vec<Candidate>, base: usize) -> Result<Vec<Candidate>> {
+        rough.truncate(REFINE_MOST * base);
+        let read = self.records(rough).await?;
+        let estimator = Estimator::new(self.column.metric, self.column.dims);
+        let query = extended::Prepared::new(self.rotated());
+        let mut anchors: HashMap<usize, Anchor> = HashMap::new();
+        for (candidate, _, _) in &read {
+            (anchors.entry(candidate.cluster)).or_insert_with(|| self.anchor(candidate.cluster));
+        }
+        let size = extended::record(self.column.dims);
+        let estimates = ivf::parallel(read.len().div_ceil(REFINE_PER_THREAD), |chunks| {
+            let rows =
+                chunks.start * REFINE_PER_THREAD..(chunks.end * REFINE_PER_THREAD).min(read.len());
+            (read[rows].iter())
+                .map(|(candidate, bytes, at)| {
+                    let record = &bytes[*at..*at + size];
+                    let anchor = &anchors[&candidate.cluster];
+                    let (norm, to_anchor) = (candidate.norm, candidate.to_anchor);
+                    let estimate =
+                        extended::estimate(&estimator, &query, anchor, record, norm, to_anchor);
+                    extended::intact(record).then_some(estimate)
+                })
+                .collect::<Vec<_>>()
+        });
+        let mut best = Kth::new(self.query.top_k, f32::INFINITY);
+        let mut fine = Vec::with_capacity(read.len());
+        for ((mut candidate, _, _), estimate) in
+            read.into_iter().zip(estimates.into_iter().flatten())
+        {
+            let Some((d, error)) = estimate else {
+                let hash = self.known.get(candidate.cluster).hash;
+                return Err(Error::Corrupt(format!(
+                    "an extended code of blob {hash} is damaged"
+                )));
+            };
+            (candidate.lower, candidate.upper) = (d - error, d + error);
+            best.offer(candidate.upper);
+            fine.push(candidate);
+        }
+        let bound = best.get();
+        fine.retain(|c| c.lower <= bound);
+        Ok(fine)
+    }
+
+    async fn records(
+        &self,
+        mut candidates: Vec<Candidate>,
+    ) -> Result<Vec<(Candidate, Arc<Vec<u8>>, usize)>> {
+        let dims = self.column.dims;
+        let size = extended::record(dims);
+        let runs = runs(&mut candidates, size);
+        let mut read = stream::iter(runs)
+            .map(|run| async move {
+                let cluster = self.known.get(run[0].cluster);
+                let range = cluster.extended(run[0].row..run[run.len() - 1].row + 1, dims);
+                let bytes = self.storage.range_cached(cluster.hash, range).await?;
+                Ok::<_, Error>((run, bytes))
+            })
+            .buffer_unordered(FAN_OUT);
+        let mut out = Vec::new();
+        while let Some((run, bytes)) = read.try_next().await? {
+            let first = run[0].row;
+            for candidate in run {
+                let at = (candidate.row - first) * size;
+                if bytes.len() < at + size {
+                    let hash = self.known.get(candidate.cluster).hash;
+                    return Err(Error::Corrupt(format!(
+                        "the extended codes of blob {hash} are cut short"
+                    )));
+                }
+                out.push((candidate, bytes.clone(), at));
             }
         }
+        Ok(out)
+    }
+
+    async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
+        let size = self.column.dims * self.column.element.bytes();
+        let runs = runs(&mut candidates, size);
         let mut read = stream::iter(runs)
             .map(|run| async move {
                 let cluster = self.known.get(run[0].cluster);
@@ -575,10 +673,30 @@ struct Cluster<'a> {
 }
 
 struct Candidate {
+    lower: f32,
+    upper: f32,
     cluster: usize,
     row: usize,
     check: u64,
+    norm: f32,
+    to_anchor: f32,
     id: Id,
+}
+
+fn by_middle(candidates: &mut [Candidate]) {
+    candidates.sort_unstable_by(|a, b| (a.lower + a.upper).total_cmp(&(b.lower + b.upper)));
+}
+
+fn runs(candidates: &mut Vec<Candidate>, size: usize) -> Vec<Vec<Candidate>> {
+    candidates.sort_unstable_by_key(|c| (c.cluster, c.row));
+    let mut runs: Vec<Vec<Candidate>> = Vec::new();
+    for candidate in candidates.drain(..) {
+        match runs.last_mut() {
+            Some(run) if near(&run[run.len() - 1], &candidate, size) => run.push(candidate),
+            _ => runs.push(vec![candidate]),
+        }
+    }
+    runs
 }
 
 fn near(a: &Candidate, b: &Candidate, size: usize) -> bool {

@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::format::legacy::V14;
+use crate::format::legacy::{V14, V15_FORMAT};
 use crate::format::{FORMAT, decode_version};
 use crate::store::head;
 use crate::testing::{Gate, brute_force, clustered, table};
@@ -300,9 +300,51 @@ async fn indexes_without_pieces_keep_the_old_format_and_old_ones_still_open() {
     let now = shape(&index).await;
     assert!(now.pieces as u64 > now.groups);
     let (_, written) = format(index.clone()).await;
-    assert_eq!(written, FORMAT);
+    assert_eq!(written, V15_FORMAT);
     let reopened = Index::open(gate.clone(), MAIN).await.unwrap();
     matches_exact(&reopened).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn wide_vectors_keep_extended_codes_through_appends_and_reopening() {
+    let dims = 256;
+    let gate = Gate::new();
+    let options = Options {
+        cluster_rows: 50,
+        ..Options::default()
+    };
+    let schema = Schema::new().vector("v", dims, Metric::Cosine);
+    let index = Index::create_with(gate.clone(), schema, options)
+        .await
+        .unwrap();
+    let wide = |ids: std::ops::Range<u64>, seed: u64| -> Vec<Doc> {
+        let vectors = clustered((ids.end - ids.start) as usize, dims, seed);
+        (ids.zip(vectors))
+            .map(|(id, v)| Doc::new(id).vector("v", v))
+            .collect()
+    };
+    index.upsert(wide(0..600, 1)).await.unwrap();
+    index.build().await.unwrap();
+    index.upsert(wide(600..700, 2)).await.unwrap();
+    index.build().await.unwrap();
+    let version = index.version().await.unwrap();
+    assert!(version.ann.as_ref().unwrap().columns["v"].extended);
+    let head = head::read(index.storage.store.as_ref(), MAIN)
+        .await
+        .unwrap()
+        .unwrap();
+    let raw = index.storage.raw_version(head.version).await.unwrap();
+    assert_eq!(postcard::from_bytes::<(u32,)>(&raw).unwrap().0, FORMAT);
+    let reopened = Index::open(gate.clone(), MAIN).await.unwrap();
+    for vector in clustered(8, dims, 77) {
+        let query = Query::new("v", vector, 10);
+        let want: HashSet<Id> = (brute_force(&reopened, &query).await.into_iter())
+            .map(|(id, _)| id)
+            .collect();
+        let got = reopened.query(&query).await.unwrap();
+        let found = got.iter().filter(|hit| want.contains(&hit.id)).count();
+        assert!(found >= 8, "{found} of 10");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]

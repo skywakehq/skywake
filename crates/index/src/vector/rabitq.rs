@@ -180,6 +180,16 @@ impl Estimator {
             ),
             false => (0.0, 0.0),
         };
+        self.finish(anchor, [norm, aligned, to_anchor], along, rounding)
+    }
+
+    pub(crate) fn finish(
+        &self,
+        anchor: &Anchor,
+        [norm, aligned, to_anchor]: [f32; 3],
+        along: f32,
+        rounding: f32,
+    ) -> (f32, f32) {
         let cosine = along / aligned;
         let spread = (1.0 - aligned * aligned).max(0.0).sqrt() * self.bound;
         let error = (spread + rounding) / aligned;
