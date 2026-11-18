@@ -122,14 +122,28 @@ impl Api {
     }
 
     async fn call(&self, method: Method, path: &str, body: Option<&Json>) -> Result<Json> {
-        let mut request = self
-            .client
-            .request(method, format!("{}/v2{path}", self.url))
-            .bearer_auth(&self.key);
-        if let Some(body) = body {
-            request = request.json(body);
-        }
-        let response = request.send().await?;
+        let bytes = body.map(serde_json::to_vec).transpose()?;
+        self.send(method, path, bytes).await
+    }
+
+    async fn send(&self, method: Method, path: &str, body: Option<Vec<u8>>) -> Result<Json> {
+        let response = loop {
+            let mut request = self
+                .client
+                .request(method.clone(), format!("{}/v2{path}", self.url))
+                .bearer_auth(&self.key);
+            if let Some(body) = &body {
+                request = (request.header("content-type", "application/json")).body(body.clone());
+            }
+            let response = request.send().await?;
+            if response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS {
+                break response;
+            }
+            let wait = (response.headers().get("retry-after"))
+                .and_then(|v| v.to_str().ok()?.parse::<f64>().ok())
+                .unwrap_or(1.0);
+            tokio::time::sleep(Duration::from_secs_f64(wait.clamp(0.05, 30.0))).await;
+        };
         let status = response.status();
         let text = response.text().await?;
         if !status.is_success() {
@@ -330,11 +344,11 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
             break;
         }
         let path = &path;
+        let count = docs.len() as u64;
+        let body = tokio::task::spawn_blocking(move || rows_body(&docs));
         writing.push(async move {
-            let rows: Vec<Json> = docs.iter().map(row).collect();
-            api.call(Method::POST, path, Some(&Json::Array(rows)))
-                .await?;
-            Ok::<_, anyhow::Error>(docs.len() as u64)
+            api.send(Method::POST, path, Some(body.await??)).await?;
+            Ok::<_, anyhow::Error>(count)
         });
         if writing.len() >= args.writers.max(1) {
             meter.add(writing.next().await.expect("an upsert is in flight")?);
@@ -465,16 +479,34 @@ fn schema(dims: usize) -> Json {
     })
 }
 
-fn row(doc: &Doc) -> Json {
-    let mut row = Map::new();
-    row.insert("id".into(), id_json(&doc.id));
-    for (name, value) in &doc.attributes {
-        row.insert(name.clone(), value_json(value));
+fn rows_body(docs: &[Doc]) -> Result<Vec<u8>> {
+    let dims: usize = docs
+        .first()
+        .map_or(0, |d| d.vectors.values().map(Vec::len).sum());
+    let mut out = Vec::with_capacity(docs.len() * (dims * 12 + 64));
+    out.push(b'[');
+    for (i, doc) in docs.iter().enumerate() {
+        if i > 0 {
+            out.push(b',');
+        }
+        out.extend_from_slice(b"{\"id\":");
+        serde_json::to_writer(&mut out, &id_json(&doc.id))?;
+        for (name, value) in &doc.attributes {
+            out.push(b',');
+            serde_json::to_writer(&mut out, name)?;
+            out.push(b':');
+            serde_json::to_writer(&mut out, &value_json(value))?;
+        }
+        for (name, vector) in &doc.vectors {
+            out.push(b',');
+            serde_json::to_writer(&mut out, name)?;
+            out.push(b':');
+            serde_json::to_writer(&mut out, vector)?;
+        }
+        out.push(b'}');
     }
-    for (name, vector) in &doc.vectors {
-        row.insert(name.clone(), json!(vector));
-    }
-    Json::Object(row)
+    out.push(b']');
+    Ok(out)
 }
 
 fn id_json(id: &Id) -> Json {
