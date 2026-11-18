@@ -17,6 +17,7 @@ use crate::format::columns::writer::Writer;
 use crate::format::pages::Pages;
 use crate::format::{Ann, Clusters, SegmentRef, Version};
 use crate::store::{Storage, Written};
+use crate::vector::groups::Groups;
 use crate::vector::ivf;
 use crate::{Column, Result};
 use assign::Assignment;
@@ -93,6 +94,7 @@ pub(super) async fn full_build(
         let calibration = calibrator.finish(&coding.centroids);
         let centroids = storage.put_centroids(&coding.centroids).await?;
         written.object(centroids);
+        let groups = Groups::count(&coding.centroids, column.dims);
         let clusters = Clusters {
             centroids,
             origin: None,
@@ -100,6 +102,8 @@ pub(super) async fn full_build(
             seed: seed(name),
             calibration,
             directory: None,
+            groups,
+            calibrated: groups,
         };
         built.insert(name.clone(), clusters);
     }

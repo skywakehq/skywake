@@ -92,6 +92,8 @@ pub(crate) struct ClustersV9 {
 impl From<ClustersV9> for Clusters {
     fn from(c: ClustersV9) -> Self {
         Self {
+            groups: c.table.len,
+            calibrated: c.table.len,
             centroids: c.centroids,
             origin: c.origin,
             table: c.table,
@@ -624,7 +626,7 @@ pub(crate) struct V10 {
     schema: Schema,
     built: Pages,
     tail: Vec<SegmentRef>,
-    ann: Option<Ann>,
+    ann: Option<AnnV14>,
     next_seq: u64,
     text: Option<OldText>,
 }
@@ -639,7 +641,7 @@ impl From<V10> for Version {
             schema: old.schema,
             built: old.built,
             tail: old.tail,
-            ann: old.ann,
+            ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text.map(TextIndex::from),
             columns: None,
@@ -655,7 +657,7 @@ impl From<&Version> for V10 {
             schema: version.schema.clone(),
             built: version.built.clone(),
             tail: version.tail.clone(),
-            ann: version.ann.clone(),
+            ann: version.ann.as_ref().map(AnnV14::from),
             next_seq: version.next_seq,
             text: version.text.as_ref().map(OldText::from),
         }
@@ -669,7 +671,7 @@ pub(crate) struct V11 {
     schema: Schema,
     built: Pages,
     tail: Vec<SegmentRef>,
-    ann: Option<Ann>,
+    ann: Option<AnnV14>,
     next_seq: u64,
     text: Option<OldText>,
     columns: Option<OldColumns>,
@@ -685,7 +687,7 @@ impl From<V11> for Version {
             schema: old.schema,
             built: old.built,
             tail: old.tail,
-            ann: old.ann,
+            ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text.map(TextIndex::from),
             columns: old.columns.map(Columns::from),
@@ -701,7 +703,7 @@ impl From<&Version> for V11 {
             schema: version.schema.clone(),
             built: version.built.clone(),
             tail: version.tail.clone(),
-            ann: version.ann.clone(),
+            ann: version.ann.as_ref().map(AnnV14::from),
             next_seq: version.next_seq,
             text: version.text.as_ref().map(OldText::from),
             columns: version.columns.as_ref().map(OldColumns::from),
@@ -716,7 +718,7 @@ pub(crate) struct V12 {
     schema: Schema,
     built: Pages,
     tail: Vec<SegmentRef>,
-    ann: Option<Ann>,
+    ann: Option<AnnV14>,
     next_seq: u64,
     text: Option<TextIndex>,
     columns: Option<OldColumns>,
@@ -732,7 +734,7 @@ impl From<V12> for Version {
             schema: old.schema,
             built: old.built,
             tail: old.tail,
-            ann: old.ann,
+            ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
             columns: old.columns.map(Columns::from),
@@ -748,7 +750,7 @@ impl From<&Version> for V12 {
             schema: version.schema.clone(),
             built: version.built.clone(),
             tail: version.tail.clone(),
-            ann: version.ann.clone(),
+            ann: version.ann.as_ref().map(AnnV14::from),
             next_seq: version.next_seq,
             text: version.text.clone(),
             columns: version.columns.as_ref().map(OldColumns::from),
@@ -763,7 +765,7 @@ pub(crate) struct V13 {
     schema: Schema,
     built: Pages,
     tail: Vec<SegmentRef>,
-    ann: Option<Ann>,
+    ann: Option<AnnV14>,
     next_seq: u64,
     text: Option<TextIndex>,
     columns: Option<Columns13>,
@@ -779,7 +781,7 @@ impl From<V13> for Version {
             schema: old.schema,
             built: old.built,
             tail: old.tail,
-            ann: old.ann,
+            ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
             columns: old.columns.map(Columns::from),
@@ -795,7 +797,7 @@ impl From<&Version> for V13 {
             schema: version.schema.clone(),
             built: version.built.clone(),
             tail: version.tail.clone(),
-            ann: version.ann.clone(),
+            ann: version.ann.as_ref().map(AnnV14::from),
             next_seq: version.next_seq,
             text: version.text.clone(),
             columns: version.columns.as_ref().map(Columns13::from),
@@ -918,6 +920,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V14_FORMAT => postcard::from_bytes::<V14>(raw)?.into(),
         V13_FORMAT => postcard::from_bytes::<V13>(raw)?.into(),
         V12_FORMAT => postcard::from_bytes::<V12>(raw)?.into(),
         V11_FORMAT => postcard::from_bytes::<V11>(raw)?.into(),
@@ -936,4 +939,135 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
             )));
         }
     })
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct ClustersV14 {
+    centroids: Hash,
+    origin: Option<Hash>,
+    table: Pages,
+    seed: u64,
+    calibration: Calibration,
+    directory: Option<Hash>,
+}
+
+impl From<ClustersV14> for Clusters {
+    fn from(c: ClustersV14) -> Self {
+        Self {
+            groups: c.table.len,
+            calibrated: c.table.len,
+            centroids: c.centroids,
+            origin: c.origin,
+            table: c.table,
+            seed: c.seed,
+            calibration: c.calibration,
+            directory: c.directory,
+        }
+    }
+}
+
+impl From<&Clusters> for ClustersV14 {
+    fn from(c: &Clusters) -> Self {
+        Self {
+            centroids: c.centroids,
+            origin: c.origin,
+            table: c.table.clone(),
+            seed: c.seed,
+            calibration: c.calibration.clone(),
+            directory: c.directory,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct AnnV14 {
+    columns: BTreeMap<String, ClustersV14>,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    live: u64,
+    full_rows: u64,
+    removed: u64,
+    filters: Hash,
+    parts: BTreeMap<String, FilterPart>,
+}
+
+impl From<AnnV14> for Ann {
+    fn from(old: AnnV14) -> Self {
+        Self {
+            columns: (old.columns.into_iter())
+                .map(|(name, c)| (name, c.into()))
+                .collect(),
+            rows: old.rows,
+            rows_bytes: old.rows_bytes,
+            live: old.live,
+            full_rows: old.full_rows,
+            removed: old.removed,
+            filters: old.filters,
+            parts: old.parts,
+        }
+    }
+}
+
+impl From<&Ann> for AnnV14 {
+    fn from(ann: &Ann) -> Self {
+        Self {
+            columns: (ann.columns.iter())
+                .map(|(name, c)| (name.clone(), c.into()))
+                .collect(),
+            rows: ann.rows.clone(),
+            rows_bytes: ann.rows_bytes,
+            live: ann.live,
+            full_rows: ann.full_rows,
+            removed: ann.removed,
+            filters: ann.filters,
+            parts: ann.parts.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V14 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<AnnV14>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+    columns: Option<Columns>,
+}
+
+pub(crate) const V14_FORMAT: u32 = 14;
+
+impl From<V14> for Version {
+    fn from(old: V14) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann.map(Ann::from),
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: old.columns,
+        }
+    }
+}
+
+impl From<&Version> for V14 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V14_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.as_ref().map(AnnV14::from),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
+            columns: version.columns.clone(),
+        }
+    }
 }

@@ -33,7 +33,7 @@ use crate::format::columns::leaders::Leaders;
 use crate::format::columns::stats::Totals;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
-use crate::format::legacy::{V10, V11, V12, V13};
+use crate::format::legacy::{V10, V11, V12, V13, V14};
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -222,8 +222,11 @@ impl Storage {
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
         let objects = &self.chunks.objects;
         let columns = version.columns.as_ref();
-        if columns.is_some_and(|c| !c.projections.is_empty()) {
+        if version.has_pieces() {
             return Ok(objects.put(version).await?);
+        }
+        if columns.is_some_and(|c| !c.projections.is_empty()) {
+            return Ok(objects.put(&V14::from(version)).await?);
         }
         let leaders = columns.is_some_and(Columns::has_leaders);
         Ok(match (leaders, version.has_postings(), &version.columns) {

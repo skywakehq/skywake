@@ -155,28 +155,28 @@ impl Search<'_> {
             return Ok(());
         }
         let storage = self.storage;
-        let count = self.clusters.table.len as usize;
+        let (groups, count) = (self.groups(), self.clusters.table.len as usize);
         let k = self.query.top_k;
-        if self.plan(k as f64) >= count {
+        if self.plan(k as f64) >= groups {
             self.known.settle(storage, count).await?;
             return self.exact(&self.known.order, top).await;
         }
         let mut planned = self.plan(k as f64 / self.share().await?);
-        self.known.settle(storage, planned).await?;
+        self.known.settle_groups(storage, planned).await?;
 
         let mut found = Found::default();
         let mut visited = 0;
         let before = top.kth().min(self.bound_before_reading(&self.known.order));
         let mut asked = false;
         loop {
-            self.known.settle(storage, planned).await?;
+            let end = self.known.settle_groups(storage, planned).await?;
             let limit = before.min(kth(found.rows.iter().map(|e| e.upper), top));
-            let wave: Vec<usize> = (self.known.order[visited..planned].iter())
+            let wave: Vec<usize> = (self.known.order[visited..end].iter())
                 .filter(|&&(score, c)| self.lower(score, c) <= limit)
                 .map(|&(_, c)| c)
                 .collect();
             self.estimate(&wave, &mut found, limit).await?;
-            visited = planned;
+            visited = end;
             let more = match (&self.query.filter, self.query.probe) {
                 (Some(_), None) if !asked && found.matched < found.seen => {
                     asked = true;
@@ -319,8 +319,12 @@ impl Search<'_> {
         !self.exact_recall() && self.column.dims >= RERANK_CAPPED_DIMS
     }
 
+    fn groups(&self) -> usize {
+        (self.clusters.groups as usize).max(1)
+    }
+
     fn plan(&self, k: f64) -> usize {
-        let count = self.clusters.table.len as usize;
+        let count = self.groups();
         let recall = self.query.recall.unwrap_or(DEFAULT_RECALL);
         match self.query.probe {
             Some(probe) => probe.min(count),

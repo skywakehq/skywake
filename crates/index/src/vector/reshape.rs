@@ -19,13 +19,14 @@ pub(crate) struct Plan {
 }
 
 impl Plan {
-    pub(crate) fn new(sizes: &[u64], centroids: &[f32], column: &Column) -> Self {
+    pub(crate) fn new(sizes: &[u64], centroids: &[f32], column: &Column, most: u64) -> Self {
         let (k, live) = (sizes.len(), sizes.iter().sum::<u64>());
         let mut big: Vec<usize> = (0..k)
-            .filter(|&c| sizes[c] >= 2 && sizes[c] * k as u64 > SPLIT * live)
+            .filter(|&c| sizes[c] >= 2 && (sizes[c] * k as u64 > SPLIT * live || sizes[c] > most))
             .collect();
         big.sort_by_key(|&c| std::cmp::Reverse(sizes[c]));
-        big.truncate(MAX_SPLITS);
+        let over = big.iter().filter(|&&c| sizes[c] > most).count();
+        big.truncate(MAX_SPLITS.max(over));
         let mut small: Vec<usize> = (0..k)
             .filter(|&c| sizes[c] * MERGE * (k as u64) < live)
             .collect();
@@ -66,10 +67,6 @@ impl Plan {
         Self { merges, splits }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.splits.is_empty()
-    }
-
     pub(crate) fn sizes(&self, sizes: &[u64]) -> Vec<u64> {
         let mut after = sizes.to_vec();
         for &(from, into) in &self.merges {
@@ -88,7 +85,7 @@ impl Plan {
     }
 }
 
-pub(crate) fn split(cluster: Cluster, column: &Column) -> (Cluster, Cluster) {
+pub(crate) fn sides(cluster: &Cluster, column: &Column) -> Vec<u32> {
     let dims = column.dims;
     let centroids = ivf::train(&cluster.vectors, dims, 2, column.metric);
     let mut sides = ivf::assign(&cluster.vectors, dims, &centroids, column.metric);
@@ -100,25 +97,7 @@ pub(crate) fn split(cluster: Cluster, column: &Column) -> (Cluster, Cluster) {
             .enumerate()
             .for_each(|(i, side)| *side = (i >= half) as u32);
     }
-    let mut halves = (Cluster::default(), Cluster::default());
-    let rows = cluster
-        .ids
-        .into_iter()
-        .zip(cluster.seqs)
-        .zip(cluster.attributes);
-    for (row, ((id, seq), attributes)) in rows.enumerate() {
-        let half = if sides[row] == 0 {
-            &mut halves.0
-        } else {
-            &mut halves.1
-        };
-        half.ids.push(id);
-        half.seqs.push(seq);
-        half.vectors
-            .extend(&cluster.vectors[row * dims..(row + 1) * dims]);
-        half.attributes.push(attributes);
-    }
-    halves
+    sides
 }
 
 pub(crate) fn merge(into: &mut Cluster, from: Cluster) {
@@ -153,7 +132,7 @@ mod tests {
     fn a_big_cluster_splits_into_the_place_a_small_one_frees() {
         let sizes = [300, 50, 40, 10];
         let centroids = [0.0, 10.0, 20.0, 21.0];
-        let plan = Plan::new(&sizes, &centroids, &column());
+        let plan = Plan::new(&sizes, &centroids, &column(), u64::MAX);
         assert_eq!(plan.merges, vec![(3, 2)]);
         assert_eq!(plan.splits, vec![(0, 3)]);
         assert_eq!(plan.sizes(&sizes), vec![150, 50, 50, 150]);
@@ -161,13 +140,30 @@ mod tests {
 
     #[test]
     fn a_split_without_a_small_cluster_takes_a_new_place() {
-        let plan = Plan::new(&[300, 50, 50], &[0.0, 1.0, 2.0], &column());
+        let plan = Plan::new(&[300, 50, 50], &[0.0, 1.0, 2.0], &column(), u64::MAX);
         assert_eq!((plan.merges, plan.splits), (vec![], vec![(0, 3)]));
     }
 
     #[test]
     fn small_clusters_stay_when_nothing_splits() {
-        assert!(Plan::new(&[100, 100, 5], &[0.0, 1.0, 2.0], &column()).is_empty());
+        assert!(
+            Plan::new(&[100, 100, 5], &[0.0, 1.0, 2.0], &column(), u64::MAX)
+                .splits
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn every_cluster_past_the_most_rows_splits() {
+        let sizes = [500; 12];
+        let centroids: Vec<f32> = (0..12).map(|c| c as f32).collect();
+        let plan = Plan::new(&sizes, &centroids, &column(), 400);
+        assert_eq!(plan.splits.len(), 12);
+        assert!(
+            Plan::new(&sizes, &centroids, &column(), 500)
+                .splits
+                .is_empty()
+        );
     }
 
     #[test]
@@ -178,7 +174,7 @@ mod tests {
             vectors: vec![1.0; 6],
             attributes: vec![Default::default(); 6],
         };
-        let (a, b) = split(cluster, &column());
-        assert_eq!((a.ids.len(), b.ids.len()), (3, 3));
+        let sides = sides(&cluster, &column());
+        assert_eq!(sides.iter().filter(|&&side| side == 0).count(), 3);
     }
 }

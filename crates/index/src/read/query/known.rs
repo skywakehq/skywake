@@ -154,6 +154,38 @@ impl Known {
         }
     }
 
+    pub(super) async fn settle_groups(
+        &mut self,
+        storage: &Storage,
+        groups: usize,
+    ) -> Result<usize> {
+        loop {
+            let (end, short) = self.groups_end(groups);
+            let known = self.order.len();
+            self.settle(storage, end + short).await?;
+            let now = self.groups_end(groups);
+            if now == (end, short) && (short == 0 || self.order.len() == known) {
+                return Ok(end);
+            }
+        }
+    }
+
+    fn groups_end(&self, groups: usize) -> (usize, usize) {
+        let (mut seen, mut end) = (0, 0);
+        while end < self.order.len() && seen < groups {
+            let score = self.order[end].0.to_bits();
+            while self
+                .order
+                .get(end)
+                .is_some_and(|&(s, _)| s.to_bits() == score)
+            {
+                end += 1;
+            }
+            seen += 1;
+        }
+        (end, groups - seen)
+    }
+
     pub(super) async fn load(
         &mut self,
         storage: &Storage,

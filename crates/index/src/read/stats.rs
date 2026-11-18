@@ -56,7 +56,7 @@ pub(crate) async fn stats(storage: &Storage, version: &Version) -> Result<Stats>
     for (name, column) in &ann.columns {
         let dims = version.schema.vectors.get(name).map_or(0, |c| c.dims);
         let table: Paged<ClusterRef> = column.table.open(storage).await?;
-        stats.clusters += column.table.len;
+        stats.clusters += column.groups;
         stats.bytes += 4 * dims as u64 * column.table.len;
         stats.bytes += table.iter().map(|c| c.bytes()).sum::<u64>();
     }

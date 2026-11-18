@@ -4,6 +4,7 @@ mod builder;
 pub(crate) mod directory;
 pub(crate) mod full;
 mod grow;
+mod pieces;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -13,7 +14,7 @@ use futures::{Stream, StreamExt, TryStreamExt, stream};
 pub(crate) use builder::spawn;
 pub use builder::{BuildPolicy, Builder};
 use full::full_build;
-use grow::grow;
+use grow::{Sizes, grow};
 
 use crate::filter;
 use crate::format;
@@ -25,6 +26,10 @@ use crate::vector::rabitq::Rotation;
 use crate::{Column, Element, Error, Kind, Result};
 
 const READ_AHEAD: usize = 16;
+
+const TRAINED: u64 = 100_000;
+
+const GROWN: u64 = 4;
 
 pub(crate) struct Settings {
     pub budget: usize,
@@ -70,8 +75,9 @@ pub(crate) async fn build(
     {
         if version.tail.is_empty() {
             grown = Some(ann.clone());
-        } else if small_tail(ann, &version) {
-            grown = grow(storage, &version, ann, budget, &mut written).await?;
+        } else if !retrain(ann, &version) {
+            let most = 2 * cluster_rows.max(1) as u64;
+            grown = grow(storage, &version, ann, Sizes { budget, most }, &mut written).await?;
         }
     }
     let incremental = grown.is_some();
@@ -152,7 +158,7 @@ pub(crate) async fn build(
     storage
         .save(branch, &written, |current| {
             let apply = match incremental {
-                true => current.ann == base,
+                true => same_clusters(current.ann.as_ref(), base.as_ref()),
                 false => current.covers() < covers || (full && current.ann == base),
             };
             let text_applies = current.text == version.text && current.columns == version.columns;
@@ -160,7 +166,7 @@ pub(crate) async fn build(
             (apply && text_applies && skip <= current.tail.len()).then(|| Version {
                 built: built.clone(),
                 tail: current.tail[skip..].to_vec(),
-                ann: ann.clone(),
+                ann: calibrated(ann.clone(), current.ann.as_ref(), incremental),
                 text: text.clone(),
                 columns: columns.clone(),
                 ..current.clone()
@@ -169,9 +175,37 @@ pub(crate) async fn build(
         .await
 }
 
-fn small_tail(ann: &Ann, version: &Version) -> bool {
+fn retrain(ann: &Ann, version: &Version) -> bool {
     let tail: u64 = version.tail.iter().map(|segment| segment.rows).sum();
-    ann.live > 0 && tail * 2 <= ann.live
+    ann.live == 0 || (ann.full_rows < TRAINED && ann.live + tail >= GROWN * ann.full_rows)
+}
+
+fn same_clusters(current: Option<&Ann>, base: Option<&Ann>) -> bool {
+    match (current, base) {
+        (Some(current), Some(base)) => {
+            let mut current = current.clone();
+            for (name, clusters) in &mut current.columns {
+                if let Some(old) = base.columns.get(name) {
+                    clusters.calibration = old.calibration.clone();
+                    clusters.calibrated = old.calibrated;
+                }
+            }
+            current == *base
+        }
+        (current, base) => current == base,
+    }
+}
+
+fn calibrated(mut ann: Option<Ann>, current: Option<&Ann>, incremental: bool) -> Option<Ann> {
+    if let (Some(ann), Some(current), true) = (&mut ann, current, incremental) {
+        for (name, clusters) in &mut ann.columns {
+            if let Some(now) = current.columns.get(name) {
+                clusters.calibration = now.calibration.clone();
+                clusters.calibrated = now.calibrated;
+            }
+        }
+    }
+    ann
 }
 
 pub(crate) fn segments<'a>(
@@ -222,11 +256,6 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) 
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|_| Error::Corrupt("the index build panicked".into()))
-}
-
-async fn assign(data: Vec<f32>, column: &Column, centroids: Arc<Vec<f32>>) -> Result<Vec<u32>> {
-    let (dims, metric) = (column.dims, column.metric);
-    blocking(move || ivf::assign(&data, dims, &centroids, metric)).await
 }
 
 async fn store_clusters(
