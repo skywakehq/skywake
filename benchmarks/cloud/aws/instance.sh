@@ -174,6 +174,11 @@ if [ "$TPUF" = 1 ]; then
     SKYWAKE_API_LISTEN=127.0.0.1:8080 SKYWAKE_API_PEER_URL=http://127.0.0.1:8080 \
     SKYWAKE_API_PEER_TOKEN=bench-peer-$RANDOM$RANDOM SKYWAKE_INDEX_CACHE_GB=200 \
     node apps/api/src/main.ts >"$LOGS/api-server.log" 2>&1 &
+  server=$!
+  (while kill -0 "$server" 2>/dev/null; do
+    echo "$(date -u +%H:%M:%S) rss $(($(ps -o rss= -p "$server") / 1024)) MB · free $(free -m | awk '/Mem:/ {print $7}') MB"
+    sleep 15
+  done; dmesg | grep -iE "out of memory|killed process" | tail -3) >"$RESULTS/memory.log" 2>&1 &
   until curl -sf http://127.0.0.1:8080/health >/dev/null; do sleep 1; done
   SKYWAKE_API_KEY=$(curl -sf -X POST http://127.0.0.1:8080/v1/orgs -H "authorization: Bearer $SKYWAKE_API_ADMIN_TOKEN" \
     -H 'content-type: application/json' -d '{"name":"bench-tpuf"}' |

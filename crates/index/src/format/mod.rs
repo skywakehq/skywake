@@ -6,6 +6,7 @@ pub(crate) mod directory;
 pub(crate) mod legacy;
 pub(crate) mod pages;
 pub(crate) mod rows;
+pub(crate) mod segment_ids;
 
 use std::collections::BTreeMap;
 

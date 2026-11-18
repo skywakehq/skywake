@@ -34,6 +34,7 @@ use crate::format::columns::stats::Totals;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
 use crate::format::legacy::{V10, V11, V12, V13, V14};
+use crate::format::segment_ids::SegmentIds;
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::ivf;
 use crate::{Error, Result, text};
@@ -249,16 +250,28 @@ impl Storage {
         if let Some(found) = self.cache.get(hash) {
             return Ok(found);
         }
-        let bytes = match self.disk_read(&self.chunks, hash, 0..u64::MAX).await {
-            Some(bytes) => bytes,
-            None => {
-                reads::count(From::Store);
-                self.chunks.objects.get_chunk(hash).await?
-            }
-        };
+        let bytes = self.chunk(hash).await?;
         let value = Arc::new(postcard::from_bytes(&bytes)?);
         self.cache.insert(hash, Arc::clone(&value), bytes.len());
         Ok(value)
+    }
+
+    pub(crate) async fn segment_ids(&self, hash: Hash) -> Result<Arc<SegmentIds>> {
+        let key = part(hash, "ids");
+        if let Some(found) = self.cache.get(key) {
+            return Ok(found);
+        }
+        let ids: Arc<SegmentIds> = Arc::new(postcard::from_bytes(&self.chunk(hash).await?)?);
+        self.cache.insert(key, Arc::clone(&ids), ids.weight());
+        Ok(ids)
+    }
+
+    async fn chunk(&self, hash: Hash) -> Result<Vec<u8>> {
+        if let Some(bytes) = self.disk_read(&self.chunks, hash, 0..u64::MAX).await {
+            return Ok(bytes);
+        }
+        reads::count(From::Store);
+        Ok(self.chunks.objects.get_chunk(hash).await?)
     }
 
     pub(crate) async fn get_all<T>(&self, hashes: Vec<Hash>) -> Result<Vec<Arc<T>>>

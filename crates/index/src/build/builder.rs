@@ -52,20 +52,20 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
         let mut calibrating = JoinSet::new();
         loop {
             while calibrating.try_join_next().is_some() {}
+            if calibrating.is_empty() && index.calibration_wanted().await {
+                let index = index.clone();
+                calibrating.spawn(async move {
+                    if let Err(error) = index.recalibrate().await {
+                        tracing::warn!(%error, branch = index.branch(), "index calibration failed");
+                    }
+                });
+            }
             match due(&index, &policy).await {
                 Ok(false) => failures = 0,
                 Ok(true) => match index.build_inner(false).await {
                     Ok(true) => {
                         failures = 0;
                         count.send_modify(|builds| *builds += 1);
-                        if calibrating.is_empty() && index.calibration_wanted().await {
-                            let index = index.clone();
-                            calibrating.spawn(async move {
-                                if let Err(error) = index.recalibrate().await {
-                                    tracing::warn!(%error, branch = index.branch(), "index calibration failed");
-                                }
-                            });
-                        }
                         continue;
                     }
                     Ok(false) => failures += 1,
