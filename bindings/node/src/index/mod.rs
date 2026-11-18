@@ -38,8 +38,10 @@ use crate::index_json::results::{
     IndexStats, fused_hit_to, group_to, hit_to, ranked_to, reads_to, row_to, search_hit_to,
     stats_to,
 };
+use crate::index_json::rows::{IndexRowsPlan, IndexRowsWritten, rows_from};
 use crate::index_json::schema::{IndexSchema, schema_from, schema_to};
 use crate::index_json::values::id_from;
+use crate::index_json::values::id_to;
 
 #[napi]
 pub struct Index {
@@ -186,6 +188,25 @@ impl Index {
         let docs = docs.into_iter().map(doc_from).collect::<Result<_>>()?;
         let branch = self.branch(&branch).await?;
         branch.upsert(docs).await.map_err(fail_index)
+    }
+
+    #[napi]
+    pub async fn upsert_rows(
+        &self,
+        branch: String,
+        body: napi::bindgen_prelude::Buffer,
+        plan: IndexRowsPlan,
+    ) -> Result<Option<IndexRowsWritten>> {
+        let Some(rows) = rows_from(&body, &plan) else {
+            return Ok(None);
+        };
+        let ids = rows.docs.iter().map(|doc| id_to(doc.id.clone())).collect();
+        let branch = self.branch(&branch).await?;
+        branch.upsert(rows.docs).await.map_err(fail_index)?;
+        Ok(Some(IndexRowsWritten {
+            ids,
+            bytes: rows.bytes as f64,
+        }))
     }
 
     #[napi]

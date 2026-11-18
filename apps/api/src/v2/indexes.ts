@@ -221,6 +221,18 @@ export function registerIndexes(api: V2) {
     return c.body(null, 204);
   });
 
+  api.post("/indexes/:index/rows", async (c, next) => {
+    const index = new Indexes(await c.var.scope(), c.req.param("index"));
+    const path = `${index.branch(c.req.query("branch") ?? MAIN)}/rows`;
+    const bytes = await c.req.arrayBuffer();
+    const done = await index.scope.v1.send("POST", path, { bytes }).catch((error: unknown) => {
+      if (error instanceof Failure && error.status === 404) return null;
+      throw error;
+    });
+    if (done?.status === 200) return c.json(done.body as object, 200);
+    await next();
+  });
+
   api.openapi(routes.upsertRows, async (c) => {
     const index = await open(c, c.req.valid("param").index);
     const { branch } = c.req.valid("query");

@@ -17,7 +17,7 @@ futures.workspace = true
 object_store.workspace = true
 napi = { workspace = true, features = ["serde-json"] }
 napi-derive.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 
 [build-dependencies]
 napi-build.workspace = true

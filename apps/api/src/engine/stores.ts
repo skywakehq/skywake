@@ -21,6 +21,7 @@ const WRITES: Record<string, number> = {
   dropAttributes: 0,
   merge: 0,
   upsert: 0,
+  upsertRows: 0,
   delete: 0,
   write: 0,
   deleteBranch: 0,
@@ -194,7 +195,7 @@ export function inFolder(store: string, folder: string) {
   return `${path.replace(/\/+$/, "")}/${folder}${settings}`;
 }
 
-const BUILT = new Set(["upsert", "delete", "write", "merge"]);
+const BUILT = new Set(["upsert", "upsertRows", "delete", "write", "merge"]);
 
 function built(index: Index, written: (branch: string) => void): Index {
   return new Proxy(index, {
