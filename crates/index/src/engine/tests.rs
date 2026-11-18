@@ -366,7 +366,7 @@ async fn columns_answer_like_the_row_path() {
 async fn projections_answer_like_the_row_path() {
     let schema = Schema::new()
         .attribute("city", Kind::String)
-        .attribute("score", Kind::Number)
+        .attribute("score", Kind::Int)
         .text("body", crate::TextOptions::default());
     let engine = Options {
         columns: true,
@@ -384,7 +384,7 @@ async fn projections_answer_like_the_row_path() {
         ids.map(|id| {
             let mut doc = Doc::new(id).attribute("city", format!("c{}", draw.below(6)));
             if draw.below(10) != 0 {
-                doc = doc.attribute("score", draw.below(300) as f64 / 4.0);
+                doc = doc.attribute("score", draw.below(300) as i64 - 50);
             }
             doc
         })
@@ -405,7 +405,7 @@ async fn projections_answer_like_the_row_path() {
         order
     };
     let counting = |draw: &mut Draw| {
-        let low = draw.below(300) as f64 / 4.0;
+        let low = draw.below(1200) as f64 / 4.0 - 50.0;
         let mut all = vec![city(draw), Filter::Gt("score".into(), Value::Number(low))];
         if draw.below(2) == 0 {
             all.push(Filter::Lte(

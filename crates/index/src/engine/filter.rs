@@ -209,8 +209,11 @@ impl<'a> Page<'a> {
         let Some(partial) = partial else {
             return self.select(filter);
         };
-        let spans: Vec<Hash> = (partial.names.iter())
-            .map(|name| columns::key(&self.resolved.columns[name.as_str()].pages[self.page].span))
+        let spans: Vec<(Hash, Hash)> = (partial.names.iter())
+            .map(|name| {
+                let column = &self.resolved.columns[name.as_str()];
+                (columns::key(&column.pages[self.page].span), column.source)
+            })
             .collect();
         let key = Hash::of(&postcard::to_stdvec(&(partial.predicate, spans)).unwrap_or_default());
         let cache = partial.storage.cache();

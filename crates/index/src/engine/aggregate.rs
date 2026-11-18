@@ -13,7 +13,9 @@ use crate::layout::scalar;
 use crate::read::snapshot::{Aggregate, Measure, Tallied, Tally, keys_of};
 use crate::read::tail::{Row as TailRow, Tail};
 use crate::store::Storage;
-use crate::{Filter, Result, Value};
+use crate::{Filter, Kind, Result, Schema, Value};
+
+const DENSE_TALLIES: usize = 1 << 18;
 
 pub(crate) async fn aggregate(
     storage: &Storage,
@@ -37,7 +39,16 @@ pub(crate) async fn aggregate(
     let newest = tail.newest();
     let dead = Dead::find(storage, version, &resolved, newest.keys().copied()).await?;
     let mut groups = Groups::new(aggregate, &resolved);
-    if let Some(count) = projected_count(storage, &resolved, aggregate, filter, &dead).await? {
+    if let Some(count) = projected_count(
+        storage,
+        &resolved,
+        &version.schema,
+        aggregate,
+        filter,
+        &dead,
+    )
+    .await?
+    {
         if count > 0 {
             groups.count(0, count);
         }
@@ -105,6 +116,7 @@ fn add_tail(
 async fn projected_count(
     storage: &Storage,
     resolved: &Resolved,
+    schema: &Schema,
     aggregate: &Aggregate,
     filter: Option<&Filter>,
     dead: &Dead,
@@ -141,7 +153,7 @@ async fn projected_count(
     };
     let mut keyed = Vec::new();
     for &(_, value, bound) in &bounds {
-        let Some(key) = scalar(value) else {
+        let Some(key) = scalar(value).filter(|_| same_kind(schema, sort, value)) else {
             return Ok(None);
         };
         keyed.push((key, bound));
@@ -179,6 +191,15 @@ async fn projected_count(
         }
     }
     Ok(Some(count))
+}
+
+fn same_kind(schema: &Schema, name: &str, value: &Value) -> bool {
+    matches!(
+        (schema.attributes.get(name), value),
+        (Some(Kind::Number), Value::Number(_))
+            | (Some(Kind::Int), Value::Int(_))
+            | (Some(Kind::Datetime), Value::Datetime(_))
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -234,6 +255,9 @@ impl<'a> Groups<'a> {
             [] => Some(None),
             [name] => (resolved.columns.get_key_value(name))
                 .filter(|(_, column)| column.layout == Layout::Dictionary)
+                .filter(|(_, column)| {
+                    (column.dictionary.values.len() + 1) * measures.len().max(1) <= DENSE_TALLIES
+                })
                 .map(|(name, column)| Some((name.as_str(), column))),
             _ => None,
         };

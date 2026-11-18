@@ -23,6 +23,7 @@ pub(crate) struct Resolved {
 pub(crate) struct Column {
     pub layout: Layout,
     pub dictionary: Arc<Dictionary>,
+    pub source: Hash,
     pub totals: Arc<Totals>,
     pub pages: Vec<PageRef>,
     pub leaders: Option<Arc<Leaders>>,
@@ -77,6 +78,7 @@ impl Resolved {
             let column = Column {
                 layout: column.layout,
                 dictionary,
+                source: column.dictionary,
                 totals,
                 pages,
                 leaders,
