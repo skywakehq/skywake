@@ -67,8 +67,7 @@ export async function query(index: Indexes, asked: Query) {
 
   if (asked.text) {
     const cached = await known();
-    const columns =
-      embedColumn(cached) || textFields(cached).length > 0 ? cached : await schema();
+    const columns = embedColumn(cached) || textFields(cached).length > 0 ? cached : await schema();
     const embed = embedColumn(columns);
     const words = textFields(columns);
     const meaning = embed && mode !== "keywords";

@@ -120,11 +120,9 @@ export class Indexes {
       if (!(error instanceof Failure && error.status === 404)) throw error;
       if (branch !== MAIN) throw await this.scope.notFound("index", this.name);
       await this.create(firstSchema(rows, await this.embedding())).catch((error: unknown) => {
-        if (!(
-          error instanceof Failure &&
-          error.status === 409 &&
-          error.details.hint === undefined
-        )) {
+        if (
+          !(error instanceof Failure && error.status === 409 && error.details.hint === undefined)
+        ) {
           throw error;
         }
       });

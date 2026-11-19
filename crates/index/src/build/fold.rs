@@ -18,7 +18,6 @@ use crate::format::{BLOB_MAX, Segment, SegmentRef, Version, lists, pack};
 use crate::store::{Storage, Written};
 use crate::{Attributes, Id, Result, Schema};
 
-/// Built writes fold once they reach this share of the parts.
 const RATIO: u64 = 8;
 
 const PENDING_PARTS: usize = 4;
@@ -173,7 +172,6 @@ fn part(schema: &Schema, rows: &[Write]) -> Segment {
     }
 }
 
-/// The built writes in id order, newest write of each id only.
 struct Incoming<'r> {
     merged: Merged<'r, Write>,
     next: Option<Write>,

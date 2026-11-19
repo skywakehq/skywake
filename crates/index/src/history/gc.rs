@@ -314,7 +314,6 @@ impl Reachable {
         Ok(())
     }
 
-    /// The entries of a list whose tree this walk has not marked yet.
     async fn list<T: Entry>(&mut self, objects: &Objects, list: &List<T>) -> Result<Vec<T>> {
         if list.root().is_some_and(|root| self.blobs.contains(&root)) {
             return Ok(Vec::new());

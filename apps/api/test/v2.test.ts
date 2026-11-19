@@ -227,13 +227,17 @@ test(
   },
 );
 
-const base64 = (floats: number[]) => Buffer.from(new Float32Array(floats).buffer).toString("base64");
+const base64 = (floats: number[]) =>
+  Buffer.from(new Float32Array(floats).buffer).toString("base64");
 
 test("rows: base64 vectors are exact on both paths and checked", { skip }, async () => {
   const { api } = await started(false);
   const encoded = "/indexes/vecs/rows?vector_encoding=base64";
   assert.equal((await api("POST", encoded, { id: 1, v: base64([1, 2]) })).status, 400);
-  const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [{ name: "tag", type: "string" }] };
+  const schema = {
+    vectors: [{ name: "v", dims: 2 }],
+    attributes: [{ name: "tag", type: "string" }],
+  };
   ok(await api("POST", "/indexes", { name: "vecs", schema, embed: false }), 201);
 
   const exact = [0.1, -3.4028234663852886e38];

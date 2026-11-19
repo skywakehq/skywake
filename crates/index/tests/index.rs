@@ -550,9 +550,6 @@ async fn an_incremental_build_rewrites_only_the_clusters_it_touches() {
     index.build().await.unwrap();
     let clusters_written = count(&store, "blobs").await - clusters_before;
     let pages_written = count(&store, "chunks").await - pages_before;
-    // Six pieces at most, against 50 clusters for a full build; a page each
-    // of the cluster table, the segment list and the row map (2 pages), and
-    // the centroids with the new pieces and the origin they keep.
     assert!(clusters_written <= 6, "{clusters_written} clusters written");
     assert!(pages_written <= 6, "{pages_written} pages written");
 

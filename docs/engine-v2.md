@@ -15,18 +15,18 @@ turbopuffer v3, p90, 10M documents per namespace in GCP us-central1, one load ge
 8 QPS for 10 minutes; hot is a 100% cache hit ratio, cold is the cache disabled
 ([turbopuffer.com/v3](https://turbopuffer.com/v3), Nov 16 2026). They publish p90 only.
 
-| Workload                          |   v3 p90 |   v2 p90 | Their mechanism                                    |
-| --------------------------------- | -------: | -------: | -------------------------------------------------- |
-| vector, hot                       |    20 ms |    23 ms | SPFresh clusters                                   |
-| vector, cold                      | 1,255 ms | 1,324 ms | "inherently noisy", not a v3 target                |
-| FTS, hot                          |    18 ms |    19 ms | vectorized MAXSCORE on a shared posting layout     |
-| FTS, cold                         |   306 ms |   364 ms | statistics and postings in one round trip          |
-| count, hot                        |    22 ms |  23.5 ms | index statistics                                   |
-| count, cold                       |    29 ms |    85 ms | index statistics                                   |
-| filtered count, hot               |    22 ms |  23.5 ms | popcount of a filter bitmap                        |
-| filtered count, cold              |   128 ms |   138 ms | bitmaps built page by page                         |
-| grouped count, 1,000 groups, hot  |   521 ms | 26,082 ms | hash map over contiguous columns                   |
-| order by attribute, filtered, hot |    22 ms |   218 ms | dynamic top-k filter                               |
+| Workload                          |   v3 p90 |    v2 p90 | Their mechanism                                |
+| --------------------------------- | -------: | --------: | ---------------------------------------------- |
+| vector, hot                       |    20 ms |     23 ms | SPFresh clusters                               |
+| vector, cold                      | 1,255 ms |  1,324 ms | "inherently noisy", not a v3 target            |
+| FTS, hot                          |    18 ms |     19 ms | vectorized MAXSCORE on a shared posting layout |
+| FTS, cold                         |   306 ms |    364 ms | statistics and postings in one round trip      |
+| count, hot                        |    22 ms |   23.5 ms | index statistics                               |
+| count, cold                       |    29 ms |     85 ms | index statistics                               |
+| filtered count, hot               |    22 ms |   23.5 ms | popcount of a filter bitmap                    |
+| filtered count, cold              |   128 ms |    138 ms | bitmaps built page by page                     |
+| grouped count, 1,000 groups, hot  |   521 ms | 26,082 ms | hash map over contiguous columns               |
+| order by attribute, filtered, hot |    22 ms |    218 ms | dynamic top-k filter                           |
 
 Datasets: Cohere Wikipedia 1024-d; MS MARCO v2.1; synthetic rows with numeric `popularity` and 100 categories;
 a string attribute with 1,000 values. No selectivity, top_k, or query terms are published.
@@ -77,15 +77,15 @@ to beat (3.0).
 
 ### Where each workload loses time
 
-| Workload           | Cost today                                                                                |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| every hot row      | a head GET per query, and an O(tail) map per query                                         |
+| Workload                 | Cost today                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| every hot row            | a head GET per query, and an O(tail) map per query                                   |
 | count, filtered, grouped | a full scan of codes and attributes, a `BTreeMap` and tail probe per row             |
-| order by           | the same scan, plus materializing every passing row                                         |
-| FTS hot            | single-threaded WAND; per-document hash-set probes for dead and replaced docs               |
-| FTS cold           | megabytes per query (fieldnorms, hot blob), a Tantivy open, per-hit document fetches        |
-| vector             | scalar RaBitQ; per-row tail probes; cold reads ids and checksums it does not need           |
-| no-vector indexes  | full segment replay for every query                                                        |
+| order by                 | the same scan, plus materializing every passing row                                  |
+| FTS hot                  | single-threaded WAND; per-document hash-set probes for dead and replaced docs        |
+| FTS cold                 | megabytes per query (fieldnorms, hot blob), a Tantivy open, per-hit document fetches |
+| vector                   | scalar RaBitQ; per-row tail probes; cold reads ids and checksums it does not need    |
+| no-vector indexes        | full segment replay for every query                                                  |
 
 ## 3. The design
 
@@ -135,14 +135,14 @@ values a sparse **histogram** (code → count); for list kinds the same over ite
 HyperLogLog for the planner. The column directory also carries **column totals**: the merged histogram,
 global min and max, counts. The Version carries `rows`, the exact live count at build.
 
-| Query                                       | Answered from                                                 |
-| ------------------------------------------- | ------------------------------------------------------------- |
-| `count(*)`                                  | `rows` plus the tail correction (3.4)                         |
-| `count where category = x`                  | totals plus the tail correction                               |
-| `count group by s`                          | totals plus the tail correction                               |
-| `count where a = x and b > y`               | composite projection, O(log n) (3.6), or pages: fully covered pages add their histogram, boundary pages scan |
-| `count group by s where popularity > p`     | fully covered pages add histograms; boundary pages scan       |
-| `min`, `max`                                | totals, unless the tail touches the extreme                   |
+| Query                                   | Answered from                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `count(*)`                              | `rows` plus the tail correction (3.4)                                                                        |
+| `count where category = x`              | totals plus the tail correction                                                                              |
+| `count group by s`                      | totals plus the tail correction                                                                              |
+| `count where a = x and b > y`           | composite projection, O(log n) (3.6), or pages: fully covered pages add their histogram, boundary pages scan |
+| `count group by s where popularity > p` | fully covered pages add histograms; boundary pages scan                                                      |
+| `min`, `max`                            | totals, unless the tail touches the extreme                                                                  |
 
 ### 3.3 Vectorized execution
 
@@ -300,18 +300,18 @@ replaced:
 
 ### 6.3 Targets (p90, end to end)
 
-| Workload                | tpuf v3 | Target, S3 Standard       | Target, fast tier | Margin    |
-| ----------------------- | ------: | ------------------------- | ----------------- | --------- |
-| count, hot              |   22 ms | 1.5 ms                    | same              | 15×       |
-| count, cold             |   29 ms | 16–20 ms                  | 5–6 ms            | 1.5–5×    |
-| filtered count, hot     |   22 ms | 2 ms                      | same              | 11×       |
-| filtered count, cold    |  128 ms | equality 40 ms, conjunction 70 ms | 12 / 35 ms | 2–10×     |
-| grouped count, hot      |  521 ms | 2 ms unfiltered, 8 ms filtered | same         | 65–250×   |
-| order by, filtered, hot |   22 ms | 2 ms                      | same              | 11×       |
-| vector, hot             |   20 ms | 5 ms                      | same              | 4×        |
-| vector, cold            | 1,255 ms | 300 ms                   | 120 ms            | 4–10×     |
-| FTS, hot                |   18 ms | 4 ms                      | same              | 4.5×      |
-| FTS, cold               |  306 ms | 110 ms                    | 35 ms             | 3–9×      |
+| Workload                |  tpuf v3 | Target, S3 Standard               | Target, fast tier | Margin  |
+| ----------------------- | -------: | --------------------------------- | ----------------- | ------- |
+| count, hot              |    22 ms | 1.5 ms                            | same              | 15×     |
+| count, cold             |    29 ms | 16–20 ms                          | 5–6 ms            | 1.5–5×  |
+| filtered count, hot     |    22 ms | 2 ms                              | same              | 11×     |
+| filtered count, cold    |   128 ms | equality 40 ms, conjunction 70 ms | 12 / 35 ms        | 2–10×   |
+| grouped count, hot      |   521 ms | 2 ms unfiltered, 8 ms filtered    | same              | 65–250× |
+| order by, filtered, hot |    22 ms | 2 ms                              | same              | 11×     |
+| vector, hot             |    20 ms | 5 ms                              | same              | 4×      |
+| vector, cold            | 1,255 ms | 300 ms                            | 120 ms            | 4–10×   |
+| FTS, hot                |    18 ms | 4 ms                              | same              | 4.5×    |
+| FTS, cold               |   306 ms | 110 ms                            | 35 ms             | 3–9×    |
 
 A target is met when two runs both beat it.
 
@@ -433,11 +433,13 @@ same on any cloud and that an agent can drive as easily as a person.
    the bucket and Postgres. Helm values, Terraform variables and the Compose file are all rendered from it. Its
    schema is published, so the docs, the CLI and agents read the same source.
 3. **`skywake deploy doctor`.** It checks a running or planned deployment:
+
    - the bucket's conditional writes, list and range reads, and the time to read from it;
    - Postgres version and `wal_level`;
    - clock skew, ingress and TLS, and that the image versions match.
 
    Each failure comes with the exact fix. The docs' troubleshooting page is generated from these checks.
+
 4. **What each target needs underneath.**
    - `local` and `docker`: the published images instead of building from a checkout. `scripts/start.sh` and
      `scripts/dev.sh` stay for working on Skywake itself.
@@ -479,13 +481,13 @@ A phase lands only when no number regresses by more than 10% (p90 latency, bytes
 
 ### Risks
 
-| Risk                                           | Mitigation                                                               |
-| ---------------------------------------------- | ------------------------------------------------------------------------ |
-| our BM25 drifts from Tantivy's ranking          | score oracle at 1e-4, MS MARCO quality gate in every phase-5 commit      |
-| slot owners for index heads widen the blast radius of a cache-tier bug | bucket fallback; owners flush within seconds; oracle on failover |
-| backfill doubles attribute bytes for a release  | measured in phase 1; N+2 removes the old section                         |
-| fast tier is single-AZ and pricier              | optional, metadata only, the bucket stays the record                     |
-| targets assume the API floor is ~1.5 ms        | phase 4 measures it before hot claims are made                           |
+| Risk                                                                   | Mitigation                                                          |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| our BM25 drifts from Tantivy's ranking                                 | score oracle at 1e-4, MS MARCO quality gate in every phase-5 commit |
+| slot owners for index heads widen the blast radius of a cache-tier bug | bucket fallback; owners flush within seconds; oracle on failover    |
+| backfill doubles attribute bytes for a release                         | measured in phase 1; N+2 removes the old section                    |
+| fast tier is single-AZ and pricier                                     | optional, metadata only, the bucket stays the record                |
+| targets assume the API floor is ~1.5 ms                                | phase 4 measures it before hot claims are made                      |
 
 ## 8. Results
 
@@ -495,27 +497,27 @@ p90 in ms. "Today" is commit `7c1692d` on the slow store (60 ms a request, 64 in
 1M rows with 64-d vectors; hot rows include the head read (`hot+head`), cold rows open a fresh index with
 empty caches. Full tables: `benchmarks/results/phase0-attrs-1m`.
 
-| Workload                    | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
-| --------------------------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
-| count, hot                  |      22 |   294 |      63 |         |         |         |      62 |         |
-| count, cold                 |      29 | 1,778 |     233 |         |         |         |     143 |         |
-| filtered count, hot         |      22 |    88 |      68 |         |         |         |      67 |         |
-| filtered count, cold        |     128 | 1,526 |     218 |         |         |         |     146 |         |
-| grouped count (1,000), hot  |     521 |   422 |      66 |         |         |         |      65 |         |
-| order by, filtered, hot     |      22 |    87 |      87 |      75 |         |         |      77 |         |
+| Workload                   | tpuf v3 | Today | Phase 2 | Phase 3 | Phase 4 | Phase 5 | Phase 6 | Phase 7 |
+| -------------------------- | ------: | ----: | ------: | ------: | ------: | ------: | ------: | ------: |
+| count, hot                 |      22 |   294 |      63 |         |         |         |      62 |         |
+| count, cold                |      29 | 1,778 |     233 |         |         |         |     143 |         |
+| filtered count, hot        |      22 |    88 |      68 |         |         |         |      67 |         |
+| filtered count, cold       |     128 | 1,526 |     218 |         |         |         |     146 |         |
+| grouped count (1,000), hot |     521 |   422 |      66 |         |         |         |      65 |         |
+| order by, filtered, hot    |      22 |    87 |      87 |      75 |         |         |      77 |         |
 
 At 10M rows (load 400 s, build 252 s, index 8.1 GB; `phase0-attrs-10m`, hot rows that overlapped other
 work rerun idle in `phase0-attrs-10m-rerun`), p90 in ms:
 
-| Query                        | hot+head |   cold |
-| ---------------------------- | -------: | -----: |
-| count                        |    2,717 | 17,348 |
-| count, category = c          |      128 | 13,618 |
-| count, category and range    |      137 | 14,726 |
-| grouped count (1,000)        |    4,040 | 17,061 |
-| grouped count, range         |      667 | 15,210 |
-| order by                     |    5,235 | 19,695 |
-| order by, category = c       |      164 | 14,848 |
+| Query                     | hot+head |   cold |
+| ------------------------- | -------: | -----: |
+| count                     |    2,717 | 17,348 |
+| count, category = c       |      128 | 13,618 |
+| count, category and range |      137 | 14,726 |
+| grouped count (1,000)     |    4,040 | 17,061 |
+| grouped count, range      |      667 | 15,210 |
+| order by                  |    5,235 | 19,695 |
+| order by, category = c    |      164 | 14,848 |
 
 Every cold query at 10M reads 884 MB in 5,011 GETs over ~165 waves.
 
@@ -524,13 +526,13 @@ query reads them yet, so its gate is build time and bytes, not query latency.
 
 Phase 1 gate at 1M rows on the slow store, against phase 0 (`phase1b-attrs-1m-columns-off`, `-on`):
 
-| Setup       | Phase 0 | Columns off | Columns on       |
-| ----------- | ------: | ----------: | ---------------: |
-| build       |  13.3 s |      13.3 s |  13.7 s (+3%)    |
-| build GETs  |   1,306 |       1,306 |            1,306 |
-| build PUTs  |   1,510 |       1,510 |            1,559 |
-| index       |  802 MB |      802 MB |  822 MB (+2.5%)  |
-| peak memory |  1.6 GB |      1.5 GB |           1.5 GB |
+| Setup       | Phase 0 | Columns off |     Columns on |
+| ----------- | ------: | ----------: | -------------: |
+| build       |  13.3 s |      13.3 s |   13.7 s (+3%) |
+| build GETs  |   1,306 |       1,306 |          1,306 |
+| build PUTs  |   1,510 |       1,510 |          1,559 |
+| index       |  802 MB |      802 MB | 822 MB (+2.5%) |
+| peak memory |  1.6 GB |      1.5 GB |         1.5 GB |
 
 Nothing regresses past the gate. A full build encodes column pages from each group of clusters while it fills
 them, so it reads nothing back; a first version that read every cluster again cost +16% build time.
@@ -539,15 +541,15 @@ attributes.
 
 Phase 2 gate at 1M rows on the slow store with columns on, against phase 0 (`phase2-attrs-1m`), p90 in ms:
 
-| Query                        | hot, phase 0 | hot | hot+head, phase 0 | hot+head | cold, phase 0 |  cold |
-| ---------------------------- | -----------: | --: | ----------------: | -------: | ------------: | ----: |
-| count                        |          238 | 0.0 |               294 |       63 |         1,778 |   233 |
-| count, category = c          |         10.7 | 2.5 |                88 |       68 |         1,526 |   218 |
-| count, category and range    |          7.6 | 6.8 |                82 |       79 |         1,468 |   366 |
-| grouped count (1,000)        |          348 | 0.8 |               422 |       66 |         1,982 |   212 |
-| grouped count, range         |         48.5 | 3.9 |               117 |       80 |         1,470 |   365 |
-| order by                     |          461 | 477 |               532 |      528 |         2,111 | 2,014 |
-| order by, category = c       |          8.8 |  11 |                87 |       87 |         1,512 | 1,506 |
+| Query                     | hot, phase 0 | hot | hot+head, phase 0 | hot+head | cold, phase 0 |  cold |
+| ------------------------- | -----------: | --: | ----------------: | -------: | ------------: | ----: |
+| count                     |          238 | 0.0 |               294 |       63 |         1,778 |   233 |
+| count, category = c       |         10.7 | 2.5 |                88 |       68 |         1,526 |   218 |
+| count, category and range |          7.6 | 6.8 |                82 |       79 |         1,468 |   366 |
+| grouped count (1,000)     |          348 | 0.8 |               422 |       66 |         1,982 |   212 |
+| grouped count, range      |         48.5 | 3.9 |               117 |       80 |         1,470 |   365 |
+| order by                  |          461 | 477 |               532 |      528 |         2,111 | 2,014 |
+| order by, category = c    |          8.8 |  11 |                87 |       87 |         1,512 | 1,506 |
 
 Cold counts read 1.4 MB in 55 GETs and 3 waves instead of 87 MB in 507 GETs and 19 waves; counts that scan
 pages read 20 MB in 59 GETs and 5 waves. Hot+head is now one head read plus the query. Order by is unchanged
@@ -568,10 +570,10 @@ Left for phase 8: column blobs keep a rewritten page's bytes until rebuilt, and 
 
 Phase 3 gate at 1M rows on the slow store with columns on, against phase 2 (`phase3-attrs-1m`), p90 in ms:
 
-| Query                        | hot, phase 2 | hot | hot+head, phase 2 | hot+head | cold, phase 2 | cold |
-| ---------------------------- | -----------: | --: | ----------------: | -------: | ------------: | ---: |
-| order by                     |          477 | 1.4 |               528 |       69 |         2,014 |  405 |
-| order by, category = c       |           11 | 4.1 |                87 |       75 |         1,506 |  642 |
+| Query                  | hot, phase 2 | hot | hot+head, phase 2 | hot+head | cold, phase 2 | cold |
+| ---------------------- | -----------: | --: | ----------------: | -------: | ------------: | ---: |
+| order by               |          477 | 1.4 |               528 |       69 |         2,014 |  405 |
+| order by, category = c |           11 | 4.1 |                87 |       75 |         1,506 |  642 |
 
 Order by visits pages best bound first using the page min or max, keeps a top-k threshold that skips pages
 and rows that cannot win, reads only the sort keys of selected rows, and reads `include`d columns for the
@@ -584,15 +586,15 @@ for the build, and runs each family open loop at 8 QPS for 30 s after 10 s of wa
 read lease and skips the head. The API runs on a laptop against a local folder store and the dev Postgres,
 with columns on. p90 in ms; "back to back" is curl with no gap between requests:
 
-| Query                        | engine, hot | API, first run | API, 8 QPS | API, back to back |
-| ---------------------------- | ----------: | -------------: | ---------: | ----------------: |
-| count                        |         0.0 |            9.8 |        3.6 |              0.78 |
-| count, category = c          |         2.5 |           11.5 |        6.9 |                   |
-| count, category and range    |         6.8 |           21.5 |         16 |                   |
-| grouped count (1,000)        |         0.8 |             13 |         11 |               2.3 |
-| grouped count, range         |         3.9 |           23.5 |         20 |                   |
-| order by                     |         1.4 |           11.3 |        8.5 |               1.8 |
-| order by, category = c       |         4.1 |             17 |         16 |                   |
+| Query                     | engine, hot | API, first run | API, 8 QPS | API, back to back |
+| ------------------------- | ----------: | -------------: | ---------: | ----------------: |
+| count                     |         0.0 |            9.8 |        3.6 |              0.78 |
+| count, category = c       |         2.5 |           11.5 |        6.9 |                   |
+| count, category and range |         6.8 |           21.5 |         16 |                   |
+| grouped count (1,000)     |         0.8 |             13 |         11 |               2.3 |
+| grouped count, range      |         3.9 |           23.5 |         20 |                   |
+| order by                  |         1.4 |           11.3 |        8.5 |               1.8 |
+| order by, category = c    |         4.1 |             17 |         16 |                   |
 
 Cut from the API (`phase4-api-1m-direct`): v2 counts rechecked the API key in Postgres on every call and
 emptied the key cache, so the inner v1 call looked it up again; v2 counts and aggregates read the index's
@@ -610,20 +612,20 @@ laptop. Warm is 1,000 dev queries in-process on a local store; cold opens a fres
 store (60 ms a request, 64 in flight). Posting files are written when `Options.postings` is on (off by default,
 `SKYWAKE_INDEX_POSTINGS=on` in the API) (`phase4-text-msmarco`, `phase5-text-msmarco-off`, `phase5-text-msmarco`):
 
-| MS MARCO, 8.8M             | tpuf v3 | Phase 4 | Postings off | Postings on      |
-| -------------------------- | ------: | ------: | -----------: | ---------------: |
-| warm p50, ms               |         |     2.4 |          2.4 |              0.6 |
-| warm p90, ms               |      18 |     9.7 |          9.7 |              2.0 |
-| warm p99, ms               |         |    25.7 |         24.1 |              4.2 |
-| cold p90, ms               |     306 |     287 |          295 |              273 |
-| cold waves, mean / most    |         |   4 / 4 |        4 / 4 |         3.88 / 4 |
-| cold GETs                  |         |    38.2 |         38.2 |             15.2 |
-| cold bytes                 |         | 23.0 MB |      23.0 MB |          16.1 MB |
-| MRR@10, dev small          |         |  0.1835 |       0.1834 |           0.1836 |
-| nDCG@10, dev small         |         |  0.2281 |       0.2281 |           0.2282 |
-| MRR@10 / nDCG@10, DL19     |         | 0.6940 / 0.5064 | same  |             same |
-| build                      |         |  67.2 s |       67.8 s |   77.8 s (+16%)  |
-| index                      |         | 6,069 MB |    6,069 MB | 7,097 MB (+17%)  |
+| MS MARCO, 8.8M          | tpuf v3 |         Phase 4 | Postings off |     Postings on |
+| ----------------------- | ------: | --------------: | -----------: | --------------: |
+| warm p50, ms            |         |             2.4 |          2.4 |             0.6 |
+| warm p90, ms            |      18 |             9.7 |          9.7 |             2.0 |
+| warm p99, ms            |         |            25.7 |         24.1 |             4.2 |
+| cold p90, ms            |     306 |             287 |          295 |             273 |
+| cold waves, mean / most |         |           4 / 4 |        4 / 4 |        3.88 / 4 |
+| cold GETs               |         |            38.2 |         38.2 |            15.2 |
+| cold bytes              |         |         23.0 MB |      23.0 MB |         16.1 MB |
+| MRR@10, dev small       |         |          0.1835 |       0.1834 |          0.1836 |
+| nDCG@10, dev small      |         |          0.2281 |       0.2281 |          0.2282 |
+| MRR@10 / nDCG@10, DL19  |         | 0.6940 / 0.5064 |         same |            same |
+| build                   |         |          67.2 s |       67.8 s |   77.8 s (+16%) |
+| index                   |         |        6,069 MB |     6,069 MB | 7,097 MB (+17%) |
 
 With postings off nothing moves (`compare.py`: 0 numbers worse). Quality differs in the fourth decimal between
 runs of the same code, because documents with equal scores come back in the order Tantivy numbered them. The
@@ -656,18 +658,18 @@ parsing on the async runtime.
 Phase 5 gaps closed on the same branch (postings on, all 8.8M passages, same harness; `phase5-text-msmarco`
 is `d9250e5`):
 
-| MS MARCO, 8.8M             | tpuf v3 | Phase 4  | d9250e5          | Gaps closed     |
-| -------------------------- | ------: | -------: | ---------------: | --------------: |
-| warm p50, ms               |         |      2.4 |              0.6 |             0.5 |
-| warm p90, ms               |      18 |      9.7 |              2.0 |             1.9 |
-| warm p99, ms               |         |     25.7 |              4.2 |             4.1 |
-| cold p90, ms               |     306 |      287 |              273 |             229 |
-| cold waves, mean / most    |         |    4 / 4 |         3.88 / 4 |           3 / 3 |
-| cold GETs                  |         |     38.2 |             15.2 |            15.6 |
-| cold bytes                 |         |  23.0 MB |          16.1 MB |         21.4 MB |
-| MRR@10 / nDCG@10, dev      |         | 0.1835 / 0.2281 | 0.1836 / 0.2282 | 0.1837 / 0.2283 |
-| build                      |         |   67.2 s |   77.8 s (+16%)  |  67.1 s (0%)    |
-| index                      |         | 6,069 MB | 7,097 MB (+17%)  | 6,646 MB (+9.5%) |
+| MS MARCO, 8.8M          | tpuf v3 |         Phase 4 |         d9250e5 |      Gaps closed |
+| ----------------------- | ------: | --------------: | --------------: | ---------------: |
+| warm p50, ms            |         |             2.4 |             0.6 |              0.5 |
+| warm p90, ms            |      18 |             9.7 |             2.0 |              1.9 |
+| warm p99, ms            |         |            25.7 |             4.2 |              4.1 |
+| cold p90, ms            |     306 |             287 |             273 |              229 |
+| cold waves, mean / most |         |           4 / 4 |        3.88 / 4 |            3 / 3 |
+| cold GETs               |         |            38.2 |            15.2 |             15.6 |
+| cold bytes              |         |         23.0 MB |         16.1 MB |          21.4 MB |
+| MRR@10 / nDCG@10, dev   |         | 0.1835 / 0.2281 | 0.1836 / 0.2282 |  0.1837 / 0.2283 |
+| build                   |         |          67.2 s |   77.8 s (+16%) |      67.1 s (0%) |
+| index                   |         |        6,069 MB | 7,097 MB (+17%) | 6,646 MB (+9.5%) |
 
 - Cold in 3 waves: documents go to Tantivy in groups (4,096 documents or 128 KB), so a part's documents keep
   their write order and numeric ids form runs. The posting directory, read in wave 2, holds those runs, so a
@@ -701,15 +703,15 @@ writes (grouping also changes the postings-off build).
 Gate at 1M rows on the slow store against the same harness at `44258aa` (`phase6-base-attrs-1m` →
 `phase6-attrs-1m`), columns on, p90 in ms:
 
-| Cold query                       | Before | After | Waves | Read            |
-| -------------------------------- | -----: | ----: | ----: | --------------: |
-| count                            |    208 |   143 | 3 → 2 | same            |
-| count, category = c              |    208 |   146 | 3 → 2 | same            |
-| count, category and range        |    360 |   237 | 5 → 3 | same            |
-| grouped count (1,000)            |    209 |   143 | 3 → 2 | same            |
-| grouped count, range             |    363 |   233 | 5 → 3 | same            |
-| order by, top 10                 |    407 |   205 | 6 → 3 | 3.1 → 2.2 MB    |
-| order by, top 10, category = c   |    636 |   253 | 9 → 3 | 79 → 71 MB      |
+| Cold query                     | Before | After | Waves |         Read |
+| ------------------------------ | -----: | ----: | ----: | -----------: |
+| count                          |    208 |   143 | 3 → 2 |         same |
+| count, category = c            |    208 |   146 | 3 → 2 |         same |
+| count, category and range      |    360 |   237 | 5 → 3 |         same |
+| grouped count (1,000)          |    209 |   143 | 3 → 2 |         same |
+| grouped count, range           |    363 |   233 | 5 → 3 |         same |
+| order by, top 10               |    407 |   205 | 6 → 3 | 3.1 → 2.2 MB |
+| order by, top 10, category = c |    636 |   253 | 9 → 3 |   79 → 71 MB |
 
 Hot rows within noise; peak memory 2.5 → 1.6 GB. Columns off (`phase6-base-attrs-1m-off` →
 `phase6-attrs-1m-off`): same requests and bytes, every p90 within 8%. MS MARCO, fresh builds, postings on and
@@ -742,11 +744,11 @@ Not done: the AWS end-to-end cold run and the S3 Express tier (both need a go-ah
 Gate on cohere-1m (1M × 768, cosine) on the slow store against `caf71c5` (`phase7-base-cohere-1m` →
 `phase7-cohere-1m`), 200 warm / 50 cold queries, default probes, ms:
 
-| Query        | Cold p90 | Cold p99 | Waves (max) | Bytes/q        | Hot p99   | Recall        |
-| ------------ | -------: | -------: | ----------: | -------------: | --------: | ------------: |
-| all rows     | 425 → 274 | 490 → 326 | 7 → 4      | 17.5 → 13.9 MB | 3.7 → 1.3 | 0.972 → 0.970 |
-| 10% of rows  | 406 → 287 | 463 → 289 | 7 → 4      | 25.0 → 21.7 MB | 3.1 → 2.8 | 0.978 → 0.964 |
-| 1% of rows   | 456 → 266 | 458 → 269 | 7 → 4      | 38.0 → 3.5 MB  | 2.2 → 0.9 | 0.978 → 0.996 |
+| Query       |  Cold p90 |  Cold p99 | Waves (max) |        Bytes/q |   Hot p99 |        Recall |
+| ----------- | --------: | --------: | ----------: | -------------: | --------: | ------------: |
+| all rows    | 425 → 274 | 490 → 326 |       7 → 4 | 17.5 → 13.9 MB | 3.7 → 1.3 | 0.972 → 0.970 |
+| 10% of rows | 406 → 287 | 463 → 289 |       7 → 4 | 25.0 → 21.7 MB | 3.1 → 2.8 | 0.978 → 0.964 |
+| 1% of rows  | 456 → 266 | 458 → 269 |       7 → 4 |  38.0 → 3.5 MB | 2.2 → 0.9 | 0.978 → 0.996 |
 
 Build 55.6 → 41.9 s; load, index size and peak memory unchanged. Nothing more than 10% worse. Against
 turbopuffer v3 (hot 20 ms, cold 1,255 ms) both exit targets are met: hot ≤ 5 ms, cold ≤ 300 ms p90, recall ≥ 0.95.
@@ -765,12 +767,12 @@ Exit test at 1M rows, no vectors, columns on, slow store: the same index measure
 (`phase8-attrs-1m-plain`) and after one rebuild that follows a round of the workload's own queries
 (`phase8-attrs-1m-adapt`, `--adapt`). No schema change. p90 in ms:
 
-| Query                                   | Hot before | Hot after | Cold before | Cold after | Cold read        |
-| --------------------------------------- | ---------: | --------: | ----------: | ---------: | ---------------: |
-| count, category and popularity > p      |        3.6 |       0.4 |         237 |        215 | 25.8 → 9.5 MB    |
-| count by group, popularity > p          |        3.4 |       1.1 |         235 |        215 | 25.7 → 7.6 MB    |
-| order by popularity, top 10             |        0.1 |       0.2 |         220 |        216 | 9.2 → 7.5 MB     |
-| order by popularity, top 10, category   |        2.9 |       1.1 |         254 |        252 | same             |
+| Query                                 | Hot before | Hot after | Cold before | Cold after |     Cold read |
+| ------------------------------------- | ---------: | --------: | ----------: | ---------: | ------------: |
+| count, category and popularity > p    |        3.6 |       0.4 |         237 |        215 | 25.8 → 9.5 MB |
+| count by group, popularity > p        |        3.4 |       1.1 |         235 |        215 | 25.7 → 7.6 MB |
+| order by popularity, top 10           |        0.1 |       0.2 |         220 |        216 |  9.2 → 7.5 MB |
+| order by popularity, top 10, category |        2.9 |       1.1 |         254 |        252 |          same |
 
 Unfiltered counts and grouped counts are within noise (count by group hot 0.5 → 0.8 ms). The rebuild took 11.8 s.
 
@@ -785,10 +787,10 @@ Unfiltered counts and grouped counts are within noise (count by group hot 0.5 �
 
 Then the rest of the phase (`phase8b-attrs-1m-plain`, `-adapt`, same runs; format 14):
 
-| Query, after the adapting rebuild        | Hot before | Hot after | Cold before | Cold after | Cold read      | Waves |
-| ---------------------------------------- | ---------: | --------: | ----------: | ---------: | -------------: | ----: |
-| count, category and popularity > p       |        0.4 |       0.1 |         215 |        214 | 9.5 → 7.6 MB   | 3     |
-| order by popularity, top 10, category    |        1.1 |       0.1 |         252 |        276 | 43.9 → 7.9 MB  | 3 → 4 |
+| Query, after the adapting rebuild     | Hot before | Hot after | Cold before | Cold after |     Cold read | Waves |
+| ------------------------------------- | ---------: | --------: | ----------: | ---------: | ------------: | ----: |
+| count, category and popularity > p    |        0.4 |       0.1 |         215 |        214 |  9.5 → 7.6 MB |     3 |
+| order by popularity, top 10, category |        1.1 |       0.1 |         252 |        276 | 43.9 → 7.9 MB | 3 → 4 |
 
 Without an adapting rebuild every p90 is within noise of the first part (plain hot rerun: 3.6 and 2.7 ms for
 the two filtered queries).
@@ -812,13 +814,14 @@ Then the two gaps that cost speed (`phase8c-attrs-1m-*`):
   never reads column pages, so it is unchanged. On turbopuffer's attrs workload (1M rows, 64 dims), as built
   → after one adapting rebuild, p90 in ms:
 
-| Query                                    | Hot        | Cold       | Cold read        |
-| ---------------------------------------- | ---------: | ---------: | ---------------: |
-| count, category and popularity > p       | 5.3 → 0.1  | 242 → 207  | 19.6 → 1.2 MB    |
-| count by group, popularity > p           | 3.8 → 0.9  | 237 → 206  | 19.6 → 1.1 MB    |
-| order by popularity, top 10, category    | 4.5 → 0.1  | 244 → 202  | 70.7 → 1.3 MB    |
+| Query                                 |       Hot |      Cold |     Cold read |
+| ------------------------------------- | --------: | --------: | ------------: |
+| count, category and popularity > p    | 5.3 → 0.1 | 242 → 207 | 19.6 → 1.2 MB |
+| count by group, popularity > p        | 3.8 → 0.9 | 237 → 206 | 19.6 → 1.1 MB |
+| order by popularity, top 10, category | 4.5 → 0.1 | 244 → 202 | 70.7 → 1.3 MB |
 
-  Other rows within noise (cold count rechecked over 10 queries: 146 ms, as in phase 6). The rebuild took 15.4 s.
+Other rows within noise (cold count rechecked over 10 queries: 146 ms, as in phase 6). The rebuild took 15.4 s.
+
 - The projection directory holds each code's 32 lowest and highest rows (when that is at most 16,384 entries),
   so a filtered order by goes from the hinted directory straight to its pages: cold 276 → 216 ms, 4 → 3 waves.
   It reads a block only when dead rows or ties use up a code's head.
@@ -862,12 +865,12 @@ say so when asked to apply), `lite`, the one-click buttons, bucket checks in `do
 
 Measured on 1M rows, columns on, the slow store (60 ms a request), `attrs --adapt`:
 
-| Query, cold p50                        | Before      | After        |
-| -------------------------------------- | ----------: | -----------: |
-| count                                  | 126 ms, 2 waves | 64 ms, 1 wave |
-| count, category = c                    | 128 ms      | 128 ms       |
-| count, two filters                     | 226 ms, 19.6 MB | 199 ms, 1.1 MB |
-| order by, top 10, category = c         | 240 ms, 71 MB | 197 ms, 1.3 MB |
+| Query, cold p50                |          Before |          After |
+| ------------------------------ | --------------: | -------------: |
+| count                          | 126 ms, 2 waves |  64 ms, 1 wave |
+| count, category = c            |          128 ms |         128 ms |
+| count, two filters             | 226 ms, 19.6 MB | 199 ms, 1.1 MB |
+| order by, top 10, category = c |   240 ms, 71 MB | 197 ms, 1.3 MB |
 
 Range filters and filtered order by are 0.1 ms hot once laid out.
 

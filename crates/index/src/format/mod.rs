@@ -66,7 +66,6 @@ impl Version {
         }
     }
 
-    /// How many segments builds have taken in, folded or not.
     pub(crate) fn covers(&self) -> usize {
         (self.folded + self.built.len) as usize
     }
@@ -75,7 +74,6 @@ impl Version {
         (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
     }
 
-    /// Whether only the current format holds this version.
     pub(crate) fn is_current(&self) -> bool {
         let ann = self.ann.iter().map(|ann| &ann.rows);
         let columns = self.columns.iter().map(|columns| &columns.rows);

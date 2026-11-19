@@ -38,11 +38,11 @@ is enough again.
 
 On Cohere 1M (768 dimensions, cosine), on a laptop:
 
-| Queries           | Before           | After            |
-| ----------------- | ---------------- | ---------------- |
-| held-out, default | 0.958 at 1.3 ms  | 0.959 at 1.4 ms  |
-| uniform, default  | 0.034            | 0.607 at 8.5 ms  |
-| uniform, 32 probes| 0.030            | 0.647 at 8.1 ms  |
+| Queries            | Before          | After           |
+| ------------------ | --------------- | --------------- |
+| held-out, default  | 0.958 at 1.3 ms | 0.959 at 1.4 ms |
+| uniform, default   | 0.034           | 0.607 at 8.5 ms |
+| uniform, 32 probes | 0.030           | 0.647 at 8.1 ms |
 
 Uniform queries still recall less because their true neighbours spread over far more groups than the
 calibration, measured on rows of the index itself, plans for.

@@ -347,7 +347,6 @@ def self_test():
             truth_rows = read_bin(tmp / "p/groundtruth.ibin", "<u4")
             assert np.array_equal(truth_rows, neighbors[:, :DEPTH])
 
-        # A set with string ids, in two files, cut short.
         for i, rows in enumerate((slice(0, 100), slice(100, 250))):
             part = pa.table({"_id": [f"r{j}" for j in range(250)][rows], "emb": emb[rows]})
             pq.write_table(part, tmp / f"{i:04d}.parquet")

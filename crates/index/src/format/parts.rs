@@ -19,7 +19,6 @@ pub(crate) struct PartRef {
     pub last: Id,
 }
 
-/// A blob a replay of the history reads: a part, or a segment as it was written.
 #[derive(Clone, Debug)]
 pub(crate) struct Source {
     pub hash: Hash,

@@ -597,15 +597,14 @@ impl Storage {
         Err(Error::Conflict(branch.to_string()))
     }
 
-    /// Starts `branch` at the current version of `from`, on a line of its own.
     pub(crate) async fn fork(&self, from: &str, branch: &str) -> Result<()> {
         let head = self.head(from).await?;
         let current = self.pointed(&head).await?;
         let mut seed = branch.as_bytes().to_vec();
-        seed.extend_from_slice(head.version.to_string().as_bytes());
+        seed.extend_from_slice(head.version.as_bytes());
         let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
         seed.extend_from_slice(&nanos.unwrap_or_default().as_nanos().to_le_bytes());
-        let id = u64::from_str_radix(&Hash::of(&seed).to_string()[..16], 16).unwrap_or(1);
+        let id = u64::from_le_bytes(Hash::of(&seed).as_bytes()[..8].try_into().expect("8 bytes"));
         let mut next = (*current).clone();
         next.parent = Some(head.version);
         next.line = current.line.fork(id.max(1), current.next_seq);

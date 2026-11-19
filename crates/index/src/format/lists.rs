@@ -36,7 +36,6 @@ pub(crate) async fn get_many<T: Entry>(
     list.get_many(at, |hash| storage.get::<Node<T>>(hash)).await
 }
 
-/// Stores `entries` as a list, writing only the nodes `old` does not already have.
 pub(crate) async fn store<T: Entry>(
     storage: &Storage,
     entries: Vec<T>,

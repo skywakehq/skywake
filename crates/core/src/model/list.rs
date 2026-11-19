@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Hash, Result};
 
-/// Entries a node holds on average.
 pub const FANOUT: u32 = 1024;
 
 const NODE_MAX: usize = 256 << 10;
@@ -34,13 +33,11 @@ pub struct Child {
     pub len: u64,
 }
 
-/// A list and the encoded nodes it needs stored, each under the hash of its bytes.
 pub struct Built<T> {
     pub list: List<T>,
     pub nodes: Vec<(Hash, Vec<u8>)>,
 }
 
-/// Every node a list reaches and every entry it holds.
 pub struct Walked<T> {
     pub nodes: Vec<Hash>,
     pub entries: Vec<T>,
@@ -56,7 +53,6 @@ impl<T> List<T>
 where
     T: Clone + Serialize + DeserializeOwned,
 {
-    /// Keeps up to `inline` entries in the list itself; a longer list becomes a tree.
     pub fn build(entries: Vec<T>, inline: usize) -> Result<Built<T>> {
         if entries.len() <= inline {
             let list = Self::Inline(entries);
@@ -142,7 +138,6 @@ where
         Ok(found.into_iter().flatten().collect())
     }
 
-    /// Every entry, in order.
     pub async fn all<E, F, Fut>(&self, fetch: F) -> Result<Vec<T>, E>
     where
         F: Fn(Hash) -> Fut,
