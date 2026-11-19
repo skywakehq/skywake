@@ -93,6 +93,17 @@ export class Builds {
     }
   }
 
+  /** Reads keep this server's own builders running, so they can lay the branch out for the reads it serves. */
+  read(where: Omit<BuildOrder, "branch" | "build">, branch: string) {
+    const building = this.#building.get(keyOf(where.folder, branch));
+    if (building) {
+      building.last = Date.now();
+      return;
+    }
+    const { mine } = split(this.#id, this.#live(), where.folder, branch, where.shards);
+    if (mine.length > 0) void this.build({ ...where, branch, build: mine });
+  }
+
   async build(order: BuildOrder) {
     const key = keyOf(order.folder, order.branch);
     const { region, folder, shards, kmsKeyId } = order;
