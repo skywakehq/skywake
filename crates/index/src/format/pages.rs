@@ -134,7 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_change_rewrites_only_the_pages_it_touches() {
-        let storage = Storage::new(Arc::new(InMemory::new()), 1 << 20, None, None);
+        let storage = Storage::new(Arc::new(InMemory::new()), 1 << 20, None, None, true);
         let mut written = Written::new();
         let entries: Vec<u64> = (0..2500).collect();
         let pages = Pages::write(&storage, &entries, &mut written)

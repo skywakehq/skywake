@@ -217,7 +217,7 @@ impl Index {
         if head.version == moved {
             let hints = hints(&*self.storage.version(before).await?);
             let store = self.storage.store.as_ref();
-            head::advance(store, &self.branch, &head, before, &hints).await?;
+            head::advance(store, &self.branch, &head, before, &hints, None).await?;
         }
         Err(Error::VersionNotFound(hash.to_string()))
     }
@@ -226,7 +226,7 @@ impl Index {
         let since = SystemTime::now();
         let version = self.storage.version(hash).await?;
         let store = self.storage.store.as_ref();
-        head::create(store, branch, hash, &hints(&version)).await?;
+        head::create(store, branch, hash, &hints(&version), None).await?;
         if !self.whole(since, hash).await? {
             head::delete(store, branch).await?;
             return Err(Error::VersionNotFound(hash.to_string()));

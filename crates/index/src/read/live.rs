@@ -7,10 +7,11 @@ use futures::{StreamExt, TryStreamExt, stream};
 use super::tail::Tail;
 use crate::export::doc;
 use crate::filter::attrs::has;
+use crate::format::Version;
 use crate::format::cluster::{self, ClusterRef};
 use crate::format::pages::Paged;
+use crate::format::parts::{self, Source};
 use crate::format::rows;
-use crate::format::{Segment, SegmentRef, Version};
 use crate::store::{PARALLELISM, Storage};
 use crate::{Attributes, Doc, Error, Filter, Id, Result};
 
@@ -39,10 +40,10 @@ pub(crate) async fn each(
             }
         }
         None => {
-            let built: Paged<SegmentRef> = version.built.open(storage).await?;
+            let built = parts::sources(storage, version, false).await?;
             let latest = latest_writes(storage, &built, |id| !newest.contains_key(id)).await?;
-            for segment in built.iter() {
-                let blob: std::sync::Arc<Segment> = storage.get(segment.hash).await?;
+            for segment in &built {
+                let blob = segment.get(storage).await?;
                 for (seq, id, row) in blob.writes(segment.first_seq) {
                     let Some(row) = row else { continue };
                     let attributes = &blob.attributes[row];
@@ -91,7 +92,7 @@ pub(crate) async fn fetch(
             let columns: Vec<_> = version.schema.vectors.iter().collect();
             let mut wanted: BTreeMap<(usize, u32), Vec<Id>> = BTreeMap::new();
             for id in built {
-                let page = &pages[&rows::page_of(&id, ann.rows.len())];
+                let page = &pages[&rows::page_in(&id, &ann.rows)];
                 if let Some(i) = page.find(&id) {
                     for column in 0..columns.len() {
                         let cluster = page.clusters[i * columns.len() + column];
@@ -130,10 +131,10 @@ pub(crate) async fn fetch(
         }
         _ => {
             let wanted: std::collections::HashSet<&Id> = built.iter().collect();
-            let segments: Paged<SegmentRef> = version.built.open(storage).await?;
+            let segments = parts::sources(storage, version, false).await?;
             let latest = latest_writes(storage, &segments, |id| wanted.contains(id)).await?;
-            for segment in segments.iter() {
-                let blob: std::sync::Arc<Segment> = storage.get(segment.hash).await?;
+            for segment in &segments {
+                let blob = segment.get(storage).await?;
                 for (seq, id, row) in blob.writes(segment.first_seq) {
                     if let Some(row) = row
                         && latest.get(id) == Some(&seq)
@@ -151,14 +152,13 @@ pub(crate) async fn current(storage: &Storage, version: &Version) -> Result<Hash
     let mut current = HashMap::new();
     match &version.ann {
         Some(ann) => {
-            let pages: Vec<std::sync::Arc<rows::RowPage>> =
-                storage.get_all(ann.rows.clone()).await?;
+            let pages = rows::all(storage, &ann.rows).await?;
             for page in &pages {
                 current.extend(page.ids.iter().cloned().zip(page.seqs.iter().copied()));
             }
         }
         None => {
-            let built: Paged<SegmentRef> = version.built.open(storage).await?;
+            let built = parts::sources(storage, version, false).await?;
             current = latest_writes(storage, &built, |_| true).await?;
         }
     }
@@ -202,12 +202,12 @@ async fn read_rows(
 
 async fn latest_writes(
     storage: &Storage,
-    segments: &Paged<SegmentRef>,
+    segments: &[Source],
     wanted: impl Fn(&Id) -> bool,
 ) -> Result<HashMap<Id, u64>> {
     let mut latest = HashMap::new();
-    for segment in segments.iter() {
-        let blob: std::sync::Arc<Segment> = storage.get(segment.hash).await?;
+    for segment in segments {
+        let blob = segment.get(storage).await?;
         for (seq, id, _) in blob.writes(segment.first_seq) {
             if wanted(id) {
                 latest.insert(id.clone(), seq);

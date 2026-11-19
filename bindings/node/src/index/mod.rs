@@ -23,7 +23,7 @@ use self::export::{IndexExport, IndexParquetExport};
 use self::history::{
     GRACE, IndexCollectOptions, IndexCollected, IndexVersion, days, version, version_to,
 };
-use self::open::{IndexOpenOptions, disk, stores_of};
+use self::open::{IndexOpenOptions, disk, stores_of, switch};
 use crate::error::{fail_index, invalid};
 use crate::index_json::documents::{
     IndexCounts, IndexDoc, IndexWrite, counts_to, doc_from, doc_to, write_from,
@@ -38,8 +38,10 @@ use crate::index_json::results::{
     IndexStats, fused_hit_to, group_to, hit_to, ranked_to, reads_to, row_to, search_hit_to,
     stats_to,
 };
+use crate::index_json::rows::{IndexRowsPlan, IndexRowsWritten, rows_from};
 use crate::index_json::schema::{IndexSchema, schema_from, schema_to};
 use crate::index_json::values::id_from;
+use crate::index_json::values::id_to;
 
 #[napi]
 pub struct Index {
@@ -47,6 +49,7 @@ pub struct Index {
     stores: Vec<Arc<dyn ObjectStore>>,
     options: Options,
     every_shard: bool,
+    cold: bool,
     branches: Mutex<HashMap<String, (Branch, Builders)>>,
 }
 
@@ -56,15 +59,19 @@ type Builders = HashMap<usize, Builder>;
 impl Index {
     #[napi(factory)]
     pub fn open(location: String, options: Option<IndexOpenOptions>) -> Result<Self> {
+        crate::log::start();
         let encrypted =
             (options.as_ref()).is_some_and(|o| o.kms_key_id.is_some() || o.customer_key.is_some());
         let shared = options.as_ref().and_then(|o| o.cache_folder.clone());
         let every_shard = options.as_ref().and_then(|o| o.builders).unwrap_or(true);
+        let cold = switch("SKYWAKE_INDEX_COLD")?;
         let (store, stores) = stores_of(&location, options)?;
         let options = Options {
-            disk: if encrypted { None } else { disk()? },
+            disk: if encrypted || cold { None } else { disk()? },
             spill: !encrypted,
-            shared,
+            shared: shared.filter(|_| !cold),
+            columns: switch("SKYWAKE_INDEX_COLUMNS")?,
+            postings: switch("SKYWAKE_INDEX_POSTINGS")?,
             ..Options::default()
         };
         Ok(Self {
@@ -72,6 +79,7 @@ impl Index {
             stores,
             options,
             every_shard,
+            cold,
             branches: Mutex::default(),
         })
     }
@@ -184,6 +192,25 @@ impl Index {
         let docs = docs.into_iter().map(doc_from).collect::<Result<_>>()?;
         let branch = self.branch(&branch).await?;
         branch.upsert(docs).await.map_err(fail_index)
+    }
+
+    #[napi]
+    pub async fn upsert_rows(
+        &self,
+        branch: String,
+        body: napi::bindgen_prelude::Buffer,
+        plan: IndexRowsPlan,
+    ) -> Result<Option<IndexRowsWritten>> {
+        let Some(rows) = rows_from(&body, &plan) else {
+            return Ok(None);
+        };
+        let ids = rows.docs.iter().map(|doc| id_to(doc.id.clone())).collect();
+        let branch = self.branch(&branch).await?;
+        branch.upsert(rows.docs).await.map_err(fail_index)?;
+        Ok(Some(IndexRowsWritten {
+            ids,
+            bytes: rows.bytes as f64,
+        }))
     }
 
     #[napi]
@@ -426,7 +453,9 @@ impl Index {
         let open = Branch::open(self.stores.clone(), name, self.options.clone())
             .await
             .map_err(fail_index)?;
-        self.keep(open.clone());
+        if !self.cold {
+            self.keep(open.clone());
+        }
         Ok(open)
     }
 

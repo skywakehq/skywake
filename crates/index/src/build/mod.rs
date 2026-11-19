@@ -1,9 +1,12 @@
 //! Building the cluster index.
 
 mod builder;
+pub(crate) mod calibrate;
 pub(crate) mod directory;
-mod full;
+mod fold;
+pub(crate) mod full;
 mod grow;
+mod pieces;
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -13,11 +16,14 @@ use futures::{Stream, StreamExt, TryStreamExt, stream};
 pub(crate) use builder::spawn;
 pub use builder::{BuildPolicy, Builder};
 use full::full_build;
-use grow::grow;
+use grow::{Sizes, grow};
 
 use crate::filter;
+use crate::format;
 use crate::format::cluster::{self, Cluster, ClusterRef, Coder};
-use crate::format::{Ann, Segment, SegmentRef, Version};
+use crate::format::pages::Pages;
+use crate::format::parts::Source;
+use crate::format::{Ann, Segment, Version};
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::vector::ivf;
 use crate::vector::rabitq::Rotation;
@@ -25,21 +31,57 @@ use crate::{Column, Element, Error, Kind, Result};
 
 const READ_AHEAD: usize = 16;
 
+const TRAINED: u64 = 100_000;
+
+const GROWN: u64 = 4;
+
+pub(crate) struct Settings {
+    pub budget: usize,
+    pub cluster_rows: usize,
+    pub spill: bool,
+    pub columns: Option<usize>,
+    pub postings: bool,
+    pub fold_bytes: u64,
+}
+
+/// What a build redoes: only what was written since the last one, the column
+/// layout the queries ask for, or everything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Grow,
+    Layout { sort: bool },
+    Full,
+}
+
 pub(crate) async fn build(
     storage: &Storage,
     branch: &str,
-    budget: usize,
-    cluster_rows: usize,
-    spill: bool,
-    full: bool,
+    settings: Settings,
+    mode: Mode,
 ) -> Result<bool> {
+    let full = mode == Mode::Full;
+    let layout = matches!(mode, Mode::Layout { .. });
+    let resort = full || mode == (Mode::Layout { sort: true });
+    let Settings {
+        budget,
+        cluster_rows,
+        spill,
+        columns,
+        postings,
+        fold_bytes,
+    } = settings;
     let version = storage.current(branch).await?;
     let covers = version.covers() + version.tail.len();
     let vectors = !version.schema.vectors.is_empty();
     let built_before = version.ann.is_some() || version.text.is_some() || !vectors;
     let parts_missing = (version.ann.as_ref())
         .is_some_and(|ann| !ann.parts.keys().eq(&version.schema.filter_index));
-    let nothing_new = version.tail.is_empty() && built_before && !parts_missing;
+    let columns_missing =
+        columns.is_some() && version.columns.is_none() && (version.ann.is_some() || !vectors);
+    let postings_missing = postings
+        && (version.text.iter().flat_map(|text| &text.parts)).any(|p| p.postings.is_none());
+    let rebuilt = parts_missing || columns_missing || postings_missing || layout;
+    let nothing_new = version.tail.is_empty() && built_before && !rebuilt;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
     }
@@ -51,16 +93,25 @@ pub(crate) async fn build(
     {
         if version.tail.is_empty() {
             grown = Some(ann.clone());
-        } else if small_tail(ann, &version) {
-            grown = grow(storage, &version, ann, budget, &mut written).await?;
+        } else if !retrain(ann, &version) {
+            let most = 2 * cluster_rows.max(1) as u64;
+            grown = grow(storage, &version, ann, Sizes { budget, most }, &mut written).await?;
         }
     }
     let incremental = grown.is_some();
+    let sorted = vectors
+        && columns.is_some()
+        && (crate::layout::sorts(storage, &version.schema)
+            || (version.columns.as_ref()).is_some_and(|c| !c.rows.is_empty()));
+    let mut filled = None;
     let mut ann = match (grown, vectors) {
         (Some(ann), _) => Some(ann),
         (None, true) => {
             let sizes = (budget, cluster_rows, spill);
-            Some(full_build(storage, &version, sizes, &mut written).await?)
+            let on = columns.is_some() && !sorted;
+            let (ann, pages) = full_build(storage, &version, sizes, on, &mut written).await?;
+            filled = pages;
+            Some(ann)
         }
         (None, false) => None,
     };
@@ -77,40 +128,126 @@ pub(crate) async fn build(
         ann.parts =
             filter::build(storage, schema, ann, base.as_ref(), budget, &mut written).await?;
     }
-    let text = crate::text::build::build(storage, &version, budget, full, &mut written).await?;
+    let columns = match (&ann, columns) {
+        (Some(_), Some(_)) if filled.is_some() => filled,
+        (ann, Some(page_rows)) if ann.is_none() || sorted => {
+            let build = format::columns::plain::build(
+                storage,
+                &version,
+                (page_rows, budget, spill),
+                resort,
+                &mut written,
+            );
+            Some(build.await?)
+        }
+        (Some(ann), Some(_)) => {
+            let old = (base.as_ref().zip(version.columns.as_ref()))
+                .filter(|_| incremental)
+                .map(|(ann, columns)| format::columns::build::Base { ann, columns });
+            let schema = &version.schema;
+            Some(format::columns::build::build(storage, schema, ann, old, &mut written).await?)
+        }
+        _ => None,
+    };
+    let columns = match columns {
+        Some(mut built) => {
+            let old = version.columns.as_ref();
+            let wanted =
+                crate::layout::projections(&version.schema, storage, version.columns.as_ref());
+            let sizes = (budget, spill);
+            let made = format::columns::projection::build(
+                storage,
+                &built,
+                old,
+                &wanted,
+                sizes,
+                &mut written,
+            );
+            built.projections = made.await?;
+            Some(built)
+        }
+        None => None,
+    };
+    let text = crate::text::build::build(storage, &version, budget, full, postings, &mut written);
+    let text = text.await?;
     let built = (version.built)
         .append(storage, &version.tail, &mut written)
         .await?;
+    let folded = fold::fold(
+        storage,
+        &version,
+        &built,
+        (budget, spill, fold_bytes),
+        &mut written,
+    )
+    .await?;
+    let (built, folded, parts) = match folded {
+        Some(folded) => (Pages::default(), folded.folded, folded.parts),
+        None => (built, version.folded, version.parts.clone()),
+    };
     storage
         .save(branch, &written, |current| {
             let apply = match incremental {
-                true => current.ann == base,
-                false => current.covers() < covers || (full && current.ann == base),
+                true => same_clusters(current.ann.as_ref(), base.as_ref()),
+                false => current.covers() < covers || ((full || layout) && current.ann == base),
             };
-            let text_applies = current.text == version.text;
+            let text_applies = current.text == version.text && current.columns == version.columns;
             let skip = covers.checked_sub(current.covers())?;
-            (apply && text_applies && skip <= current.tail.len()).then(|| Version {
+            let history = current.folded == version.folded && current.parts == version.parts;
+            (apply && text_applies && history && skip <= current.tail.len()).then(|| Version {
                 built: built.clone(),
+                folded,
+                parts: parts.clone(),
                 tail: current.tail[skip..].to_vec(),
-                ann: ann.clone(),
+                ann: calibrated(ann.clone(), current.ann.as_ref(), incremental),
                 text: text.clone(),
+                columns: columns.clone(),
                 ..current.clone()
             })
         })
         .await
 }
 
-fn small_tail(ann: &Ann, version: &Version) -> bool {
+fn retrain(ann: &Ann, version: &Version) -> bool {
     let tail: u64 = version.tail.iter().map(|segment| segment.rows).sum();
-    ann.live > 0 && tail * 2 <= ann.live
+    let total = ann.live + tail;
+    ann.live == 0 || (total <= TRAINED && total >= GROWN * ann.full_rows)
+}
+
+fn same_clusters(current: Option<&Ann>, base: Option<&Ann>) -> bool {
+    match (current, base) {
+        (Some(current), Some(base)) => {
+            let mut current = current.clone();
+            for (name, clusters) in &mut current.columns {
+                if let Some(old) = base.columns.get(name) {
+                    clusters.calibration = old.calibration.clone();
+                    clusters.calibrated = old.calibrated;
+                }
+            }
+            current == *base
+        }
+        (current, base) => current == base,
+    }
+}
+
+fn calibrated(mut ann: Option<Ann>, current: Option<&Ann>, incremental: bool) -> Option<Ann> {
+    if let (Some(ann), Some(current), true) = (&mut ann, current, incremental) {
+        for (name, clusters) in &mut ann.columns {
+            if let Some(now) = current.columns.get(name) {
+                clusters.calibration = now.calibration.clone();
+                clusters.calibrated = now.calibrated;
+            }
+        }
+    }
+    ann
 }
 
 pub(crate) fn segments<'a>(
     storage: &'a Storage,
-    refs: &'a [SegmentRef],
+    refs: &'a [Source],
 ) -> impl Stream<Item = Result<(u64, Segment)>> + 'a {
     stream::iter(refs)
-        .map(move |r| async move { Ok((r.first_seq, storage.fetch::<Segment>(r.hash).await?)) })
+        .map(move |r| async move { Ok((r.first_seq, r.fetch(storage).await?)) })
         .buffered(READ_AHEAD)
 }
 
@@ -153,11 +290,6 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) 
     tokio::task::spawn_blocking(work)
         .await
         .map_err(|_| Error::Corrupt("the index build panicked".into()))
-}
-
-async fn assign(data: Vec<f32>, column: &Column, centroids: Arc<Vec<f32>>) -> Result<Vec<u32>> {
-    let (dims, metric) = (column.dims, column.metric);
-    blocking(move || ivf::assign(&data, dims, &centroids, metric)).await
 }
 
 async fn store_clusters(
@@ -210,5 +342,9 @@ fn groups<T>(items: &[T], budget: usize, size: impl Fn(&T) -> usize) -> Vec<&[T]
     groups
 }
 
+#[cfg(test)]
+mod append_tests;
+#[cfg(test)]
+mod fold_tests;
 #[cfg(test)]
 mod tests;

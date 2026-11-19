@@ -148,9 +148,51 @@ Every row gets a `tag` attribute (a hash of its id, 0–999), and filtered passe
 rows through. `msmarco` does the same for BM25: MRR@10 and NDCG@10 on the judged queries, then warm and cold
 latency.
 
+`attrs` measures counts, grouped counts and order by, the workloads of turbopuffer's v3 benchmark, on generated
+rows: `popularity` (a Pareto number), `category` (100 values), `group` (1,000 values), `created`, and a random
+vector column (`--dims`, 64 by default, since an index needs one today). Each query family draws fresh
+constants per query. Every family runs `hot` (the head held, all in memory), `hot+head` (the head read per
+query, as `Index::query` does) and `cold` (a fresh index per query); `--qps` runs the hot passes open loop.
+Counts and grouped totals are checked against the row count. `--columns` builds the index with engine v2
+column pages, so a run shows what they cost to build and store.
+
+```bash
+target/release/index-bench attrs --rows 10000000 --store slow
+```
+
+`run` and `attrs` time the index inside the benchmark's own process: no API server, HTTP, JSON or auth.
+`api` times what a client sees instead. It loads rows through a running API, then times every query at the
+client, open loop at `--qps`. `vector` and `vector-filtered` search the vector column for the top `--k`
+(10), unfiltered and at 1%, and `--recall` (100) queries are checked against an exact search the benchmark
+runs itself over the same rows. The other families are the `attrs` ones.
+
+The turbopuffer-shaped run matches their `vector-10m` benchmark: the first 10M rows of Cohere's 1024-d English
+Wikipedia embeddings, loaded in file order, and query vectors whose numbers are each drawn from [0, 1)
+(`--probes uniform`, the default), top 10 at 8 QPS, from a client in the bucket's region:
+
+```bash
+uv run --script benchmarks/datasets/fetch.py get cohere-wiki-10m
+SKYWAKE_API_ADMIN_TOKEN=… target/release/index-bench api --url http://api:8080 \
+  --dataset benchmarks/datasets/data/cohere-wiki-10m --rows 10000000 --batch 500 \
+  --families vector,vector-filtered --qps 8
+```
+
+Uniform queries have only positive numbers, so under cosine they all point nearly the same way and touch the
+same few clusters; that flatters a cache. Random queries also sit far from any real embedding, where an
+approximate index misses most true neighbours: on 30k Cohere rows, recall@10 at the default probe is 0.95 to 0.98
+for real queries and 0.27 to 0.30 for uniform ones, in process and through the API alike. turbopuffer's
+benchmark measures no recall, so it never shows this. `--probes dataset` asks the set's own 1,000 held-out
+queries (query.fbin), and is the run to quote recall from; `--probes normal` asks in every direction. Without `--dataset` the
+rows are generated, with random vectors (`--dims`).
+
+Loading sends each vector in base64 (`?vector_encoding=base64`, little-endian f32 bytes), as a fast client
+would: the same floats, bit for bit, in half the bytes and with no number parsing. `--vectors float` sends
+lists of numbers instead.
+
 `--store local` is a temp folder; `slow` adds 60 ms before every request with at most 64 in flight, to act
 like object storage; `s3://bucket/folder` uses the `AWS_*` settings and refuses a non-local endpoint unless
-`--allow-remote`.
+`--allow-remote`. `--tail 4` makes the slow store's wait vary, with a p99 four times its median, and
+`--mb-per-s 80` charges each request for its bytes, so hedged and smaller reads show up.
 
 Loading runs `--writers` (8) upserts at once, which the index groups into commits. While it runs, `run` writes
 one line per step to stderr: when each step starts and ends, how far a load has got with its rate and time

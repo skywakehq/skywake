@@ -123,3 +123,39 @@ async fn warming_puts_every_blob_on_the_disk() {
         .collect();
     assert!(from_bucket.is_empty(), "{from_bucket:?}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_builder_puts_the_version_into_an_old_head() {
+    let gate = Gate::new();
+    let index = built(&gate, 2_000, 16, 500).await;
+    let old = index.storage.head("main").await.unwrap();
+    let store = index.storage.store.as_ref();
+    super::head::advance(store, "main", &old, old.version, &old.hints, None)
+        .await
+        .unwrap();
+    assert!(index.storage.head("main").await.unwrap().inline.is_none());
+    let _builder = index.spawn_builder(crate::BuildPolicy::default());
+    for _ in 0..200 {
+        let head = index.storage.head("main").await.unwrap();
+        if head.inline.is_some() {
+            assert_eq!(head.version, old.version);
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the head never got its version");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_a_branch_reads_its_version_from_the_head() {
+    let gate = Gate::new();
+    let index = built(&gate, 2_000, 16, 500).await;
+    let head = index.storage.head("main").await.unwrap();
+    assert!(head.inline.is_some());
+    gate.reads.lock().unwrap().clear();
+    let fresh = Index::open(gate.clone(), "main").await.unwrap();
+    assert_eq!(fresh.stats().await.unwrap().rows, 2_000);
+    let version = format!("objects/{}", head.version);
+    let reads = gate.reads.lock().unwrap();
+    assert!(reads.iter().all(|(path, _)| *path != version), "{reads:?}");
+}

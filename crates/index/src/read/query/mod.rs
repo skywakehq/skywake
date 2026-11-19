@@ -3,7 +3,7 @@
 mod known;
 mod top;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::RangeInclusive;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
@@ -16,8 +16,8 @@ use crate::format::cluster::{self, Codes};
 use crate::format::{Clusters, Version};
 use crate::read::tail::{Row, Tail};
 use crate::store::{PARALLELISM, Storage};
-use crate::vector::ivf;
 use crate::vector::rabitq::{self, Anchor, Estimator, Prepared, Rotation};
+use crate::vector::{extended, ivf};
 use crate::{Column, Error, Hit, Id, Metric, Query, Result, invalid};
 use known::{Known, reach};
 use skywake_core::Hash;
@@ -27,7 +27,21 @@ const DEFAULT_RECALL: f32 = 0.95;
 
 const GAP: u64 = 256 << 10;
 
-const FILTER_FIRST_SHARE: f64 = 0.003;
+const RERANK_PER_HIT: usize = 4;
+
+const RERANK_LEAST: usize = 40;
+
+const RERANK_MOST: usize = 8;
+
+const REFINE_MOST: usize = 512;
+
+const REFINE_PER_THREAD: usize = 256;
+
+const PROBE_MOST_ROWS: u64 = 1 << 19;
+
+const EXACT_MOST_ROWS: u64 = 1 << 16;
+
+const FILTER_FIRST_SHARE: f64 = 0.02;
 
 const FILTER_FIRST_ROWS: RangeInclusive<u64> = 4096..=100_000;
 
@@ -102,6 +116,7 @@ pub(crate) async fn run(storage: &Storage, version: &Version, query: &Query) -> 
             known,
             origin: &origin,
             newest: &newest,
+            rows: ann.live,
             filters: ann.filters,
             parts: &ann.parts,
             pos,
@@ -122,6 +137,7 @@ struct Search<'a> {
     known: Known,
     origin: &'a [f32],
     newest: &'a HashMap<&'a Id, Option<Row>>,
+    rows: u64,
     filters: Hash,
     parts: &'a BTreeMap<String, FilterPart>,
     pos: usize,
@@ -149,28 +165,28 @@ impl Search<'_> {
             return Ok(());
         }
         let storage = self.storage;
-        let count = self.clusters.table.len as usize;
+        let (groups, count) = (self.groups(), self.clusters.table.len as usize);
         let k = self.query.top_k;
-        if self.plan(k as f64) >= count {
+        if self.plan(k as f64) >= groups && self.exact_allowed() {
             self.known.settle(storage, count).await?;
             return self.exact(&self.known.order, top).await;
         }
         let mut planned = self.plan(k as f64 / self.share().await?);
-        self.known.settle(storage, planned).await?;
+        self.known.settle_groups(storage, planned).await?;
 
         let mut found = Found::default();
         let mut visited = 0;
         let before = top.kth().min(self.bound_before_reading(&self.known.order));
         let mut asked = false;
         loop {
-            self.known.settle(storage, planned).await?;
+            let end = self.known.settle_groups(storage, planned).await?;
             let limit = before.min(kth(found.rows.iter().map(|e| e.upper), top));
-            let wave: Vec<usize> = (self.known.order[visited..planned].iter())
+            let wave: Vec<usize> = (self.known.order[visited..end].iter())
                 .filter(|&&(score, c)| self.lower(score, c) <= limit)
                 .map(|&(_, c)| c)
                 .collect();
             self.estimate(&wave, &mut found, limit).await?;
-            visited = planned;
+            visited = end;
             let more = match (&self.query.filter, self.query.probe) {
                 (Some(_), None) if !asked && found.matched < found.seen => {
                     asked = true;
@@ -189,19 +205,25 @@ impl Search<'_> {
             self.exact(&self.known.order[visited..], top).await?;
         }
         let limit = kth(found.rows.iter().map(|e| e.upper), top);
-        let candidates = (found.rows.iter())
-            .filter(|e| e.lower <= limit)
+        found.rows.retain(|e| e.lower <= limit);
+        nearest(&mut found.rows, self.budget());
+        let kept: Vec<Candidate> = (found.rows.iter())
             .map(|e| {
                 let codes = &found.codes[&e.cluster];
+                let [norm, _, to_anchor, _] = codes.factors[e.row];
                 Candidate {
+                    lower: e.lower,
+                    upper: e.upper,
                     cluster: e.cluster,
                     row: e.row,
                     check: codes.checks[e.row],
+                    norm,
+                    to_anchor,
                     id: codes.ids[e.row].clone(),
                 }
             })
             .collect();
-        self.rerank(candidates, top).await
+        self.settle(kept, top).await
     }
 
     async fn filter_first(&mut self, top: &mut Top) -> Result<bool> {
@@ -230,7 +252,7 @@ impl Search<'_> {
             .load(storage, clusters.map(|&c| c as usize))
             .await?;
         let rest = !std::ptr::eq(filter, choice.clause);
-        let exact = self.query.recall.unwrap_or(DEFAULT_RECALL) >= 1.0;
+        let exact = self.exact_recall();
         let (estimator, query) = self.prepared();
         let words = rabitq::words(self.column.dims);
         let mut anchors: HashMap<usize, Anchor> = HashMap::new();
@@ -269,19 +291,24 @@ impl Search<'_> {
             }
         }
         let limit = kth(rows.iter().map(|r| r.1), top);
-        let candidates = (rows.into_iter())
+        let kept = (rows.into_iter())
             .filter(|r| r.0 <= limit)
-            .map(|(_, _, b, i)| {
+            .map(|(lower, upper, b, i)| {
                 let located = &blocks[b].columns[self.pos];
+                let [norm, _, to_anchor, _] = located.codes.factors[i];
                 Candidate {
+                    lower,
+                    upper,
                     cluster: located.clusters[i] as usize,
                     row: located.rows[i] as usize,
                     check: located.codes.checks[i],
+                    norm,
+                    to_anchor,
                     id: located.codes.ids[i].clone(),
                 }
             })
             .collect();
-        self.rerank(candidates, top).await?;
+        self.settle(kept, top).await?;
         Ok(true)
     }
 
@@ -299,15 +326,45 @@ impl Search<'_> {
         Ok(((passed - passed.sqrt()).max(0.5) / rows as f64).min(1.0))
     }
 
+    fn exact_recall(&self) -> bool {
+        self.query.recall.unwrap_or(DEFAULT_RECALL) >= 1.0
+    }
+
+    fn capped(&self) -> bool {
+        !self.exact_recall() && extended::wanted(self.column.dims)
+    }
+
+    fn base(&self) -> usize {
+        (RERANK_PER_HIT * self.query.top_k).max(RERANK_LEAST)
+    }
+
+    fn budget(&self) -> usize {
+        match (self.capped(), self.clusters.extended) {
+            (false, _) => usize::MAX,
+            (true, true) => REFINE_MOST * self.base(),
+            (true, false) => RERANK_MOST * self.base(),
+        }
+    }
+
+    fn groups(&self) -> usize {
+        (self.clusters.groups as usize).max(1)
+    }
+
+    fn exact_allowed(&self) -> bool {
+        self.exact_recall() || self.query.probe.is_some() || self.rows <= EXACT_MOST_ROWS
+    }
+
     fn plan(&self, k: f64) -> usize {
-        let count = self.clusters.table.len as usize;
+        let count = self.groups();
         let recall = self.query.recall.unwrap_or(DEFAULT_RECALL);
         match self.query.probe {
             Some(probe) => probe.min(count),
             None if recall >= 1.0 => count,
             None => {
                 let share = self.clusters.calibration.share(k, recall);
-                ((share * count as f32).ceil() as usize).clamp(1, count)
+                let most =
+                    (PROBE_MOST_ROWS as f64 * count as f64 / self.rows.max(1) as f64) as usize;
+                ((share * count as f32).ceil() as usize).clamp(1, most.clamp(1, count))
             }
         }
     }
@@ -389,11 +446,14 @@ impl Search<'_> {
         Ok(())
     }
 
+    fn rotated(&self) -> Vec<f32> {
+        let rotation = Rotation::new(self.column.dims, self.clusters.seed);
+        rotation.difference(self.vector, self.origin)
+    }
+
     fn prepared(&self) -> (Estimator, Prepared) {
-        let dims = self.column.dims;
-        let rotation = Rotation::new(dims, self.clusters.seed);
-        let estimator = Estimator::new(self.column.metric, dims);
-        let query = estimator.prepare(&rotation.difference(self.vector, self.origin));
+        let estimator = Estimator::new(self.column.metric, self.column.dims);
+        let query = estimator.prepare(&self.rotated());
         (estimator, query)
     }
 
@@ -422,8 +482,9 @@ impl Search<'_> {
         let (c, codes) = (cluster.c, cluster.codes);
         let words = rabitq::words(self.column.dims);
         let anchor = self.anchor(c);
+        let replaced = !self.newest.is_empty();
         for (row, id) in codes.ids.iter().enumerate() {
-            if self.newest.contains_key(id) {
+            if replaced && self.newest.contains_key(id) {
                 continue;
             }
             found.seen += 1;
@@ -446,16 +507,83 @@ impl Search<'_> {
         }
     }
 
-    async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
-        candidates.sort_unstable_by_key(|c| (c.cluster, c.row));
-        let size = self.column.dims * self.column.element.bytes();
-        let mut runs: Vec<Vec<Candidate>> = Vec::new();
-        for candidate in candidates {
-            match runs.last_mut() {
-                Some(run) if near(&run[run.len() - 1], &candidate, size) => run.push(candidate),
-                _ => runs.push(vec![candidate]),
-            }
+    async fn settle(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
+        if !self.capped() {
+            return self.rerank(candidates, top).await;
         }
+        by_middle(&mut candidates);
+        let base = self.base();
+        if self.clusters.extended {
+            candidates = self.refine(candidates, base).await?;
+            by_middle(&mut candidates);
+        }
+        let mut budget = RERANK_MOST * base;
+        let mut batch = base;
+        while !candidates.is_empty() && budget > 0 {
+            let take = batch.min(candidates.len()).min(budget);
+            let now: Vec<Candidate> = candidates.drain(..take).collect();
+            self.rerank(now, top).await?;
+            budget -= take;
+            let bound = top.kth();
+            candidates.retain(|c| c.lower <= bound);
+            batch *= 2;
+        }
+        Ok(())
+    }
+
+    async fn refine(&self, mut rough: Vec<Candidate>, base: usize) -> Result<Vec<Candidate>> {
+        rough.truncate(REFINE_MOST * base);
+        let estimator = Estimator::new(self.column.metric, self.column.dims);
+        let query = extended::Prepared::new(self.rotated());
+        let mut fine = self.refined(rough, &estimator, &query).await?;
+        let mut best = Kth::new(self.query.top_k, f32::INFINITY);
+        fine.iter().for_each(|c| best.offer(c.upper));
+        let bound = best.get();
+        fine.retain(|c| c.lower <= bound);
+        Ok(fine)
+    }
+
+    async fn refined(
+        &self,
+        rough: Vec<Candidate>,
+        estimator: &Estimator,
+        query: &extended::Prepared,
+    ) -> Result<Vec<Candidate>> {
+        let dims = self.column.dims;
+        let clusters: HashSet<usize> = rough.iter().map(|c| c.cluster).collect();
+        let sections: HashMap<usize, (Arc<Vec<u8>>, Anchor)> = stream::iter(clusters)
+            .map(|c| async move {
+                let section = self.storage.extended(self.known.get(c), dims).await?;
+                Ok::<_, Error>((c, (section, self.anchor(c))))
+            })
+            .buffer_unordered(FAN_OUT)
+            .try_collect()
+            .await?;
+        let size = extended::record(dims);
+        let estimates = ivf::parallel(rough.len().div_ceil(REFINE_PER_THREAD), |chunks| {
+            let rows =
+                chunks.start * REFINE_PER_THREAD..(chunks.end * REFINE_PER_THREAD).min(rough.len());
+            (rough[rows].iter())
+                .map(|candidate| {
+                    let (section, anchor) = &sections[&candidate.cluster];
+                    let record = &section[candidate.row * size..(candidate.row + 1) * size];
+                    let (norm, to_anchor) = (candidate.norm, candidate.to_anchor);
+                    extended::estimate(estimator, query, anchor, record, norm, to_anchor)
+                })
+                .collect::<Vec<_>>()
+        });
+        Ok((rough.into_iter())
+            .zip(estimates.into_iter().flatten())
+            .map(|(mut candidate, (d, error))| {
+                (candidate.lower, candidate.upper) = (d - error, d + error);
+                candidate
+            })
+            .collect())
+    }
+
+    async fn rerank(&self, mut candidates: Vec<Candidate>, top: &mut Top) -> Result<()> {
+        let size = self.column.dims * self.column.element.bytes();
+        let runs = runs(&mut candidates, size);
         let mut read = stream::iter(runs)
             .map(|run| async move {
                 let cluster = self.known.get(run[0].cluster);
@@ -533,10 +661,39 @@ struct Cluster<'a> {
 }
 
 struct Candidate {
+    lower: f32,
+    upper: f32,
     cluster: usize,
     row: usize,
     check: u64,
+    norm: f32,
+    to_anchor: f32,
     id: Id,
+}
+
+fn nearest(rows: &mut Vec<Estimate>, most: usize) {
+    if rows.len() > most {
+        rows.select_nth_unstable_by(most, |a, b| {
+            (a.lower + a.upper).total_cmp(&(b.lower + b.upper))
+        });
+        rows.truncate(most);
+    }
+}
+
+fn by_middle(candidates: &mut [Candidate]) {
+    candidates.sort_unstable_by(|a, b| (a.lower + a.upper).total_cmp(&(b.lower + b.upper)));
+}
+
+fn runs(candidates: &mut Vec<Candidate>, size: usize) -> Vec<Vec<Candidate>> {
+    candidates.sort_unstable_by_key(|c| (c.cluster, c.row));
+    let mut runs: Vec<Vec<Candidate>> = Vec::new();
+    for candidate in candidates.drain(..) {
+        match runs.last_mut() {
+            Some(run) if near(&run[run.len() - 1], &candidate, size) => run.push(candidate),
+            _ => runs.push(vec![candidate]),
+        }
+    }
+    runs
 }
 
 fn near(a: &Candidate, b: &Candidate, size: usize) -> bool {

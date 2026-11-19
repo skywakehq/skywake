@@ -74,22 +74,29 @@ impl Order {
     pub(crate) fn compare(&self, a: (&Id, &Attributes), b: (&Id, &Attributes)) -> Ordering {
         for (by, descending) in self.keys() {
             let order = match by {
+                "id" if descending => b.0.cmp(a.0),
                 "id" => a.0.cmp(b.0),
-                _ => match (a.1.get(by), b.1.get(by)) {
-                    (Some(x), Some(y)) => x.order(y),
-                    (x, y) if self.missing_lowest => x.is_some().cmp(&y.is_some()),
-                    // Missing comes last either way, so it is not turned around.
-                    (Some(_), None) => return Ordering::Less,
-                    (None, Some(_)) => return Ordering::Greater,
-                    (None, None) => Ordering::Equal,
-                },
+                _ => self.key_order(descending, a.1.get(by), b.1.get(by)),
             };
-            let order = if descending { order.reverse() } else { order };
             if order != Ordering::Equal {
                 return order;
             }
         }
         a.0.cmp(b.0)
+    }
+
+    pub(crate) fn key_order(
+        &self,
+        descending: bool,
+        x: Option<&Value>,
+        y: Option<&Value>,
+    ) -> Ordering {
+        let turn = |order: Ordering| if descending { order.reverse() } else { order };
+        match (x, y) {
+            (Some(x), Some(y)) => turn(x.order(y)),
+            (x, y) if self.missing_lowest => turn(x.is_some().cmp(&y.is_some())),
+            (x, y) => x.is_none().cmp(&y.is_none()),
+        }
     }
 }
 
@@ -139,7 +146,7 @@ pub enum Measure {
 }
 
 impl Measure {
-    fn attribute(&self) -> Option<&String> {
+    pub(crate) fn attribute(&self) -> Option<&String> {
         match self {
             Measure::Count(name) => name.as_ref(),
             Measure::Sum(name) | Measure::Avg(name) | Measure::Min(name) | Measure::Max(name) => {
@@ -184,6 +191,7 @@ impl Snapshot {
 
     pub async fn query(&self, query: &Query) -> Result<Vec<Hit>> {
         let typed = self.typed_query(query)?;
+        self.storage.shapes().filter(query.filter.as_ref());
         let (per, include) = (query.per.as_ref(), &query.include);
         per::limited(per, include, query.top_k, query.offset, |top_k, include| {
             let query = Query {
@@ -202,16 +210,21 @@ impl Snapshot {
         let (storage, version) = (self.storage.as_ref(), self.version.as_ref());
         Tail::load(storage, version).await?;
         let parts = version.text.as_ref().map_or(&[][..], |text| &text.parts);
-        let text_blobs = parts
-            .iter()
-            .flat_map(|p| p.blobs.iter().copied().chain([p.hot]));
+        let posted = parts.iter().flat_map(|p| &p.postings);
+        let text_blobs = (parts.iter())
+            .flat_map(|p| p.blobs.iter().copied().chain([p.hot]))
+            .chain(posted.clone().flat_map(|p| p.blobs.iter().copied()));
         storage.keep_on_disk(text_blobs.collect()).await?;
+        try_join_all(posted.map(|p| text::postings::read::opened(storage, p))).await?;
         try_join_all(
             parts
                 .iter()
                 .map(|p| text::part::open(storage, p.hot, p.hot_bytes)),
         )
         .await?;
+        if let Some(columns) = &version.columns {
+            crate::format::columns::warm(storage, columns).await?;
+        }
         let Some(ann) = &version.ann else {
             return Ok(());
         };
@@ -295,6 +308,14 @@ impl Snapshot {
         }
         check_names(schema, &order.include)?;
         let filter = order.filter.as_ref().map(|f| f.typed(schema)).transpose()?;
+        self.storage
+            .shapes()
+            .order(&order.by, order.filter.as_ref());
+        let engine =
+            crate::engine::order::order(&self.storage, &self.version, order, filter.as_ref());
+        if let Some(rows) = engine.await? {
+            return Ok(rows);
+        }
         let wanted = order.offset + order.top_k;
         type Kept = (Id, Attributes, Attributes);
         let compare = |a: &Kept, b: &Kept| order.compare((&a.0, &a.1), (&b.0, &b.1));
@@ -380,57 +401,85 @@ impl Snapshot {
         let filter = (aggregate.filter.as_ref())
             .map(|f| f.typed(schema))
             .transpose()?;
-        let mut groups: HashMap<Vec<u8>, Tallied> = HashMap::new();
-        let fresh = || {
-            aggregate
-                .measures
-                .values()
-                .map(|_| Tally::default())
-                .collect()
+        self.storage.shapes().filter(aggregate.filter.as_ref());
+        self.storage.shapes().group(&aggregate.group_by);
+        let engine = crate::engine::aggregate::aggregate(
+            &self.storage,
+            &self.version,
+            aggregate,
+            filter.as_ref(),
+        );
+        let groups = match engine.await? {
+            Some(groups) => groups,
+            None => self.tally(aggregate, filter.as_ref()).await?,
         };
-        let mut failed = None;
-        live::each(&self.storage, &self.version, filter.as_ref(), |_, all| {
-            for key in keys_of(aggregate, &all) {
-                let encoded = postcard::to_stdvec(&key).unwrap_or_default();
-                let (_, tallies) = groups.entry(encoded).or_insert_with(|| (key, fresh()));
-                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
-                    if let Err(e) = tally.add(measure, &all) {
-                        failed.get_or_insert(e);
-                    }
-                }
-            }
-        })
-        .await?;
-        if let Some(e) = failed {
-            return Err(e);
-        }
-        let mut groups: Vec<Tallied> = groups.into_values().collect();
-        groups.sort_by(|a, b| {
+        let mut groups: Vec<(Vec<u8>, Tallied)> = (groups.into_iter())
+            .map(|group| Ok((postcard::to_stdvec(&group.0)?, group)))
+            .collect::<Result<_>>()?;
+        groups.sort_by(|(a_bytes, a), (b_bytes, b)| {
             let pairs = a.0.iter().zip(&b.0);
             let order = pairs.map(|(x, y)| match (x, y) {
                 (Some(x), Some(y)) => x.order(y),
                 (x, y) => x.is_some().cmp(&y.is_some()),
             });
-            order.fold(Ordering::Equal, Ordering::then)
+            order
+                .fold(Ordering::Equal, Ordering::then)
+                .then_with(|| a_bytes.cmp(b_bytes))
         });
+        let mut groups: Vec<Tallied> = groups.into_iter().map(|(_, group)| group).collect();
         if groups.is_empty() && aggregate.group_by.is_empty() {
-            groups.push((Vec::new(), fresh()));
+            groups.push((Vec::new(), Tally::many(aggregate.measures.len())));
         }
-        Ok(groups
+        groups
             .into_iter()
-            .map(|(key, tallies)| Group {
-                key: (aggregate.group_by.iter().cloned())
-                    .zip(key)
-                    .filter_map(|(name, value)| Some((name, value?)))
-                    .collect(),
-                values: (aggregate.measures.iter())
-                    .zip(tallies)
-                    .filter_map(|((name, measure), tally)| {
-                        Some((name.clone(), tally.value(measure, schema)?))
-                    })
-                    .collect(),
+            .map(|(key, tallies)| {
+                let mut values = BTreeMap::new();
+                for ((name, measure), tally) in aggregate.measures.iter().zip(tallies) {
+                    if let Some(value) = tally.value(measure, schema)? {
+                        values.insert(name.clone(), value);
+                    }
+                }
+                Ok(Group {
+                    key: (aggregate.group_by.iter().cloned())
+                        .zip(key)
+                        .filter_map(|(name, value)| Some((name, value?.canonical())))
+                        .collect(),
+                    values,
+                })
             })
-            .collect())
+            .collect()
+    }
+
+    pub(crate) async fn tally(
+        &self,
+        aggregate: &Aggregate,
+        filter: Option<&Filter>,
+    ) -> Result<Vec<Tallied>> {
+        let mut groups: HashMap<Vec<u8>, Tallied> = HashMap::new();
+        let mut failed = None;
+        live::each(&self.storage, &self.version, filter, |_, all| {
+            for key in keys_of(aggregate, &all) {
+                let encoded = match postcard::to_stdvec(&key) {
+                    Ok(encoded) => encoded,
+                    Err(e) => {
+                        failed.get_or_insert(e.into());
+                        continue;
+                    }
+                };
+                let count = aggregate.measures.len();
+                let (_, tallies) = groups
+                    .entry(encoded)
+                    .or_insert_with(|| (key, Tally::many(count)));
+                for (tally, measure) in tallies.iter_mut().zip(aggregate.measures.values()) {
+                    tally.add(measure, &all);
+                }
+            }
+        })
+        .await?;
+        match failed {
+            Some(e) => Err(e),
+            None => Ok(groups.into_values().collect()),
+        }
     }
 
     pub async fn get_many(&self, ids: &[Id]) -> Result<Vec<Doc>> {
@@ -457,7 +506,7 @@ impl Snapshot {
     }
 }
 
-fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
+pub(crate) fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
     let mut keys: Vec<Vec<Option<Value>>> = vec![Vec::new()];
     for name in &aggregate.group_by {
         let value = all.get(name);
@@ -465,6 +514,7 @@ fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
             Some(list) if aggregate.each.contains(name) => {
                 let mut unique: Vec<Value> = Vec::new();
                 for item in list.items() {
+                    let item = item.canonical();
                     if !unique.contains(&item) {
                         unique.push(item);
                     }
@@ -472,7 +522,7 @@ fn keys_of(aggregate: &Aggregate, all: &Attributes) -> Vec<Vec<Option<Value>>> {
                 unique.into_iter().map(Some).collect()
             }
             None if aggregate.each.contains(name) => Vec::new(),
-            value => vec![value.cloned()],
+            value => vec![value.cloned().map(Value::canonical)],
         };
         keys = (keys.into_iter())
             .flat_map(|key| {
@@ -495,58 +545,77 @@ fn check_names(schema: &Schema, names: &[String]) -> Result<()> {
         .try_for_each(|name| schema.kind(name).map(drop))
 }
 
-type Tallied = (Vec<Option<Value>>, Vec<Tally>);
+pub(crate) type Tallied = (Vec<Option<Value>>, Vec<Tally>);
 
 #[derive(Default)]
-struct Tally {
-    count: u64,
-    int: i64,
+pub(crate) struct Tally {
+    pub count: u64,
+    int: i128,
     float: f64,
     extreme: Option<Value>,
 }
 
 impl Tally {
-    fn add(&mut self, measure: &Measure, attributes: &Attributes) -> Result<()> {
-        let Some(name) = measure.attribute() else {
-            self.count += 1;
-            return Ok(());
+    pub(crate) fn many(count: usize) -> Vec<Tally> {
+        (0..count).map(|_| Tally::default()).collect()
+    }
+
+    fn add(&mut self, measure: &Measure, attributes: &Attributes) {
+        match measure.attribute() {
+            None => self.count += 1,
+            Some(name) => self.add_value(measure, attributes.get(name)),
+        }
+    }
+
+    pub(crate) fn merge(&mut self, other: Tally, measure: &Measure) {
+        self.count += other.count;
+        self.int += other.int;
+        self.float += other.float;
+        if let Some(value) = other.extreme {
+            self.consider(measure, value);
+        }
+    }
+
+    fn consider(&mut self, measure: &Measure, value: Value) {
+        if matches!(value, Value::Number(n) if n.is_nan()) {
+            return;
+        }
+        let wins = |old: &Value| match measure {
+            Measure::Min(_) => value.order(old).is_lt(),
+            _ => value.order(old).is_gt(),
         };
-        let Some(value) = attributes.get(name) else {
-            return Ok(());
+        if self.extreme.as_ref().is_none_or(wins) {
+            self.extreme = Some(value.canonical());
+        }
+    }
+
+    pub(crate) fn add_value(&mut self, measure: &Measure, value: Option<&Value>) {
+        let Some(value) = value else {
+            return;
         };
         self.count += 1;
         match (measure, value) {
             (Measure::Sum(_) | Measure::Avg(_), Value::Int(n)) => {
-                self.int = (self.int.checked_add(*n))
-                    .ok_or_else(|| invalid(format!("the sum of `{name}` is too large")))?;
+                self.int += *n as i128;
                 self.float += *n as f64;
             }
             (Measure::Sum(_) | Measure::Avg(_), Value::Number(n)) => self.float += n,
-            (Measure::Min(_), value)
-                if self.extreme.as_ref().is_none_or(|e| value.order(e).is_lt()) =>
-            {
-                self.extreme = Some(value.clone());
-            }
-            (Measure::Max(_), value)
-                if self.extreme.as_ref().is_none_or(|e| value.order(e).is_gt()) =>
-            {
-                self.extreme = Some(value.clone());
-            }
+            (Measure::Min(_) | Measure::Max(_), value) => self.consider(measure, value.clone()),
             _ => {}
         }
-        Ok(())
     }
 
-    fn value(self, measure: &Measure, schema: &Schema) -> Option<Value> {
-        Some(match measure {
+    fn value(self, measure: &Measure, schema: &Schema) -> Result<Option<Value>> {
+        Ok(Some(match measure {
             Measure::Count(_) => Value::Int(self.count as i64),
-            Measure::Sum(name) if schema.attributes.get(name) == Some(&Kind::Int) => {
-                Value::Int(self.int)
-            }
+            Measure::Sum(name) if schema.attributes.get(name) == Some(&Kind::Int) => Value::Int(
+                i64::try_from(self.int)
+                    .map_err(|_| invalid(format!("the sum of `{name}` is too large")))?,
+            ),
             Measure::Sum(_) => Value::Number(self.float),
-            Measure::Avg(_) if self.count == 0 => return None,
+            Measure::Avg(_) if self.count == 0 => return Ok(None),
             Measure::Avg(_) => Value::Number(self.float / self.count as f64),
-            Measure::Min(_) | Measure::Max(_) => self.extreme?,
-        })
+            Measure::Min(_) | Measure::Max(_) => return Ok(self.extreme),
+        }))
     }
 }

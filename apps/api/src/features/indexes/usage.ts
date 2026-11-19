@@ -57,6 +57,18 @@ export class Bill {
   }
 }
 
+export function writtenBytes(value: unknown): number {
+  let numbers = 0;
+  const rest = JSON.stringify(value, (_key, field: unknown) => {
+    if (Array.isArray(field) && typeof field[0] === "number") {
+      numbers += field.length * 4;
+      return 0;
+    }
+    return field;
+  });
+  return Buffer.byteLength(rest ?? "") + numbers;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FLUSH_MS = 5000;
 const SIZE_MS = 10 * 60 * 1000;

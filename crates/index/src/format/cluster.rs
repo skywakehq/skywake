@@ -1,4 +1,5 @@
-//! A cluster blob: `[header][codes][attributes][vectors]`.
+//! A cluster blob: `[header][codes][attributes][vectors][extended codes]`. The extended codes come
+//! last and outside the offsets, so blobs without them read the same.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -7,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
 use crate::filter::attrs::Attrs;
-use crate::vector::ivf;
 use crate::vector::rabitq::{self, Factors, Rotation};
+use crate::vector::{extended, ivf};
 use crate::{Attributes, Element, Error, Id, Kind, Result};
 
 const MAGIC: [u8; 4] = *b"swc2";
@@ -44,6 +45,11 @@ impl ClusterRef {
         let size = (self.offsets[3] - self.offsets[2]) / self.rows.max(1);
         self.offsets[2] + rows.start as u64 * size..self.offsets[2] + rows.end as u64 * size
     }
+
+    pub(crate) fn extended(&self, rows: Range<usize>, dims: usize) -> Range<u64> {
+        let size = extended::record(dims) as u64;
+        self.offsets[3] + rows.start as u64 * size..self.offsets[3] + rows.end as u64 * size
+    }
 }
 
 #[derive(Default)]
@@ -77,9 +83,16 @@ pub(crate) fn encode(cluster: &Cluster, coder: &Coder) -> Result<(Vec<u8>, Clust
     let scale = anchor_scale(coder.centroid, vectors());
     let anchor: Vec<f32> = coder.centroid.iter().map(|x| x * scale).collect();
     let lift = coder.rotation.difference(&anchor, coder.origin);
+    let record = extended::record(dims);
+    let wanted = extended::wanted(dims);
+    let mut records = vec![0u8; if wanted { rows * record } else { 0 }];
     for (row, vector) in vectors().enumerate() {
         let out = &mut bits[row * words..(row + 1) * words];
         factors.push(rabitq::encode(coder.rotation, &anchor, &lift, vector, out));
+        if wanted {
+            let out = &mut records[row * record..(row + 1) * record];
+            extended::encode(coder.rotation, &anchor, &lift, vector, out);
+        }
     }
     let stored: Vec<u8> = to_bytes(&cluster.vectors, coder.element);
     let checks = (stored.chunks_exact((dims * coder.element.bytes()).max(1)))
@@ -104,7 +117,7 @@ pub(crate) fn encode(cluster: &Cluster, coder: &Coder) -> Result<(Vec<u8>, Clust
         vectors_start,
         vectors_start + stored.len() as u64,
     ];
-    let mut blob = Vec::with_capacity(offsets[3] as usize);
+    let mut blob = Vec::with_capacity(offsets[3] as usize + records.len());
     blob.extend(MAGIC);
     for n in [rows as u32, dims as u32, element_code(coder.element)] {
         blob.extend(n.to_le_bytes());
@@ -113,6 +126,7 @@ pub(crate) fn encode(cluster: &Cluster, coder: &Coder) -> Result<(Vec<u8>, Clust
     blob.extend(codes);
     blob.extend(attrs);
     blob.extend(stored);
+    blob.extend(records);
     let section = |i: usize| Hash::of(&blob[offsets[i] as usize..offsets[i + 1] as usize]);
     let stored = ClusterRef {
         hash: Hash::of(&blob),

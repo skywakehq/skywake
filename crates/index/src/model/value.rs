@@ -23,6 +23,13 @@ pub enum Value {
 }
 
 impl Value {
+    pub(crate) fn canonical(self) -> Value {
+        match self {
+            Value::Number(n) => Value::Number(n + 0.0),
+            value => value,
+        }
+    }
+
     pub fn kind(&self) -> Kind {
         match self {
             Value::String(_) => Kind::String,
@@ -113,7 +120,12 @@ impl Value {
     }
 
     pub(crate) fn order(&self, other: &Value) -> Ordering {
-        self.compare(other).unwrap_or(Ordering::Equal)
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) if a.is_nan() || b.is_nan() => {
+                a.is_nan().cmp(&b.is_nan())
+            }
+            _ => self.compare(other).unwrap_or(Ordering::Equal),
+        }
     }
 }
 

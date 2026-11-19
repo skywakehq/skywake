@@ -9,7 +9,8 @@ use futures::future::try_join_all;
 use super::fields::{Fields, key};
 use super::part::{self, PartRef, PartWriter, TextIndex, blocking};
 use crate::build::segments;
-use crate::format::{Segment, SegmentRef, Version};
+use crate::format::parts::{self, Source};
+use crate::format::{Segment, Version};
 use crate::store::{Storage, Written};
 use crate::{Id, Result};
 
@@ -24,24 +25,25 @@ pub(crate) async fn build(
     version: &Version,
     budget: usize,
     full: bool,
+    postings: bool,
     written: &mut Written,
 ) -> Result<Option<TextIndex>> {
     if version.schema.text.is_empty() {
         return Ok(None);
     }
     let base = version.text.clone().unwrap_or_default();
+    let postings = postings || (!full && base.parts.iter().any(|p| p.postings.is_some()));
     let docs: u64 = base.parts.iter().map(|p| p.docs as u64).sum();
     let dead: u64 = base.parts.iter().map(|p| p.dead_docs as u64).sum();
     let anew = full
         || base.parts.len() >= MAX_PARTS
         || dead * DEAD_SHARE > docs
-        || (base.parts.is_empty() && version.covers() > 0);
-    let mut refs: Vec<SegmentRef> = Vec::new();
-    if anew {
-        let built = version.built.open::<SegmentRef>(storage).await?;
-        refs.extend(built.iter().cloned());
-    }
-    refs.extend_from_slice(&version.tail);
+        || (base.parts.is_empty() && version.covers() > 0)
+        || (postings && base.parts.iter().any(|p| p.postings.is_none()));
+    let refs: Vec<Source> = match anew {
+        true => parts::sources(storage, version, true).await?,
+        false => version.tail.iter().map(Source::from).collect(),
+    };
     if refs.is_empty() {
         return Ok(Some(base));
     }
@@ -75,7 +77,7 @@ pub(crate) async fn build(
     )
     .await?;
     let fields = Arc::new(Fields::new(&version.schema, part::widest(&kept)));
-    let mut writer = Some(PartWriter::new(fields, budget / 2)?);
+    let mut writer = Some(PartWriter::new(fields, budget / 2, postings)?);
     let mut pass = segments(storage, &refs);
     while let Some((first_seq, segment)) = pass.try_next().await? {
         let segment = Arc::new(segment);

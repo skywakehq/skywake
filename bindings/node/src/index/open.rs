@@ -63,6 +63,17 @@ pub(crate) fn stores_of(location: &str, options: Option<IndexOpenOptions>) -> Re
     Ok((store, stores))
 }
 
+pub(crate) fn switch(name: &str) -> Result<bool> {
+    match std::env::var(name).as_deref() {
+        Err(_) | Ok("") | Ok("off") => Ok(false),
+        Ok("on") => Ok(true),
+        Ok(other) => Err(failure(
+            "internal",
+            format!("{name}: `{other}`: use `on` or `off`"),
+        )),
+    }
+}
+
 pub(crate) fn disk() -> Result<Option<Arc<ChunkCache>>> {
     static DISK: OnceLock<std::result::Result<Option<Arc<ChunkCache>>, String>> = OnceLock::new();
     let disk = DISK.get_or_init(open_disk);

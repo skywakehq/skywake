@@ -10,6 +10,7 @@ use object_store::path::Path;
 use object_store::prefix::PrefixStore;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
 use skywake_core::kind::{Kind, require};
+use skywake_core::list::{List, Node};
 use skywake_core::lock::{self, Lease};
 use skywake_core::{Hash, Objects};
 
@@ -18,8 +19,11 @@ pub use skywake_core::Collected;
 use serde::de::DeserializeOwned;
 
 use crate::format::cluster::ClusterRef;
+use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory::Directory;
+use crate::format::lists::Entry;
 use crate::format::pages::Pages;
+use crate::format::rows::RowMap;
 use crate::format::{SegmentRef, Version, decode_version};
 use crate::store::head::{self, DELETED};
 use crate::store::object_path;
@@ -237,15 +241,22 @@ impl Reachable {
         for page in self.pages::<SegmentRef>(objects, &version.built).await? {
             self.blobs.extend(page.iter().map(|segment| segment.hash));
         }
+        let parts = self.list(objects, &version.parts).await?;
+        self.blobs.extend(parts.iter().map(|part| part.hash));
         for part in version.text.iter().flat_map(|text| &text.parts) {
             self.blobs.insert(part.hot);
             self.blobs.extend(part.blobs.iter().copied());
             self.blobs.extend(part.dead);
+            self.blobs
+                .extend(part.postings.iter().flat_map(|p| p.blobs.iter().copied()));
+        }
+        if let Some(columns) = &version.columns {
+            self.columns(objects, columns).await?;
         }
         let Some(ann) = &version.ann else {
             return Ok(());
         };
-        self.blobs.extend(ann.rows.iter().copied());
+        self.row_map(objects, &ann.rows).await?;
         self.blobs.insert(ann.filters);
         for part in ann.parts.values() {
             self.blobs.insert(part.directory);
@@ -264,6 +275,57 @@ impl Reachable {
             }
         }
         Ok(())
+    }
+
+    async fn columns(&mut self, objects: &Objects, columns: &Columns) -> Result<()> {
+        let small = columns
+            .columns
+            .values()
+            .flat_map(|c| [Some(c.dictionary), Some(c.totals), c.leaders])
+            .flatten();
+        self.blobs.extend(small);
+        self.row_map(objects, &columns.rows).await?;
+        for page in self
+            .chunks::<Vec<Span>>(objects, columns.ids.iter().copied())
+            .await?
+        {
+            self.blobs.extend(page.iter().map(|span| span.blob));
+        }
+        let projections = columns.projections.iter().flat_map(|p| p.directories());
+        for directory in self
+            .chunks::<projection::Directory>(objects, projections)
+            .await?
+        {
+            self.blobs
+                .extend(directory.blocks.iter().map(|block| block.hash));
+        }
+        for column in columns.columns.values() {
+            let directory = column.directory.iter().copied();
+            for page in self.chunks::<Vec<PageRef>>(objects, directory).await? {
+                self.blobs.extend(page.iter().map(|page| page.span.blob));
+            }
+        }
+        Ok(())
+    }
+
+    async fn row_map(&mut self, objects: &Objects, map: &RowMap) -> Result<()> {
+        let pages = self.list(objects, map).await?;
+        self.blobs.extend(pages);
+        Ok(())
+    }
+
+    async fn list<T: Entry>(&mut self, objects: &Objects, list: &List<T>) -> Result<Vec<T>> {
+        if list.root().is_some_and(|root| self.blobs.contains(&root)) {
+            return Ok(Vec::new());
+        }
+        let walked = list
+            .walk(|hash| async move {
+                let bytes = objects.get_chunk(hash).await?;
+                Ok::<_, Error>(Arc::new(postcard::from_bytes::<Node<T>>(&bytes)?))
+            })
+            .await?;
+        self.blobs.extend(walked.nodes);
+        Ok(walked.entries)
     }
 
     async fn pages<T: DeserializeOwned>(

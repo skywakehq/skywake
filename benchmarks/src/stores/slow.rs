@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -13,11 +14,18 @@ use object_store::{
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
+use crate::datasets::random::Random;
+
+const P99_SIGMAS: f64 = 2.326;
+
 #[derive(Debug)]
 pub(crate) struct Slow {
     inner: Arc<dyn ObjectStore>,
     latency: Duration,
-    slots: Arc<Semaphore>,
+    slots: Option<Arc<Semaphore>>,
+    tail: f64,
+    bytes_per_s: Option<f64>,
+    draws: AtomicU64,
 }
 
 impl Slow {
@@ -25,21 +33,67 @@ impl Slow {
         Self {
             inner,
             latency,
-            slots: Arc::new(Semaphore::new(in_flight.max(1))),
+            slots: (in_flight > 0).then(|| Arc::new(Semaphore::new(in_flight))),
+            tail: 1.0,
+            bytes_per_s: None,
+            draws: AtomicU64::new(0),
         }
     }
 
-    async fn wait(&self) -> OwnedSemaphorePermit {
-        let slot =
-            (self.slots.clone().acquire_owned().await).expect("the semaphore is never closed");
-        tokio::time::sleep(self.latency).await;
+    pub(crate) fn with_tail(mut self, p99_over_p50: f64) -> Self {
+        self.tail = p99_over_p50.max(1.0);
+        self
+    }
+
+    pub(crate) fn with_bandwidth(mut self, mb_per_s: f64) -> Self {
+        self.bytes_per_s = (mb_per_s > 0.0).then_some(mb_per_s * 1e6);
+        self
+    }
+
+    pub(crate) fn queued(inner: Arc<dyn ObjectStore>, in_flight: usize) -> Self {
+        Self::new(inner, Duration::ZERO, in_flight.max(1))
+    }
+
+    async fn wait(&self) -> Option<OwnedSemaphorePermit> {
+        let slot = match &self.slots {
+            Some(slots) => {
+                Some((slots.clone().acquire_owned().await).expect("the semaphore is never closed"))
+            }
+            None => None,
+        };
+        if !self.latency.is_zero() {
+            tokio::time::sleep(self.latency.mul_f64(self.factor())).await;
+        }
         slot
+    }
+
+    fn factor(&self) -> f64 {
+        if self.tail <= 1.0 {
+            return 1.0;
+        }
+        let n = self.draws.fetch_add(1, Ordering::Relaxed);
+        let mut random = Random(n);
+        let sigma = self.tail.ln() / P99_SIGMAS;
+        (sigma * random.normal() as f64).exp()
+    }
+
+    async fn transfer(&self, bytes: u64) {
+        if let Some(rate) = self.bytes_per_s {
+            tokio::time::sleep(Duration::from_secs_f64(bytes as f64 / rate)).await;
+        }
     }
 }
 
 impl fmt::Display for Slow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} + {:?} per request", self.inner, self.latency)
+        write!(f, "{} + {:?} per request", self.inner, self.latency)?;
+        if self.tail > 1.0 {
+            write!(f, ", p99 {}x", self.tail)?;
+        }
+        match self.bytes_per_s {
+            Some(rate) => write!(f, ", {} MB/s a request", rate / 1e6),
+            None => Ok(()),
+        }
     }
 }
 
@@ -66,7 +120,12 @@ impl ObjectStore for Slow {
 
     async fn get_opts(&self, location: &Path, options: GetOptions) -> Result<GetResult> {
         let _slot = self.wait().await;
-        self.inner.get_opts(location, options).await
+        let head = options.head;
+        let got = self.inner.get_opts(location, options).await?;
+        if !head {
+            self.transfer(got.range.end - got.range.start).await;
+        }
+        Ok(got)
     }
 
     fn delete_stream(

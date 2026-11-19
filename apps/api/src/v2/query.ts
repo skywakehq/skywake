@@ -38,7 +38,8 @@ const shown = (asked: Query) =>
 const hitOf = (hit: Hit, score: number) => ({ id: hit.id, score, ...hit.attributes });
 
 export async function query(index: Indexes, asked: Query) {
-  const schema = (await index.index()).schema;
+  const schema = async () => (await index.index()).schema;
+  const known = () => index.schema();
   const branch = index.branch(asked.branch);
   const limit = asked.limit ?? 10;
   const filter = filterOf(asked.filter);
@@ -47,7 +48,9 @@ export async function query(index: Indexes, asked: Query) {
   const mode = asked.mode ?? "auto";
 
   if (asked.vector) {
-    const column = vectorColumn(schema, asked.vector.length);
+    const column =
+      vectorColumn(await known(), asked.vector.length) ??
+      vectorColumn(await schema(), asked.vector.length);
     if (!column)
       throw invalid(
         `has ${asked.vector.length} numbers; no vector field of the index has that many`,
@@ -63,8 +66,10 @@ export async function query(index: Indexes, asked: Query) {
   }
 
   if (asked.text) {
-    const embed = embedColumn(schema);
-    const words = textFields(schema);
+    const cached = await known();
+    const columns = embedColumn(cached) || textFields(cached).length > 0 ? cached : await schema();
+    const embed = embedColumn(columns);
+    const words = textFields(columns);
     const meaning = embed && mode !== "keywords";
     const keywords = words.length > 0 && mode !== "meaning";
     if (mode === "meaning" && !embed) {
@@ -109,21 +114,24 @@ export async function query(index: Indexes, asked: Query) {
     return hits.map((hit) => hitOf(hit, hit.score ?? 0));
   }
 
+  return ordered(index, asked);
+}
+
+async function ordered(index: Indexes, asked: Query) {
   const keys = Object.entries(asked.sort ?? { id: "asc" });
   const [first, ...rest] = keys.map(([by, dir]) => ({ by, descending: dir === "desc" }));
-  const { rows } = await v1.post<{ rows: Hit[] }>(`${branch}/order`, {
+  const { rows } = await index.read<{ rows: Hit[] }>(`${index.branch(asked.branch)}/order`, {
     ...first,
     thenBy: rest.length ? rest : undefined,
-    topK: limit,
-    filter,
-    ...fields,
+    topK: asked.limit ?? 10,
+    filter: filterOf(asked.filter),
+    ...shown(asked),
   });
   return rows.map((row) => hitOf(row, 0));
 }
 
 export async function count(index: Indexes, filter: Filter, branch?: string) {
-  await index.index();
-  const { groups } = await index.scope.v1.post<{ groups: { values: { count: number } }[] }>(
+  const { groups } = await index.read<{ groups: { values: { count: number } }[] }>(
     `${index.branch(branch)}/aggregate`,
     { measures: { count: ["count"] }, filter: filterOf(filter) },
   );
@@ -135,7 +143,6 @@ const listOf = (value: string | string[] | undefined) =>
   value === undefined ? [] : Array.isArray(value) ? value : [value];
 
 export async function aggregate(index: Indexes, asked: Aggregate) {
-  await index.index();
   const measures: Record<string, string[]> = {};
   if (asked.count !== false) measures.count = ["count"];
   for (const measure of MEASURES) {
@@ -147,7 +154,7 @@ export async function aggregate(index: Indexes, asked: Aggregate) {
       "count",
       "ask for `count`, or a `sum`, `avg`, `min` or `max` of a field",
     );
-  const { groups } = await index.scope.v1.post<{
+  const { groups } = await index.read<{
     groups: { key: Attributes; values: Record<string, number> }[];
   }>(`${index.branch(asked.branch)}/aggregate`, {
     measures,

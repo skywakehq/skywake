@@ -21,6 +21,7 @@ const WRITES: Record<string, number> = {
   dropAttributes: 0,
   merge: 0,
   upsert: 0,
+  upsertRows: 0,
   delete: 0,
   write: 0,
   deleteBranch: 0,
@@ -135,7 +136,11 @@ export class Stores {
       });
       if (builds) {
         const where = { region, folder, shards: options?.shards ?? 1, kmsKeyId: options?.kmsKeyId };
-        index = built(index, (branch) => builds.written(where, branch));
+        index = built(
+          index,
+          (branch) => builds.written(where, branch),
+          (branch) => builds.read(where, branch),
+        );
       }
       return this.#leases ? leased(index, folder, this.#leases) : index;
     });
@@ -194,13 +199,24 @@ export function inFolder(store: string, folder: string) {
   return `${path.replace(/\/+$/, "")}/${folder}${settings}`;
 }
 
-const BUILT = new Set(["upsert", "delete", "write", "merge"]);
+const BUILT = new Set(["upsert", "upsertRows", "delete", "write", "merge"]);
+const READ = new Set(["order", "aggregate", "multi", "query", "search", "hybrid"]);
 
-function built(index: Index, written: (branch: string) => void): Index {
+function built(
+  index: Index,
+  written: (branch: string) => void,
+  read: (branch: string) => void,
+): Index {
   return new Proxy(index, {
     get(target, key) {
       const value: unknown = Reflect.get(target, key, target);
       if (typeof value !== "function") return value;
+      if (typeof key === "string" && READ.has(key)) {
+        return (...args: unknown[]) => {
+          read(args[0] as string);
+          return value.apply(target, args);
+        };
+      }
       if (typeof key !== "string" || !BUILT.has(key)) return value.bind(target);
       return async (...args: unknown[]) => {
         const result: unknown = await value.apply(target, args);

@@ -50,7 +50,7 @@ async fn clusters_of_format_4_are_still_read() {
         &now.tail,
         Some(Ann4 {
             columns,
-            rows: &ann.rows,
+            rows: &crate::format::legacy::flat(&ann.rows),
             rows_bytes: ann.rows_bytes,
             live: ann.live,
             full_rows: ann.full_rows,
@@ -61,7 +61,7 @@ async fn clusters_of_format_4_are_still_read() {
         &now.text,
     );
     let hash = Objects::new(gate.clone()).put(&old).await.unwrap();
-    crate::store::head::create(gate.as_ref(), "old", hash, &[])
+    crate::store::head::create(gate.as_ref(), "old", hash, &[], None)
         .await
         .unwrap();
     let query = Query::new("v", clustered(1, 16, 9).remove(0), 10);
@@ -91,7 +91,7 @@ async fn a_version_of_format_6_opens_with_number_and_string_ids() {
         &now.text,
     );
     let hash = Objects::new(gate.clone()).put(&old).await.unwrap();
-    crate::store::head::create(gate.as_ref(), "old", hash, &[])
+    crate::store::head::create(gate.as_ref(), "old", hash, &[], None)
         .await
         .unwrap();
     let opened = Index::open(gate.clone(), "old").await.unwrap();

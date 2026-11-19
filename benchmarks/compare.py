@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from schema import RESULTS  # noqa: E402
 
 WORSE = 0.10
-NOISE = {"ms": 2.0, "requests": 2, "MB": 0.1}
+NOISE = {"ms": 2.0, "requests": 2, "gets": 0.5, "store_reads": 0.5, "waves": 0.5, "MB": 0.1, "bytes": 65536}
 HIGHER = ("/s", "_per_s", "qps", "recall", "mrr10", "ndcg10")
 EXPECTED = ("started", "hostname")
 
@@ -46,7 +46,7 @@ def main():
             previous = before["numbers"].get(table, {}).get((label, metric))
             if previous is None:
                 continue
-            change = (value - previous) / previous if previous else 0.0
+            change = (value - previous) / previous if previous else (float("inf") if value > 0 else 0.0)
             worse = -change if metric.endswith(HIGHER) else change
             flag = ""
             if abs(value - previous) >= noise(metric):

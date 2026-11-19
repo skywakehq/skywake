@@ -16,7 +16,7 @@ enum Read {
     Codes,
     Vectors,
     Attributes,
-    Other,
+    Other(String),
 }
 
 async fn cold_query(gate: &Arc<Gate>, table: &[ClusterRef], query: &Query) -> (Vec<Read>, u64) {
@@ -28,7 +28,7 @@ async fn cold_query(gate: &Arc<Gate>, table: &[ClusterRef], query: &Query) -> (V
     let mut bytes = 0;
     for (path, range) in reads {
         let Some(hash) = path.strip_prefix("blobs/") else {
-            kinds.push(Read::Other);
+            kinds.push(Read::Other(path.to_string()));
             continue;
         };
         let cluster = table.iter().find(|c| c.hash.to_string() == hash).unwrap();
@@ -259,12 +259,20 @@ async fn a_cold_query_reads_in_three_rounds() {
     let version = index.version().await.unwrap();
     let table = table(&index, &version).await;
     let vector = clustered(1, 128, 3).remove(0);
+    let ann = version.ann.as_ref().unwrap();
+    let clusters = ann.columns.values().next().unwrap();
+    let needed = [
+        format!("objects/{}", clusters.centroids),
+        format!("chunks/{}", clusters.table.hashes[0]),
+    ];
     let (kinds, _) = cold_query(&gate, &table, &Query::new("v", vector, 10)).await;
     let first_codes = kinds.iter().position(|k| *k == Read::Codes).unwrap();
     let last_codes = kinds.iter().rposition(|k| *k == Read::Codes).unwrap();
     let first_vectors = kinds.iter().position(|k| *k == Read::Vectors).unwrap();
-    let last_other = kinds.iter().rposition(|k| *k == Read::Other).unwrap();
-    assert!(first_codes > 0 && last_other < first_codes, "{kinds:?}");
+    for path in &needed {
+        let at = kinds.iter().position(|k| *k == Read::Other(path.clone()));
+        assert!(at.is_some_and(|at| at < first_codes), "{path} in {kinds:?}");
+    }
     assert!(last_codes < first_vectors, "{kinds:?}");
 }
 

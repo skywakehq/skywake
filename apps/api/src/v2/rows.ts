@@ -106,6 +106,39 @@ export function docOf(schema: Schema, row: Row): Doc {
   return { id: row.id, vectors, attributes };
 }
 
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+
+export function decodeVectors(rows: Row[], schema: Pick<Schema, "vectors">): Row[] {
+  const dims = new Map(schema.vectors.map((c) => [c.name, c.dims]));
+  return rows.map((row, i) => {
+    const decoded = { ...row };
+    for (const [name, value] of Object.entries(row)) {
+      const want = dims.get(name);
+      if (want !== undefined && typeof value === "string") {
+        decoded[name] = floatsOf(value, want, `rows[${i}].${name}`);
+      }
+    }
+    return decoded;
+  });
+}
+
+function floatsOf(text: string, dims: number, at: string): number[] {
+  const bytes = text.length % 4 === 0 && BASE64.test(text) ? Buffer.from(text, "base64") : null;
+  if (bytes?.length !== dims * 4) {
+    throw invalid(
+      `is not ${dims} numbers in base64`,
+      at,
+      "encode the vector's numbers as little-endian 32-bit floats, in standard base64 with padding",
+    );
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+  return Array.from({ length: dims }, (_, k) => {
+    const x = view.getFloat32(k * 4, true);
+    if (!Number.isFinite(x)) throw invalid("holds a number that is not finite", at);
+    return x;
+  });
+}
+
 export function rowOf(doc: { id: string | number; attributes?: Record<string, unknown> }): Row {
   return { id: doc.id, ...doc.attributes };
 }

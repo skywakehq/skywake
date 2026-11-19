@@ -3,12 +3,11 @@
 use std::sync::Arc;
 
 use futures::TryStreamExt;
-use skywake_core::Hash;
 
 use super::REPLACED;
 use super::runs::{Run, Runs, Sorter, Writer};
 use crate::build::{blocking, segments};
-use crate::format::SegmentRef;
+use crate::format::parts::Source;
 use crate::format::rows::{self, RowPage};
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::vector::calibrate::Calibrator;
@@ -37,7 +36,7 @@ struct Assigned<'r> {
 
 pub(super) async fn assign<'r>(
     storage: &Storage,
-    refs: &[SegmentRef],
+    refs: &[Source],
     (columns, centroids, calibrators): Models<'_>,
     places: Sorter<'r, u64>,
     (runs, limit, live, k): (&'r Runs<'r>, usize, usize, usize),
@@ -155,7 +154,7 @@ pub(super) async fn store_rows(
     row_map: Sorter<'_, RowKey>,
     pages: usize,
     written: &mut Written,
-) -> Result<(Vec<Hash>, u64)> {
+) -> Result<(rows::RowMap, u64)> {
     let mut sorted = row_map.finish().await?;
     let mut next = sorted.next().await?;
     let (mut hashes, mut bytes) = (Vec::with_capacity(pages), 0);
@@ -174,5 +173,5 @@ pub(super) async fn store_rows(
             ready.clear();
         }
     }
-    Ok((hashes, bytes))
+    Ok((rows::map(storage, hashes, written).await?, bytes))
 }

@@ -6,7 +6,7 @@ use futures::TryStreamExt;
 
 use super::runs::{Runs, Sorter};
 use crate::build::segments;
-use crate::format::SegmentRef;
+use crate::format::parts::Source;
 use crate::store::Storage;
 use crate::vector::ivf;
 use crate::{Attributes, Column, Id, Result};
@@ -27,7 +27,7 @@ pub(super) struct Live<'r> {
 
 pub(super) async fn find<'r>(
     storage: &Storage,
-    refs: &[SegmentRef],
+    refs: &[Source],
     columns: &[Column],
     (want, writes): (usize, u64),
     (runs, limit): (&'r Runs<'r>, usize),

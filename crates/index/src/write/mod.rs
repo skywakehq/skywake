@@ -6,6 +6,7 @@ pub(crate) mod merge;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, PoisonError};
+use std::time::Duration;
 
 use futures::{StreamExt, TryStreamExt, stream};
 use tokio::sync::oneshot::error::TryRecvError;
@@ -15,6 +16,19 @@ use crate::format::{BLOB_MAX, Segment, SegmentRef, Version, pack};
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::vector::ivf;
 use crate::{Doc, Element, Id, Metric, Result, Schema, invalid};
+
+const HARD: u64 = 4;
+
+const LONGEST_PAUSE: Duration = Duration::from_secs(2);
+
+pub(crate) fn pause(unbuilt: u64, soft: u64) -> Option<Duration> {
+    let over = unbuilt.saturating_sub(soft);
+    let room = soft.saturating_mul(HARD - 1).max(1);
+    match over > room {
+        true => None,
+        false => Some(LONGEST_PAUSE.mul_f64(over as f64 / room as f64)),
+    }
+}
 
 pub(crate) enum Op {
     Upsert(Vec<Doc>),
@@ -216,6 +230,7 @@ pub(crate) fn encode_docs(schema: &Schema, docs: &[Doc]) -> Result<Vec<(Vec<u8>,
                 .collect(),
             attributes: docs.iter().map(|doc| doc.attributes.clone()).collect(),
             deletes: Vec::new(),
+            seqs: Vec::new(),
         };
         Ok(postcard::to_stdvec(&segment)?)
     })

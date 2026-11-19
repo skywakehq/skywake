@@ -7,7 +7,7 @@ import { Failure, invalid } from "./errors.ts";
 import { segment } from "./forward.ts";
 import { pageAfter, pageOf } from "./pages.ts";
 import { aggregate, count, filterOf, query } from "./query.ts";
-import { docOf, fieldsOf, firstSchema, type Row, rowOf } from "./rows.ts";
+import { decodeVectors, docOf, fieldsOf, firstSchema, type Row, rowOf } from "./rows.ts";
 import { orMissing, type Scope } from "./scope.ts";
 
 const routes = v2.indexes;
@@ -17,6 +17,8 @@ type Branch = { name: string; forked_from: string | null; created: string };
 type Version = { version: string; time: string; rows: number };
 
 const MAIN = "main";
+const SCHEMA_MS = 10_000;
+const SCHEMAS = new Map<string, { at: number; schema: Schema }>();
 const VERSION = /^[0-9a-f]{64}$/;
 
 export const branchOf = (branch: {
@@ -53,7 +55,32 @@ export class Indexes {
   }
 
   async index(): Promise<Index> {
-    return orMissing(this.scope, "index", this.name, this.scope.v1.get<Index>(this.path));
+    const index = await orMissing(
+      this.scope,
+      "index",
+      this.name,
+      this.scope.v1.get<Index>(this.path),
+    );
+    SCHEMAS.set(this.key, { at: Date.now(), schema: index.schema });
+    return index;
+  }
+
+  async schema(): Promise<Schema> {
+    const kept = SCHEMAS.get(this.key);
+    if (kept && Date.now() - kept.at < SCHEMA_MS) return kept.schema;
+    return (await this.index()).schema;
+  }
+
+  forget() {
+    SCHEMAS.delete(this.key);
+  }
+
+  private get key() {
+    return `${this.scope.org}\u0000${this.path}`;
+  }
+
+  async read<T>(path: string, body: unknown): Promise<T> {
+    return orMissing(this.scope, "index", this.name, this.scope.v1.post<T>(path, body));
   }
 
   async info() {
@@ -104,6 +131,19 @@ export class Indexes {
     return this.grown(schema, rows);
   }
 
+  async encoded(): Promise<Schema> {
+    try {
+      return (await this.scope.v1.get<Index>(this.path)).schema;
+    } catch (error) {
+      if (!(error instanceof Failure && error.status === 404)) throw error;
+      throw invalid(
+        "needs an index with its vector columns already made",
+        "vector_encoding",
+        "make the index first, or send the first rows' vectors as lists of numbers",
+      );
+    }
+  }
+
   async grown(schema: Schema, rows: Row[]): Promise<Schema> {
     const found = fieldsOf(rows, schema);
     const vector = [...found.vectors.keys()][0];
@@ -116,13 +156,19 @@ export class Indexes {
     }
     if (found.attributes.length === 0) return schema;
     await this.scope.v1.patch(this.path, { attributes: found.attributes });
+    this.forget();
     return { ...schema, attributes: [...schema.attributes, ...found.attributes] };
   }
 
-  async upsert(input: Record<string, unknown> | Record<string, unknown>[], branch = MAIN) {
-    const rows = (Array.isArray(input) ? input : [input]).map(
+  async upsert(
+    input: Record<string, unknown> | Record<string, unknown>[],
+    branch = MAIN,
+    encoding: "float" | "base64" = "float",
+  ) {
+    let rows = (Array.isArray(input) ? input : [input]).map(
       (row) => ({ ...row, id: row.id ?? crypto.randomUUID() }) as Row,
     );
+    if (encoding === "base64") rows = decodeVectors(rows, await this.encoded());
     const schema = await this.schemaFor(rows, branch);
     for (let i = 0; i < rows.length; i += v1.BATCH_MAX) {
       const documents = rows.slice(i, i + v1.BATCH_MAX).map((row) => docOf(schema, row));
@@ -217,10 +263,25 @@ export function registerIndexes(api: V2) {
     return c.body(null, 204);
   });
 
+  api.post("/indexes/:index/rows", async (c, next) => {
+    const index = new Indexes(await c.var.scope(), c.req.param("index"));
+    const path = `${index.branch(c.req.query("branch") ?? MAIN)}/rows`;
+    const bytes = await c.req.arrayBuffer();
+    const query = { vector_encoding: c.req.query("vector_encoding") };
+    const done = await index.scope.v1
+      .send("POST", path, { bytes, query })
+      .catch((error: unknown) => {
+        if (error instanceof Failure && error.status === 404) return null;
+        throw error;
+      });
+    if (done?.status === 200) return c.json(done.body as object, 200);
+    await next();
+  });
+
   api.openapi(routes.upsertRows, async (c) => {
     const index = await open(c, c.req.valid("param").index);
-    const { branch } = c.req.valid("query");
-    return c.json(await index.upsert(c.req.valid("json"), branch), 200);
+    const { branch, vector_encoding } = c.req.valid("query");
+    return c.json(await index.upsert(c.req.valid("json"), branch, vector_encoding), 200);
   });
 
   api.openapi(routes.updateRows, async (c) => {

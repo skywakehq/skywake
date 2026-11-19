@@ -98,7 +98,7 @@ pub(crate) fn encode(
 }
 
 pub(crate) struct Prepared {
-    planes: Vec<u64>,
+    table: Vec<u16>,
     low: f32,
     step: f32,
     sum: f32,
@@ -132,9 +132,9 @@ impl Estimator {
     }
 
     pub(crate) fn prepare(&self, query: &[f32]) -> Prepared {
-        let words = words(self.dims);
+        let mut levels = vec![0u16; words(self.dims) * 64];
         let mut prepared = Prepared {
-            planes: vec![0; QUERY_BITS * words],
+            table: Vec::new(),
             low: 0.0,
             step: 0.0,
             sum: query.iter().sum(),
@@ -154,12 +154,9 @@ impl Estimator {
                 true => over += error,
                 false => under -= error,
             }
-            for j in 0..QUERY_BITS {
-                if level >> j & 1 == 1 {
-                    prepared.planes[j * words + i / 64] |= 1 << (i % 64);
-                }
-            }
+            levels[i] = level as u16;
         }
+        prepared.table = table(&levels);
         prepared.low = low;
         prepared.step = step;
         prepared.rounding = 2.0 * over.max(under) / self.root;
@@ -175,7 +172,7 @@ impl Estimator {
     ) -> (f32, f32) {
         let [norm, aligned, to_anchor, on_lift] = *factors;
         let ones: u32 = bits.iter().map(|w| w.count_ones()).sum();
-        let picked = query.low * ones as f32 + query.step * levels(bits, &query.planes) as f32;
+        let picked = query.low * ones as f32 + query.step * query.levels(bits) as f32;
         let (along, rounding) = match anchor.norm > 0.0 {
             true => (
                 ((2.0 * picked - query.sum) / self.root - on_lift) / anchor.norm,
@@ -183,6 +180,16 @@ impl Estimator {
             ),
             false => (0.0, 0.0),
         };
+        self.finish(anchor, [norm, aligned, to_anchor], along, rounding)
+    }
+
+    pub(crate) fn finish(
+        &self,
+        anchor: &Anchor,
+        [norm, aligned, to_anchor]: [f32; 3],
+        along: f32,
+        rounding: f32,
+    ) -> (f32, f32) {
         let cosine = along / aligned;
         let spread = (1.0 - aligned * aligned).max(0.0).sqrt() * self.bound;
         let error = (spread + rounding) / aligned;
@@ -205,17 +212,29 @@ impl Estimator {
     }
 }
 
-fn levels(bits: &[u64], planes: &[u64]) -> u32 {
-    let mut total = 0;
-    for (j, plane) in planes.chunks_exact(bits.len()).enumerate() {
-        let count: u32 = bits
-            .iter()
-            .zip(plane)
-            .map(|(a, b)| (a & b).count_ones())
-            .sum();
-        total += count << j;
+fn table(levels: &[u16]) -> Vec<u16> {
+    let mut table = vec![0u16; levels.len() / 8 * 256];
+    for (byte, levels) in levels.as_chunks::<8>().0.iter().enumerate() {
+        let entries = &mut table[byte * 256..(byte + 1) * 256];
+        for value in 1..256usize {
+            let low = value.trailing_zeros() as usize;
+            entries[value] = entries[value & (value - 1)] + levels[low];
+        }
     }
-    total
+    table
+}
+
+impl Prepared {
+    fn levels(&self, bits: &[u64]) -> u32 {
+        let table = &self.table[..bits.len() * 2048];
+        let word = |(w, bits): (usize, &u64)| -> u32 {
+            let base = w * 2048;
+            (bits.to_le_bytes().iter().enumerate())
+                .map(|(k, &byte)| table[base + k * 256 + byte as usize] as u32)
+                .sum()
+        };
+        bits.iter().enumerate().map(word).sum()
+    }
 }
 
 #[cfg(test)]
@@ -305,6 +324,39 @@ mod tests {
             for dims in [16, 128, 768] {
                 let rate = held(metric, dims);
                 assert!(rate >= 0.94, "{metric:?} {dims}: {rate}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_level_table_sums_the_levels_of_set_bits() {
+        let mut random = Random(5);
+        for dims in [3, 64, 100, 768] {
+            let estimator = Estimator::new(Metric::Euclidean, dims);
+            let query = estimator.prepare(&vector(&mut random, dims));
+            let levels: Vec<u32> = (0..dims)
+                .map(|i| {
+                    let mut one = vec![0u64; words(dims)];
+                    one[i / 64] = 1 << (i % 64);
+                    query.levels(&one)
+                })
+                .collect();
+            for _ in 0..20 {
+                let bits: Vec<u64> = (0..words(dims))
+                    .map(|w| {
+                        let word = random.next();
+                        match (w + 1) * 64 > dims {
+                            true => word & (u64::MAX >> ((w + 1) * 64 - dims)),
+                            false => word,
+                        }
+                    })
+                    .collect();
+                let expected: u32 = (0..dims)
+                    .filter(|&i| bits[i / 64] >> (i % 64) & 1 == 1)
+                    .map(|i| levels[i])
+                    .sum();
+                assert_eq!(query.levels(&bits), expected, "{dims}");
+                assert!(levels.iter().all(|&level| level < 256));
             }
         }
     }

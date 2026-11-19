@@ -787,7 +787,7 @@ async fn a_version_of_format_5_reads_its_text_as_english() {
         text: &now.text,
     };
     let hash = Objects::new(store.clone()).put(&old).await.unwrap();
-    head::create(store.as_ref(), "old", hash, &[])
+    head::create(store.as_ref(), "old", hash, &[], None)
         .await
         .unwrap();
     let opened = Index::open(store, "old").await.unwrap();
@@ -836,7 +836,7 @@ async fn a_version_of_format_2_still_opens() {
         next_seq: now.next_seq,
     };
     let hash = Objects::new(store.clone()).put(&old).await.unwrap();
-    head::create(store.as_ref(), "old", hash, &[])
+    head::create(store.as_ref(), "old", hash, &[], None)
         .await
         .unwrap();
     let opened = Index::open(store, "old").await.unwrap();
@@ -1021,10 +1021,10 @@ async fn a_version_of_format_8_keeps_its_text_language() {
         tail: now.tail.clone(),
         ann: None,
         next_seq: now.next_seq,
-        text: now.text.clone(),
+        text: now.text.as_ref().map(From::from),
     };
     let hash = Objects::new(store.clone()).put(&old).await.unwrap();
-    head::create(store.as_ref(), "old", hash, &[])
+    head::create(store.as_ref(), "old", hash, &[], None)
         .await
         .unwrap();
     let opened = Index::open(store, "old").await.unwrap();

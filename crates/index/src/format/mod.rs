@@ -1,15 +1,21 @@
 //! What the index stores: the Version and the blobs it names.
 
 pub(crate) mod cluster;
+pub(crate) mod columns;
 pub(crate) mod directory;
 pub(crate) mod legacy;
+pub(crate) mod line;
+pub(crate) mod lists;
 pub(crate) mod pages;
+pub(crate) mod parts;
 pub(crate) mod rows;
+pub(crate) mod segment_ids;
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
+use skywake_core::list::List;
 
 pub(crate) use legacy::decode_version;
 
@@ -17,9 +23,12 @@ use crate::filter::FilterPart;
 use crate::text::part::TextIndex;
 use crate::vector::calibrate::Calibration;
 use crate::{Attributes, Id, Result, Schema, invalid};
+use columns::Columns;
+use line::Line;
 use pages::Pages;
+use parts::PartRef;
 
-pub(crate) const FORMAT: u32 = 10;
+pub(crate) const FORMAT: u32 = 17;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 
@@ -33,7 +42,12 @@ pub(crate) struct Version {
     pub ann: Option<Ann>,
     pub next_seq: u64,
     pub text: Option<TextIndex>,
+    pub columns: Option<Columns>,
+    pub folded: u64,
+    pub parts: List<PartRef>,
+    pub line: Line,
 }
+
 impl Version {
     pub(crate) fn new(schema: Schema) -> Self {
         Self {
@@ -45,11 +59,36 @@ impl Version {
             ann: None,
             next_seq: 0,
             text: None,
+            columns: None,
+            folded: 0,
+            parts: List::default(),
+            line: Line::default(),
         }
     }
 
     pub(crate) fn covers(&self) -> usize {
-        self.built.len as usize
+        (self.folded + self.built.len) as usize
+    }
+
+    pub(crate) fn has_postings(&self) -> bool {
+        (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
+    }
+
+    pub(crate) fn is_current(&self) -> bool {
+        let ann = self.ann.iter().map(|ann| &ann.rows);
+        let columns = self.columns.iter().map(|columns| &columns.rows);
+        ann.chain(columns).any(|map| map.root().is_some())
+            || self.folded > 0
+            || !self.parts.is_empty()
+            || self.line != Line::default()
+    }
+
+    pub(crate) fn has_extended(&self) -> bool {
+        (self.ann.iter().flat_map(|ann| ann.columns.values())).any(|c| c.extended)
+    }
+
+    pub(crate) fn has_pieces(&self) -> bool {
+        (self.ann.iter().flat_map(|ann| ann.columns.values())).any(|c| !c.one_piece_each())
     }
 
     pub(crate) fn tail(&self) -> &[SegmentRef] {
@@ -62,7 +101,16 @@ impl Version {
             .map(|column| column.table.hashes.len())
             .sum();
         let parts = self.text.as_ref().map_or(0, |text| 256 * text.parts.len());
-        1024 + 64 * self.tail.len() + 32 * (self.built.hashes.len() + pages) + parts
+        let columns = self.columns.as_ref().map_or(0, Columns::weight);
+        let folded = match &self.parts {
+            List::Inline(parts) => 128 * parts.len(),
+            List::Tree { .. } => 64,
+        };
+        1024 + 64 * self.tail.len()
+            + 32 * (self.built.hashes.len() + pages)
+            + parts
+            + columns
+            + folded
     }
 }
 
@@ -77,7 +125,7 @@ pub(crate) struct SegmentRef {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Ann {
     pub columns: BTreeMap<String, Clusters>,
-    pub rows: Vec<Hash>,
+    pub rows: rows::RowMap,
     pub rows_bytes: u64,
     pub live: u64,
     pub full_rows: u64,
@@ -94,6 +142,15 @@ pub(crate) struct Clusters {
     pub seed: u64,
     pub calibration: Calibration,
     pub directory: Option<Hash>,
+    pub groups: u64,
+    pub calibrated: u64,
+    pub extended: bool,
+}
+
+impl Clusters {
+    pub(crate) fn one_piece_each(&self) -> bool {
+        self.groups == self.table.len && self.calibrated == self.table.len
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -102,15 +159,20 @@ pub(crate) struct Segment {
     pub vectors: Vec<Vec<f32>>,
     pub attributes: Vec<Attributes>,
     pub deletes: Vec<Id>,
+    #[serde(skip)]
+    pub seqs: Vec<u64>,
 }
 
 impl Segment {
     pub(crate) fn writes(&self, first_seq: u64) -> impl Iterator<Item = (u64, &Id, Option<usize>)> {
         let docs = self.ids.iter().enumerate().map(|(row, id)| (id, Some(row)));
         let deletes = self.deletes.iter().map(|id| (id, None));
-        (first_seq..)
-            .zip(docs.chain(deletes))
-            .map(|(seq, (id, row))| (seq, id, row))
+        (docs.chain(deletes))
+            .enumerate()
+            .map(move |(at, (id, row))| {
+                let seq = self.seqs.get(at).copied().unwrap_or(first_seq + at as u64);
+                (seq, id, row)
+            })
     }
 
     pub(crate) fn vector(&self, column: usize, dims: usize, row: usize) -> &[f32] {

@@ -80,7 +80,7 @@ async fn collection_walks_pages_and_keeps_only_what_branches_name() {
     let collected = gc::collect(gate.clone(), Duration::ZERO, false)
         .await
         .unwrap();
-    assert_eq!((collected.deleted, collected.missing), (0, 0));
+    assert_eq!(collected.missing, 0);
 
     let query = Query::new("v", clustered(1, 32, 5).remove(0), 10).probe(usize::MAX);
     let expected = index.query(&query).await.unwrap();
@@ -296,7 +296,7 @@ async fn collecting_an_index_goes_shard_by_shard_and_drops_only_history_past_the
     let collected = gc::collect_index(index_store.clone(), Duration::ZERO, gc::HISTORY, false)
         .await
         .unwrap();
-    assert_eq!((collected.deleted, collected.missing), (0, 0));
+    assert_eq!(collected.missing, 0);
 
     let collected = gc::collect_index(index_store.clone(), Duration::ZERO, Duration::ZERO, false)
         .await

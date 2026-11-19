@@ -1,16 +1,22 @@
 //! Reading and writing an index's objects.
 
 pub(crate) mod cache;
+mod flight;
 pub(crate) mod head;
+pub(crate) mod hedge;
 pub(crate) mod reads;
 
+use crate::layout::Shapes;
 use cache::Cache;
+use flight::{Flights, Turn};
 use head::{Head, Hint};
 use reads::From;
 
+use std::future::Future;
 use std::io;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
@@ -25,9 +31,16 @@ use tokio::sync::Semaphore;
 use crate::filter::Directory;
 use crate::filter::attrs::Attrs;
 use crate::format::cluster::{ClusterRef, Codes};
+use crate::format::columns::dictionary::Dictionary;
+use crate::format::columns::leaders::Leaders;
+use crate::format::columns::stats::Totals;
+use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
+use crate::format::legacy::{V10, V11, V12, V13, V14, V15, V16};
+use crate::format::parts;
+use crate::format::segment_ids::SegmentIds;
 use crate::format::{Clusters, Segment, Version, decode_version};
-use crate::vector::ivf;
+use crate::vector::{extended, ivf};
 use crate::{Error, Result, text};
 
 const SAVE_ATTEMPTS: u32 = 30;
@@ -43,7 +56,10 @@ pub(crate) struct Storage {
     chunks: Chunks,
     blobs: Blobs,
     cache: Arc<Cache>,
+    flights: Flights,
     disk: Option<Disk>,
+    shapes: Shapes,
+    partials: AtomicBool,
 }
 
 struct Disk {
@@ -128,6 +144,7 @@ impl Storage {
         cache_bytes: usize,
         disk: Option<Arc<ChunkCache>>,
         shared: Option<String>,
+        partials: bool,
     ) -> Self {
         Self {
             chunks: Chunks {
@@ -140,11 +157,22 @@ impl Storage {
             },
             store,
             cache: Arc::new(Cache::new(cache_bytes)),
+            flights: Flights::default(),
+            shapes: Shapes::default(),
+            partials: AtomicBool::new(partials),
             disk: disk.map(|cache| Disk {
                 cache,
                 fills: Arc::new(Semaphore::new(FILLS)),
             }),
         }
+    }
+
+    pub(crate) fn partials(&self) -> bool {
+        self.partials.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn shapes(&self) -> &Shapes {
+        &self.shapes
     }
 
     pub(crate) fn cache(&self) -> &Arc<Cache> {
@@ -159,8 +187,67 @@ impl Storage {
 
     pub(crate) async fn current(&self, branch: &str) -> Result<Arc<Version>> {
         let head = self.head(branch).await?;
-        let (version, ()) = futures::join!(self.version(head.version), self.prefetch(&head.hints));
-        version
+        self.pointed(&head).await
+    }
+
+    /// Writes the version into a head written before heads carried it.
+    pub(crate) async fn inline_head(&self, branch: &str) -> Result<()> {
+        let head = self.head(branch).await?;
+        if head.inline.is_some() {
+            return Ok(());
+        }
+        let raw = self.chunks.objects.get_raw(head.version).await?;
+        if head::fits(&raw) {
+            let store = self.store.as_ref();
+            head::advance(store, branch, &head, head.version, &head.hints, Some(&raw)).await?;
+        }
+        Ok(())
+    }
+
+    async fn pointed(&self, head: &Head) -> Result<Arc<Version>> {
+        let Some(raw) = &head.inline else {
+            return self.version(head.version).await;
+        };
+        self.cached(head.version, async {
+            let version = Arc::new(decode_version(raw)?);
+            let weight = version.weight();
+            Ok((version, weight))
+        })
+        .await
+    }
+
+    /// The current version for reads: the objects the head hints are fetched
+    /// alongside it, and a query that asks for one joins its fetch.
+    pub(crate) async fn prefetched(self: &Arc<Self>, branch: &str) -> Result<Arc<Version>> {
+        let mut head = self.head(branch).await?;
+        let hints = std::mem::take(&mut head.hints);
+        let storage = Arc::clone(self);
+        tokio::spawn(async move { storage.prefetch(&hints).await });
+        self.pointed(&head).await
+    }
+
+    pub(crate) async fn cached<T, F>(&self, key: Hash, load: F) -> Result<Arc<T>>
+    where
+        T: Send + Sync + 'static,
+        F: Future<Output = Result<(Arc<T>, usize)>>,
+    {
+        if let Some(found) = self.cache.get(key) {
+            return Ok(found);
+        }
+        let flight = match self.flights.join(key) {
+            Turn::Load(flight) => Some(flight),
+            Turn::Wait(mut landed) => {
+                let _ = landed.changed().await;
+                None
+            }
+        };
+        if let Some(found) = self.cache.get(key) {
+            return Ok(found);
+        }
+        let (value, weight) = load.await?;
+        self.cache.insert(key, Arc::clone(&value), weight);
+        drop(flight);
+        Ok(value)
     }
 
     async fn prefetch(&self, hints: &[Hint]) {
@@ -173,43 +260,70 @@ impl Storage {
                 Hint::Segment(hash) => self.get::<Segment>(hash).await.map(drop),
                 Hint::Directory(hash) => self.get::<Directory>(hash).await.map(drop),
                 Hint::Clusters(hash) => self.get::<directory::Directory>(hash).await.map(drop),
+                Hint::Postings(hash, bytes) => text::postings::read::open(self, hash, bytes)
+                    .await
+                    .map(drop),
+                Hint::Dictionary(hash) => self.get::<Dictionary>(hash).await.map(drop),
+                Hint::Totals(hash) => self.get::<Totals>(hash).await.map(drop),
+                Hint::Pages(hash) => self.get::<Vec<PageRef>>(hash).await.map(drop),
+                Hint::Spans(hash) => self.get::<Vec<Span>>(hash).await.map(drop),
+                Hint::Leaders(hash) => self.get::<Leaders>(hash).await.map(drop),
+                Hint::Projection(hash) => self.get::<projection::Directory>(hash).await.map(drop),
             };
         });
         futures::future::join_all(fetches).await;
     }
 
     pub(crate) async fn version(&self, hash: Hash) -> Result<Arc<Version>> {
-        if let Some(found) = self.cache.get(hash) {
-            return Ok(found);
-        }
-        reads::count(From::Store);
-        let raw = self.chunks.objects.get_raw(hash).await?;
-        let version = Arc::new(decode_version(&raw)?);
-        self.cache.insert(hash, version.clone(), version.weight());
-        Ok(version)
+        self.cached(hash, async {
+            reads::count(From::Store);
+            let raw = self.chunks.objects.get_raw(hash).await?;
+            let version = Arc::new(decode_version(&raw)?);
+            let weight = version.weight();
+            Ok((version, weight))
+        })
+        .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn raw_version(&self, hash: Hash) -> Result<Vec<u8>> {
+        Ok(self.chunks.objects.get_raw(hash).await?)
     }
 
     pub(crate) async fn put_version(&self, version: &Version) -> Result<Hash> {
-        Ok(self.chunks.objects.put(version).await?)
+        Ok(self
+            .chunks
+            .objects
+            .put_raw(&encode_version(version)?)
+            .await?)
     }
 
     pub(crate) async fn get<T>(&self, hash: Hash) -> Result<Arc<T>>
     where
         T: DeserializeOwned + Send + Sync + 'static,
     {
-        if let Some(found) = self.cache.get(hash) {
-            return Ok(found);
+        self.cached(hash, async {
+            let bytes = self.chunk(hash).await?;
+            Ok((Arc::new(postcard::from_bytes(&bytes)?), bytes.len()))
+        })
+        .await
+    }
+
+    pub(crate) async fn segment_ids(&self, hash: Hash) -> Result<Arc<SegmentIds>> {
+        self.cached(part(hash, "ids"), async {
+            let ids: Arc<SegmentIds> = Arc::new(postcard::from_bytes(&self.chunk(hash).await?)?);
+            let weight = ids.weight();
+            Ok((ids, weight))
+        })
+        .await
+    }
+
+    async fn chunk(&self, hash: Hash) -> Result<Vec<u8>> {
+        if let Some(bytes) = self.disk_read(&self.chunks, hash, 0..u64::MAX).await {
+            return Ok(bytes);
         }
-        let bytes = match self.disk_read(&self.chunks, hash, 0..u64::MAX).await {
-            Some(bytes) => bytes,
-            None => {
-                reads::count(From::Store);
-                self.chunks.objects.get_chunk(hash).await?
-            }
-        };
-        let value = Arc::new(postcard::from_bytes(&bytes)?);
-        self.cache.insert(hash, Arc::clone(&value), bytes.len());
-        Ok(value)
+        reads::count(From::Store);
+        Ok(self.chunks.objects.get_chunk(hash).await?)
     }
 
     pub(crate) async fn get_all<T>(&self, hashes: Vec<Hash>) -> Result<Vec<Arc<T>>>
@@ -223,6 +337,18 @@ impl Storage {
             .await
     }
 
+    pub(crate) async fn part(&self, hash: Hash) -> Result<Arc<Segment>> {
+        self.cached(hash, async {
+            let bytes = self.chunk(hash).await?;
+            Ok((Arc::new(parts::decode(&bytes)?), bytes.len()))
+        })
+        .await
+    }
+
+    pub(crate) async fn fetch_raw(&self, hash: Hash) -> Result<Vec<u8>> {
+        Ok(self.chunks.objects.get_chunk(hash).await?)
+    }
+
     pub(crate) async fn fetch<T: DeserializeOwned>(&self, hash: Hash) -> Result<T> {
         Ok(postcard::from_bytes(
             &self.chunks.objects.get_chunk(hash).await?,
@@ -234,14 +360,13 @@ impl Storage {
     }
 
     pub(crate) async fn centroids(&self, hash: Hash) -> Result<Arc<Vec<f32>>> {
-        if let Some(found) = self.cache.get(hash) {
-            return Ok(found);
-        }
-        reads::count(From::Store);
-        let centroids: Arc<Vec<f32>> = Arc::new(self.chunks.objects.get(hash).await?);
-        self.cache
-            .insert(hash, centroids.clone(), 4 * centroids.len());
-        Ok(centroids)
+        self.cached(hash, async {
+            reads::count(From::Store);
+            let centroids: Arc<Vec<f32>> = Arc::new(self.chunks.objects.get(hash).await?);
+            let weight = 4 * centroids.len();
+            Ok((centroids, weight))
+        })
+        .await
     }
 
     pub(crate) async fn origin(&self, clusters: &Clusters, dims: usize) -> Result<Arc<Vec<f32>>> {
@@ -342,6 +467,27 @@ impl Storage {
         Ok(codes)
     }
 
+    pub(crate) async fn extended(&self, cluster: &ClusterRef, dims: usize) -> Result<Arc<Vec<u8>>> {
+        let key = part(cluster.hash, "extended");
+        if let Some(found) = self.cache.get(key) {
+            return Ok(found);
+        }
+        let range = cluster.extended(0..cluster.rows as usize, dims);
+        let bytes = self.range(cluster.hash, range.clone()).await?;
+        let size = extended::record(dims);
+        if bytes.len() as u64 != range.end - range.start
+            || !bytes.chunks_exact(size).all(extended::intact)
+        {
+            return Err(Error::Corrupt(format!(
+                "the extended codes of blob {} are damaged",
+                cluster.hash
+            )));
+        }
+        let bytes = Arc::new(bytes);
+        self.cache.insert(key, bytes.clone(), bytes.len());
+        Ok(bytes)
+    }
+
     pub(crate) async fn read_codes(&self, cluster: &ClusterRef, dims: usize) -> Result<Codes> {
         let bytes = self
             .section(cluster, cluster.codes(), cluster.sums[0])
@@ -433,20 +579,40 @@ impl Storage {
     ) -> Result<Option<(Hash, Hash)>> {
         for attempt in 0..SAVE_ATTEMPTS {
             let head = self.head(branch).await?;
-            let current = self.version(head.version).await?;
+            let current = self.pointed(&head).await?;
             let Some(mut next) = change(&current) else {
                 return Ok(None);
             };
             next.parent = Some(head.version);
-            let hash = self.put_version(&next).await?;
+            let raw = encode_version(&next)?;
+            let hash = self.chunks.objects.put_raw(&raw).await?;
             self.settle(written, hash).await?;
             let hints = hints(&next);
-            if head::advance(self.store.as_ref(), branch, &head, hash, &hints).await? {
+            let store = self.store.as_ref();
+            if head::advance(store, branch, &head, hash, &hints, Some(&raw)).await? {
                 return Ok(Some((head.version, hash)));
             }
             head::backoff(attempt).await;
         }
         Err(Error::Conflict(branch.to_string()))
+    }
+
+    pub(crate) async fn fork(&self, from: &str, branch: &str) -> Result<()> {
+        let head = self.head(from).await?;
+        let current = self.pointed(&head).await?;
+        let mut seed = branch.as_bytes().to_vec();
+        seed.extend_from_slice(head.version.as_bytes());
+        let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+        seed.extend_from_slice(&nanos.unwrap_or_default().as_nanos().to_le_bytes());
+        let id = u64::from_le_bytes(Hash::of(&seed).as_bytes()[..8].try_into().expect("8 bytes"));
+        let mut next = (*current).clone();
+        next.parent = Some(head.version);
+        next.line = current.line.fork(id.max(1), current.next_seq);
+        let raw = encode_version(&next)?;
+        let hash = self.chunks.objects.put_raw(&raw).await?;
+        self.settle(&Written::new(), hash).await?;
+        let store = self.store.as_ref();
+        head::create(store, branch, hash, &hints(&next), Some(&raw)).await
     }
 
     pub(crate) async fn settle(&self, written: &Written, version: Hash) -> Result<()> {
@@ -469,10 +635,41 @@ pub(crate) fn chunk_path(hash: Hash) -> Path {
     Path::from(format!("chunks/{hash}"))
 }
 
+fn encode_version(version: &Version) -> Result<Vec<u8>> {
+    let columns = version.columns.as_ref();
+    if version.is_current() {
+        return Ok(postcard::to_stdvec(version)?);
+    }
+    if version.has_extended() {
+        return Ok(postcard::to_stdvec(&V16::from(version))?);
+    }
+    if version.has_pieces() {
+        return Ok(postcard::to_stdvec(&V15::from(version))?);
+    }
+    if columns.is_some_and(|c| !c.projections.is_empty()) {
+        return Ok(postcard::to_stdvec(&V14::from(version))?);
+    }
+    let leaders = columns.is_some_and(Columns::has_leaders);
+    Ok(match (leaders, version.has_postings(), &version.columns) {
+        (true, ..) => postcard::to_stdvec(&V13::from(version))?,
+        (false, true, _) => postcard::to_stdvec(&V12::from(version))?,
+        (false, false, Some(_)) => postcard::to_stdvec(&V11::from(version))?,
+        (false, false, None) => postcard::to_stdvec(&V10::from(version))?,
+    })
+}
+
 pub(crate) fn hints(version: &Version) -> Vec<Hint> {
     let mut hints = Vec::new();
     if let Some(text) = &version.text {
-        hints.extend(text.parts.iter().map(|p| Hint::Text(p.hot, p.hot_bytes)));
+        for p in &text.parts {
+            hints.push(Hint::Text(p.hot, p.hot_bytes));
+            if let Some(postings) = &p.postings {
+                hints.push(Hint::Postings(postings.directory, postings.directory_bytes));
+            }
+        }
+    }
+    if let Some(columns) = &version.columns {
+        hints.extend(column_hints(columns));
     }
     if version.tail.len() <= HINTED_SEGMENTS {
         hints.extend(version.tail.iter().map(|s| Hint::Segment(s.hash)));
@@ -493,6 +690,29 @@ pub(crate) fn hints(version: &Version) -> Vec<Hint> {
     }
     hints
 }
+
+fn column_hints(columns: &Columns) -> Vec<Hint> {
+    let mut hints: Vec<Hint> = columns.ids.iter().map(|&h| Hint::Spans(h)).collect();
+    for column in columns.columns.values() {
+        hints.push(Hint::Dictionary(column.dictionary));
+        hints.push(Hint::Totals(column.totals));
+        hints.extend(column.directory.iter().map(|&h| Hint::Pages(h)));
+        hints.extend(column.leaders.map(Hint::Leaders));
+    }
+    hints.extend(
+        columns
+            .projections
+            .iter()
+            .flat_map(|p| p.directories())
+            .map(Hint::Projection),
+    );
+    if hints.len() > HINTED_COLUMN_OBJECTS {
+        hints.clear();
+    }
+    hints
+}
+
+const HINTED_COLUMN_OBJECTS: usize = 512;
 
 const HINTED_PAGES: usize = 16;
 

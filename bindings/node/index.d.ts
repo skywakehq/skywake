@@ -332,6 +332,17 @@ export type AttributeValue =
   /** Vectors of one length, for late interaction. */
   | number[][];
 
+export interface IndexRowsPlan {
+  vectors: Record<string, number>;
+  attributes: Record<string, string>;
+  base64: boolean;
+}
+
+export interface IndexRowsWritten {
+  ids: DocId[];
+  bytes: number;
+}
+
 export interface IndexDoc {
   /** A string, or a whole number from 0; a UUID in an index of UUID ids. */
   id: DocId;
@@ -731,6 +742,7 @@ export interface Index {
   merge(into: string, from: string): Promise<number>;
   /** Writes documents; each replaces any earlier one with its id. */
   upsert(branch: string, docs: IndexDoc[]): Promise<void>;
+  upsertRows(branch: string, body: Buffer, plan: IndexRowsPlan): Promise<IndexRowsWritten | null>;
   delete(branch: string, ids: DocId[]): Promise<void>;
   /** Patches, conditions and writes by filter. See `IndexWrite`. */
   write(branch: string, write: IndexWrite): Promise<IndexCounts>;

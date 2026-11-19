@@ -13,6 +13,7 @@ pub mod store;
 mod sync;
 
 pub use error::{Error, Result};
+pub use model::list;
 pub use model::{
     Bundled, Chunk, Commit, Data, EXECUTABLE_MODE, Entry, FILE_MODE, Hash, Pack, Packs, Tree,
     permissions,

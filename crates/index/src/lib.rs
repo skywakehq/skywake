@@ -4,11 +4,13 @@
 #[doc(hidden)]
 pub mod bench;
 mod build;
+mod engine;
 mod error;
 mod export;
 mod filter;
 mod format;
 mod history;
+mod layout;
 mod model;
 mod read;
 mod shards;
@@ -37,6 +39,7 @@ pub use model::{
 pub use read::snapshot::{Aggregate, Group, Measure, Order, Rank, Ranked, Row, Snapshot};
 pub use read::stats::Stats;
 pub use shards::{MAX_SHARDS, Shards, ShardsExport, ShardsSnapshot, shard_folder};
+use store::hedge::Hedged;
 pub use store::reads::{Reads, counted};
 use store::{Storage, Written, head};
 pub use text::{
@@ -62,21 +65,45 @@ pub struct Options {
     /// temporary folder, unencrypted, instead of reading every segment from
     /// the bucket again for each part. Off for an index with its own key.
     pub spill: bool,
+    pub columns: bool,
+    pub page_rows: usize,
+    pub postings: bool,
+    pub partials: bool,
+    /// Built writes fold into parts once there are this many bytes of them.
+    pub fold_bytes: u64,
 }
 
 impl Default for Options {
     fn default() -> Self {
         Self {
-            cache_bytes: 1 << 30,
+            cache_bytes: memory_share(),
             build_bytes: 1 << 30,
             commit_rows: 10_000,
             queued_rows: 100_000,
-            unbuilt_bytes: 2 << 30,
+            unbuilt_bytes: 4 << 30,
             cluster_rows: 2000,
             disk: None,
             shared: None,
             spill: true,
+            columns: false,
+            page_rows: 8192,
+            postings: false,
+            partials: true,
+            fold_bytes: if cfg!(test) { 1 } else { 64 << 20 },
         }
+    }
+}
+
+fn memory_share() -> usize {
+    let (pages, size) = unsafe {
+        (
+            libc::sysconf(libc::_SC_PHYS_PAGES),
+            libc::sysconf(libc::_SC_PAGESIZE),
+        )
+    };
+    match pages > 0 && size > 0 {
+        true => ((pages as usize).saturating_mul(size as usize) / 4).max(1 << 30),
+        false => 1 << 30,
     }
 }
 
@@ -116,7 +143,7 @@ impl Index {
         let written = Written::new();
         let hash = index.storage.put_version(&version).await?;
         index.storage.settle(&written, hash).await?;
-        head::create(index.storage.store.as_ref(), MAIN, hash, &[]).await?;
+        head::create(index.storage.store.as_ref(), MAIN, hash, &[], None).await?;
         Ok(index)
     }
 
@@ -130,7 +157,7 @@ impl Index {
         options: Options,
     ) -> Result<Self> {
         let index = Self::at(store, branch, options);
-        let version = index.storage.current(branch).await?;
+        let version = index.storage.prefetched(branch).await?;
         *lock(&index.opened) = Some((Instant::now(), version.clone()));
         *lock(&index.seen) = Some((Instant::now(), version));
         Ok(index)
@@ -139,10 +166,11 @@ impl Index {
     fn at(store: Arc<dyn ObjectStore>, branch: &str, options: Options) -> Self {
         Self {
             storage: Arc::new(Storage::new(
-                store,
+                Arc::new(Hedged::new(store)),
                 options.cache_bytes,
                 options.disk.clone(),
                 options.shared.clone(),
+                options.partials,
             )),
             branch: branch.to_string(),
             writer: Arc::new(Writer::new(options.commit_rows, options.queued_rows)),
@@ -204,9 +232,7 @@ impl Index {
     }
 
     pub async fn fork(&self, branch: &str) -> Result<Self> {
-        let head = self.storage.head(&self.branch).await?;
-        let store = self.storage.store.as_ref();
-        head::create(store, branch, head.version, &head.hints).await?;
+        self.storage.fork(&self.branch, branch).await?;
         Ok(self.other(branch))
     }
 
@@ -279,19 +305,21 @@ impl Index {
 
     /// The newest snapshot, given `epoch`: a number the caller raises whenever
     /// the branch may have moved, and never repeats. While it stays the same, the
-    /// head is not read again, for up to a minute, so a build's new version is
-    /// picked up later. A read that started at an older epoch never replaces the
-    /// head kept for a newer one.
+    /// head is not read again on the query's path; once a minute it is read in the
+    /// background, so a build's new version is picked up later. A read that
+    /// started at an older epoch never replaces the head kept for a newer one.
     pub async fn snapshot_for(&self, epoch: u64) -> Result<Snapshot> {
         let known = lock(&self.known).clone();
         let version = match known {
-            Some((seen, at, version)) if seen == epoch && at.elapsed() <= EVENTUAL => version,
-            _ => {
-                let version = self.storage.current(&self.branch).await?;
-                let mut known = lock(&self.known);
-                if known.as_ref().is_none_or(|(seen, ..)| *seen <= epoch) {
-                    *known = Some((epoch, Instant::now(), version.clone()));
+            Some((seen, at, version)) if seen == epoch => {
+                if at.elapsed() > EVENTUAL {
+                    self.refresh(epoch);
                 }
+                version
+            }
+            _ => {
+                let version = self.storage.prefetched(&self.branch).await?;
+                self.remember(epoch, version.clone());
                 version
             }
         };
@@ -299,6 +327,25 @@ impl Index {
             storage: self.storage.clone(),
             version,
         })
+    }
+
+    fn refresh(&self, epoch: u64) {
+        if let Some((_, at, _)) = lock(&self.known).as_mut() {
+            *at = Instant::now();
+        }
+        let index = self.clone();
+        tokio::spawn(async move {
+            if let Ok(version) = index.storage.prefetched(&index.branch).await {
+                index.remember(epoch, version);
+            }
+        });
+    }
+
+    fn remember(&self, epoch: u64, version: Arc<Version>) {
+        let mut known = lock(&self.known);
+        if known.as_ref().is_none_or(|(seen, ..)| *seen <= epoch) {
+            *known = Some((epoch, Instant::now(), version));
+        }
     }
 
     pub async fn query(&self, query: &Query) -> Result<Vec<Hit>> {
@@ -326,18 +373,46 @@ impl Index {
     }
 
     pub async fn build(&self) -> Result<()> {
-        self.build_inner(false).await.map(drop)
+        self.build_inner(build::Mode::Grow).await.map(drop)
     }
 
     pub async fn rebuild(&self) -> Result<()> {
-        self.build_inner(true).await.map(drop)
+        self.build_inner(build::Mode::Full).await.map(drop)
     }
 
-    async fn build_inner(&self, full: bool) -> Result<bool> {
+    async fn build_inner(&self, mode: build::Mode) -> Result<bool> {
         let options = &self.options;
-        let (budget, rows) = (options.build_bytes, options.cluster_rows);
-        let spill = options.spill;
-        build::build(&self.storage, &self.branch, budget, rows, spill, full).await
+        let settings = build::Settings {
+            budget: options.build_bytes,
+            cluster_rows: options.cluster_rows,
+            spill: options.spill,
+            columns: options.columns.then_some(options.page_rows.max(1)),
+            postings: options.postings,
+            fold_bytes: options.fold_bytes,
+        };
+        build::build(&self.storage, &self.branch, settings, mode).await
+    }
+
+    pub async fn recalibrate(&self) -> Result<bool> {
+        let budget = self.options.build_bytes;
+        build::calibrate::recalibrate(&self.storage, &self.branch, budget).await
+    }
+
+    async fn layout_wanted(&self) -> Option<layout::Wanted> {
+        let checked = match self.version().await {
+            Ok(version) => layout::stale(&self.storage, &version).await,
+            Err(error) => Err(error),
+        };
+        checked
+            .inspect_err(|error| {
+                tracing::warn!(%error, branch = self.branch(), "could not check the layout");
+            })
+            .ok()
+            .flatten()
+    }
+
+    async fn calibration_wanted(&self) -> bool {
+        (self.version().await).is_ok_and(|version| build::calibrate::wanted(&version))
     }
 
     pub async fn stats(&self) -> Result<Stats> {
@@ -352,12 +427,15 @@ impl Index {
     async fn writable(&self) -> Result<Schema> {
         let version = self.version().await?;
         let unbuilt: u64 = version.tail().iter().map(|segment| segment.bytes).sum();
-        if unbuilt > self.options.unbuilt_bytes {
+        let Some(pause) = write::pause(unbuilt, self.options.unbuilt_bytes) else {
             return Err(Error::Busy(format!(
                 "index branch `{}` has {} MiB waiting for a build; try again soon",
                 self.branch,
                 unbuilt >> 20
             )));
+        };
+        if !pause.is_zero() {
+            tokio::time::sleep(pause).await;
         }
         Ok(version.schema.clone())
     }
