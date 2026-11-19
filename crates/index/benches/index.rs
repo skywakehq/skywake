@@ -8,7 +8,7 @@ use object_store::memory::InMemory;
 use skywake_index::bench::{Blocks, Coder};
 use skywake_index::{Doc, Filter, Index, Metric, Schema, TextOptions, TextQuery, Value};
 
-const DIMS: usize = 768;
+const DIMS: usize = 1024;
 const ROWS: usize = 1000;
 
 struct SplitMix(u64);
