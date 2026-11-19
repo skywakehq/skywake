@@ -10,7 +10,6 @@ use skywake_index::{Doc, Filter, Index, Metric, Schema, TextOptions, TextQuery, 
 
 const DIMS: usize = 1024;
 const ROWS: usize = 1000;
-const LARGE: usize = 256_000;
 
 struct SplitMix(u64);
 
@@ -60,16 +59,6 @@ fn rabitq(c: &mut Criterion) {
     group.bench_function("score", |b| {
         b.iter(|| {
             for (code, factors) in bits.chunks_exact(words).zip(&factors) {
-                black_box(scorer.estimate(code, factors));
-            }
-        })
-    });
-    let large_bits = bits.repeat(LARGE / ROWS);
-    let large_factors = factors.repeat(LARGE / ROWS);
-    group.throughput(Throughput::Elements(LARGE as u64));
-    group.bench_function("score-large", |b| {
-        b.iter(|| {
-            for (code, factors) in large_bits.chunks_exact(words).zip(&large_factors) {
                 black_box(scorer.estimate(code, factors));
             }
         })
