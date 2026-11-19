@@ -251,7 +251,8 @@ up() {
 #!/bin/bash
 export HOME=/root BUCKET=$BUCKET DATA=$DATA DEV=$DEV IDLE=$IDLE FRESH=$FRESH KMS_KEY=$key INSTANCE=$INSTANCE HOURS=$HOURS MINI=$MINI FILESYSTEM=$FILESYSTEM TPUF=$TPUF FS_ARGS="$FS_ARGS" SETS="$SETS" SUITES="${SUITES:-}" INDEX_ARGS="$INDEX_ARGS" NOTE="$note"
 export AWS_REGION=$REGION AWS_DEFAULT_REGION=$REGION
-aws s3 cp s3://$BUCKET/instance.sh /root/instance.sh && bash /root/instance.sh
+for _ in \$(seq 60); do aws sts get-caller-identity >/dev/null 2>&1 && break; sleep 3; done
+aws s3 cp s3://$BUCKET/instance.sh /root/instance.sh && bash /root/instance.sh || shutdown -h now
 EOF
 
   # A new instance profile takes a few seconds to be usable.
