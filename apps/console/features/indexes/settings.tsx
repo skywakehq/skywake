@@ -22,7 +22,7 @@ export function IndexSettings({ index, onChange }: { index: IndexInfo; onChange:
     try {
       await call("DELETE", indexUrl(index.name));
       toast.success(`Deleted ${name}`);
-      navigate(envPath(envOf(index.name), "indexes"));
+      navigate(envPath(envOf(index.name)));
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
       setBusy(false);

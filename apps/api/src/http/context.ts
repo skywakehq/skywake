@@ -16,13 +16,11 @@ import type { Turns } from "../engine/turns.ts";
 import type { Changes } from "../db/changes.ts";
 import type { Billing } from "../features/billing/service.ts";
 import type { Places } from "../features/compat/places.ts";
-import type { Credentials } from "../features/credentials/mint.ts";
 import type { Allowlists } from "../features/orgs/allowlist.ts";
 import type { Models } from "../features/indexes/models.ts";
 import type { IndexUsage } from "../features/indexes/usage.ts";
 import type { Pinning } from "../features/pinning/service.ts";
 import type { Buckets } from "../features/environments/buckets.ts";
-import type { Syncer } from "../features/links/sync.ts";
 import type { Deleter } from "../features/deletions/worker.ts";
 import type { Log } from "./log.ts";
 import type { Metrics } from "./metrics.ts";
@@ -37,7 +35,6 @@ export interface Services {
   admin: AdminToken;
   turns: Turns;
   limiter: RateLimiter | null;
-  credentials: Credentials | null;
   log: Log;
   metrics: Metrics;
   usage: IndexUsage;
@@ -51,7 +48,6 @@ export interface Services {
   audit: AuditRecorder;
   billing: Billing | null;
   buckets: Buckets;
-  syncer: Syncer;
   deleter: Deleter;
 }
 

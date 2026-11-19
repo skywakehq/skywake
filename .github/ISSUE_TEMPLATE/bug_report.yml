@@ -46,5 +46,5 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Output of `skywake` and `skywaked`, if any.
+      description: Output of `skywake` or the API, if any.
       render: text

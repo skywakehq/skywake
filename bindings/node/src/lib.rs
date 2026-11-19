@@ -1,10 +1,10 @@
-//! The Skywake engine for Node.js through N-API: a repo of files, and search indexes.
+//! The Skywake search index for Node.js through N-API.
 
-mod engine;
 mod error;
 mod index;
 mod index_json;
 mod log;
+mod store;
 
 #[cfg(not(windows))]
 #[global_allocator]

@@ -38,33 +38,33 @@ test(
 
     // Before the policy, any sign-in works.
     const password = await as({ email: "ada@example.com" });
-    assert.equal((await s.call("GET", "/namespaces", password)).status, 200);
+    assert.equal((await s.call("GET", "/indexes", password)).status, 200);
 
     await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: ["example.com"] });
 
-    const refused = await s.call("GET", "/namespaces", password);
+    const refused = await s.call("GET", "/indexes", password);
     assert.equal(refused.status, 403);
     assert.match(refused.body.error, /single sign-on/);
     // Single sign-on through another organization does not count.
     const elsewhere = await as({ email: "ada@example.com", sso: "org_other" });
-    assert.equal((await s.call("GET", "/namespaces", elsewhere)).status, 403);
+    assert.equal((await s.call("GET", "/indexes", elsewhere)).status, 403);
     // Domains are compared without case.
     assert.equal(
-      (await s.call("GET", "/namespaces", await as({ email: "Ada@EXAMPLE.com" }))).status,
+      (await s.call("GET", "/indexes", await as({ email: "Ada@EXAMPLE.com" }))).status,
       403,
     );
     // A token without an email is refused once any domain needs single sign-on.
-    assert.equal((await s.call("GET", "/namespaces", await as({}))).status, 403);
+    assert.equal((await s.call("GET", "/indexes", await as({}))).status, 403);
 
     const sso = await as({ email: "ada@example.com", sso: id });
-    assert.equal((await s.call("GET", "/namespaces", sso)).status, 200);
+    assert.equal((await s.call("GET", "/indexes", sso)).status, 200);
     // People from other domains, such as contractors, still sign in as before.
     const other = await as({ email: "sam@contractor.dev" });
-    assert.equal((await s.call("GET", "/namespaces", other)).status, 200);
+    assert.equal((await s.call("GET", "/indexes", other)).status, 200);
     // API keys are for programs and are not affected.
-    assert.equal((await s.call("GET", "/namespaces", key)).status, 200);
+    assert.equal((await s.call("GET", "/indexes", key)).status, 200);
 
     await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: [] });
-    assert.equal((await s.call("GET", "/namespaces", password)).status, 200);
+    assert.equal((await s.call("GET", "/indexes", password)).status, 200);
   },
 );

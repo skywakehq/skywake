@@ -1,7 +1,6 @@
-// An environment is the first part of a namespace's name: `prod/website` is
-// the namespace `website` in the environment `prod` (the console calls it a
-// disk). A name with no `/` is in the environment `default`. The API
-// keeps each disk's and index's region; keys for `prod/*` reach one environment.
+// An environment is the first part of an index's full name: `prod/products` is
+// the index `products` in the environment `prod`. A name with no `/` is in the
+// environment `default`. Keys for `prod/*` reach one environment.
 
 export const DEFAULT = "default";
 
@@ -10,7 +9,7 @@ export function envOf(ns: string) {
   return slash < 0 ? DEFAULT : ns.slice(0, slash);
 }
 
-/** The namespace's name within its environment. */
+/** The name within its environment. */
 export function nameInEnv(ns: string) {
   const slash = ns.indexOf("/");
   return slash < 0 ? ns : ns.slice(slash + 1);

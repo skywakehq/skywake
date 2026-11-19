@@ -3,8 +3,8 @@ import { AuthGrid } from "./auth-grid";
 
 // The landing page's numbers. The console can't import the site, so they are copied.
 const STATS = [
-  { figure: "300×", line: "faster than copying 1 GB" },
   { figure: "411 ms", line: "cold search, 10M vectors" },
+  { figure: "10 ms", line: "warm search, 10M vectors" },
 ];
 
 export function Wordmark() {
@@ -26,9 +26,9 @@ export function AuthPanel() {
       </div>
       <div className="relative">
         <h2 className="text-[clamp(2rem,1.2rem+2vw,3rem)] leading-[1.05] font-medium tracking-[-0.03em] text-foreground">
-          Files and search
+          Search, straight
           <br />
-          for your agents.
+          from object storage.
         </h2>
         <dl className="mt-10 grid grid-cols-2 border-t border-border">
           {STATS.map((stat, i) => (

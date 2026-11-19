@@ -28,7 +28,6 @@ import {
   type Document,
   type DocumentPage,
   type IndexInfo,
-  INTERNAL,
   branchUrl,
   call,
   useApi,
@@ -65,10 +64,7 @@ function Browser({ index, branch }: { index: IndexInfo; branch: string }) {
 
   const documents = page?.documents ?? [];
   const firstRow = (cursors.length - 1) * size + 1;
-  const linked = index.schema.attributes.some((a) => a.name === "chunk");
-  const attributes = index.schema.attributes
-    .map((a) => a.name)
-    .filter((name) => !(linked && INTERNAL.has(name)));
+  const attributes = index.schema.attributes.map((a) => a.name);
   // A text-only index has no vector to preview.
   const vector = index.schema.vectors[0];
   const allSelected = documents.length > 0 && documents.every((d) => selected.has(keyOf(d.id)));
@@ -360,8 +356,7 @@ function Detail({
 }) {
   const [doc, setDoc] = useState(picked);
   if (picked && picked !== doc) setDoc(picked);
-  const linked = index.schema.attributes.some((a) => a.name === "chunk");
-  const attributes = index.schema.attributes.filter((a) => !(linked && INTERNAL.has(a.name)));
+  const { attributes } = index.schema;
   return (
     <Dialog open={picked !== null} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
@@ -373,15 +368,10 @@ function Detail({
           <>
             <div className="grid gap-1 border-b px-6 pt-5 pb-4 pr-12">
               <DialogTitle className="text-base font-semibold break-all">
-                {linked ? String(doc.attributes.path) : String(doc.id)}
+                {String(doc.id)}
               </DialogTitle>
               <DialogDescription className="text-xs text-faint">
-                {linked
-                  ? `Passage ${Number(doc.attributes.chunk) + 1}`
-                  : typeof doc.id === "number"
-                    ? "Number id"
-                    : "String id"}{" "}
-                · {nameInEnv(index.name)}
+                {typeof doc.id === "number" ? "Number id" : "String id"} · {nameInEnv(index.name)}
               </DialogDescription>
             </div>
 

@@ -8,30 +8,15 @@ type LegalPage = {
   sections: { title: string; body: (string | string[])[] }[];
 };
 type Chart = { title: string; verdict: string; labels: string[] };
-type ProductPage = {
-  label: string;
-  title: string;
-  accent: string;
-  line: string;
-  features: Feature[];
-};
 
 export type HomeMessages = {
   /** Title and description of each page, for search engines and link previews. */
   pages: Record<
-    | "/"
-    | "/filesystem"
-    | "/search"
-    | "/use-cases"
-    | "/pricing"
-    | "/privacy"
-    | "/terms"
-    | "/benchmarks",
+    "/" | "/pricing" | "/privacy" | "/terms" | "/benchmarks",
     { title: string; description: string }
   >;
   nav: {
-    filesystem: string;
-    search: string;
+    features: string;
     benchmarks: string;
     pricing: string;
     docs: string;
@@ -48,7 +33,7 @@ export type HomeMessages = {
     product: string;
     project: string;
     legal: string;
-    useCases: string;
+    compare: string;
     openSource: string;
     privacy: string;
     terms: string;
@@ -58,35 +43,16 @@ export type HomeMessages = {
     badge: string;
     titleBefore: string;
     titleAccent: string;
+    line: string;
+    docsCta: string;
     screenshotAlt: string;
     getStartedCta: string;
   };
-  useCases: {
+  features: {
     label: string;
-    /** The heading: a short claim, then a quieter second line. */
-    heading: [string, string];
-    more: string;
-    cta: string;
-    items: { name: string; title: string; line: string }[];
-  };
-  git: {
-    label: string;
-    titleBefore: string;
-    titleAccent: string;
+    title: string;
     line: string;
-    works: string;
-    note: string;
-  };
-  products: {
-    items: {
-      name: string;
-      href: "/filesystem" | "/search";
-      icon: "files" | "search";
-      before: string;
-      highlight: string;
-      after: string;
-      points: string[];
-    }[];
+    items: Feature[];
   };
   architecture: {
     label: string;
@@ -99,19 +65,11 @@ export type HomeMessages = {
     label: string;
     title: string;
   };
-  cost: {
+  compare: {
     label: string;
-    chartTitle: string;
-    chart: {
-      without: string;
-      with: string;
-      withoutDetail: string;
-      withDetail: string;
-      perMonth: string;
-      gap: string;
-    };
-    /** The headline: "{n}% less storage, {n}× lower cost and {n}× faster agent starts." */
-    headline: { storage: string; cost: string; starts: string; and: string };
+    title: string;
+    line: string;
+    points: { name: string; line: string }[];
   };
   openSource: {
     label: string;
@@ -142,25 +100,15 @@ export type HomeMessages = {
   layers: {
     alt: string;
     agents: [string, string];
-    filesystem: [string, string];
     index: [string, string];
     cache: [string, string];
     storage: [string, string];
-  };
-  productPages: {
-    getStarted: string;
-    star: string;
-    filesystem: ProductPage;
-    search: ProductPage;
+    note: string;
   };
   benchmarkPage: {
     line: string;
-    filesTitle: string;
-    searchTitle: string;
-    filesNote: string;
-    searchNote: string;
-    files: Chart[];
-    search: Chart[];
+    note: string;
+    charts: Chart[];
   };
   plans: {
     eyebrow: string;
@@ -182,14 +130,4 @@ export type HomeMessages = {
     terms: LegalPage;
   };
   notFound: { label: string; title: string; line: string; back: string };
-  guides: {
-    eyebrow: string;
-    title: string;
-    accent: string;
-    onThisPage: string;
-    read: string;
-    related: { eyebrow: string; title: string; all: string };
-    /** One per use case, by its id in content/use-cases. */
-    items: Record<string, { name: string; title: string; lead: string }>;
-  };
 };

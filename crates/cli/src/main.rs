@@ -4,7 +4,6 @@ mod credentials;
 mod deploy;
 mod docs_spec;
 mod input;
-mod local;
 mod new_key;
 mod output;
 mod session;
@@ -21,8 +20,6 @@ async fn main() -> Result<()> {
     match command {
         Command::DocsSpec => output::json(&docs_spec::spec(Cli::command())),
         Command::Deploy(deploy) => deploy::run(&global, *deploy).await,
-        command if local::is_mount(&command) => local::mounts(&global, command).await,
-        command if global.local.is_some() => local::run(&global, command).await,
         command => commands::run(&global, command).await,
     }
 }

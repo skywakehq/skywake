@@ -4,7 +4,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 export SKYWAKE_API_DATABASE=${SKYWAKE_API_DATABASE:-postgres://skywake:skywake-dev@localhost:5433/skywake_test}
 suites=("$@")
-[ ${#suites[@]} -gt 0 ] || suites=(typescript python go rust java csharp ruby cli docs guides)
+[ ${#suites[@]} -gt 0 ] || suites=(typescript python go rust java csharp ruby cli docs)
 
 log=$(mktemp)
 node "$root/apps/api/test/scenario-server.ts" >"$log" 2>&1 &
@@ -34,7 +34,6 @@ run() {
     ruby) (cd "$root/sdks/ruby" && ruby -Ilib -Itest test/scenarios_test.rb) ;;
     cli) (cd "$root" && cargo test -q -p skywake-cli --test scenarios) ;;
     docs) (cd "$root" && pnpm -s --filter @skywake/sdk --filter skywake build && cargo build -q -p skywake-cli && node apps/docs/scripts/run-examples.ts) ;;
-    guides) (cd "$root" && pnpm -s --filter @skywake/sdk --filter skywake build && node apps/www/scripts/guide-programs.mts && node apps/docs/scripts/run-examples.ts --dir apps/www/.guide-programs) ;;
     *) echo "unknown suite: $1" >&2; exit 2 ;;
   esac
 }

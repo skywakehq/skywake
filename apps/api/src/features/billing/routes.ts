@@ -30,12 +30,7 @@ async function summaryOf(c: Ctx, org: string) {
   const found = c.var.services.billing;
   if (found) return found.summary(org);
   const { db } = c.var.services;
-  return unbilled(
-    await billing.storedBytes(db, org),
-    await billing.indexCount(db, org),
-    await billing.filesStored(db, org),
-    await billing.filesystemCount(db, org),
-  );
+  return unbilled(await billing.storedBytes(db, org), await billing.indexCount(db, org));
 }
 
 export const billingFeature: Feature = {

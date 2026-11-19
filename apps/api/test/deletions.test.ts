@@ -21,31 +21,9 @@ async function pending(s: Awaited<ReturnType<typeof server>>, org: string) {
   return rows.rows;
 }
 
-test("a deleted namespace's files leave the bucket", { skip }, async () => {
-  const s = await server();
-  const { id, key } = await s.ready();
-  const ns = (await s.services.db.query.namespaces.findFirst({
-    where: (t, { and, eq }) => and(eq(t.org, id), eq(t.name, "prod/app")),
-  }))!;
-  const folder = join(s.store, ns.region, ns.folder);
-  assert.ok(files(folder).length > 0);
-
-  assert.equal((await s.call("DELETE", "/namespaces/prod%2Fapp", key)).status, 204);
-  assert.equal((await s.call("GET", "/namespaces/prod%2Fapp", key)).status, 404);
-  assert.equal((await s.call("DELETE", "/namespaces/prod%2Fapp", key)).status, 404);
-  assert.deepEqual(
-    (await pending(s, id)).map((row) => row.kind),
-    ["namespace"],
-  );
-
-  await s.services.deleter.drain();
-  assert.equal(files(folder).length, 0);
-  assert.deepEqual(await pending(s, id), []);
-});
-
 test("a deletion that fails is kept and tried again, by any server", { skip }, async () => {
   const s = await server();
-  const { id, key } = await s.ready();
+  const { id, key } = await s.org();
   const made = await s.call("POST", "/indexes", key, {
     name: "prod/docs",
     schema: { vectors: [{ name: "v", dims: 2 }], attributes: [] },

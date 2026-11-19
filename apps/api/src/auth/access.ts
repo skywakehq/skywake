@@ -1,18 +1,13 @@
 import type { Role } from "@skywake/contract";
-import type { Engine, Index } from "@skywake/engine";
+import type { Index } from "@skywake/engine";
 
 import type { Changes } from "../db/changes.ts";
 import type { Db } from "../db/client.ts";
 import type { Stores } from "../engine/stores.ts";
 import * as indexes from "../features/indexes/queries.ts";
-import * as namespaces from "../features/namespaces/queries.ts";
-import { notFound, unauthorized } from "../http/errors.ts";
+import { notFound } from "../http/errors.ts";
 import { Remembered } from "./remembered.ts";
 import { allow, type Caller } from "./roles.ts";
-
-export interface Namespace extends namespaces.NamespaceRow {
-  engine: Engine;
-}
 
 export interface SearchIndex extends indexes.IndexRow {
   store: Index;
@@ -41,25 +36,6 @@ export class Access {
     });
   }
 
-  async namespace(caller: Caller | null, ref: string, role: Role): Promise<Namespace> {
-    const at = ref.indexOf(":");
-    const org = at < 0 ? caller?.org : ref.slice(0, at);
-    const name = at < 0 ? ref : ref.slice(at + 1);
-    if (!org) throw unauthorized();
-
-    if (caller?.org === org) {
-      allow(caller, role, name);
-      const row = await namespaces.find(this.#db, org, name);
-      if (!row) throw notFound(`namespace \`${name}\``);
-      return await this.#open(row);
-    }
-
-    const row = await namespaces.find(this.#db, org, name);
-    if (row?.visibility === "public" && role === "read") return await this.#open(row);
-    if (!caller) throw unauthorized();
-    throw notFound(`namespace \`${ref}\``);
-  }
-
   /** An index of the caller's own organization. Indexes are never public. */
   async index(caller: Caller, name: string, role: Role): Promise<SearchIndex> {
     allow(caller, role, name);
@@ -75,10 +51,5 @@ export class Access {
     const load = () => indexes.find(this.#db, org, name);
     if (role !== "read" || !changes) return load();
     return this.#rows.get(rowKey(org, name), load, (row) => row !== null && changes.listening);
-  }
-
-  async #open(row: namespaces.NamespaceRow): Promise<Namespace> {
-    await this.#stores.ready(row.region);
-    return { ...row, engine: this.#stores.engine(row.region, row.folder) };
   }
 }

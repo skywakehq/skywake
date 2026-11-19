@@ -1,4 +1,4 @@
-import { Engine, Index, type IndexOpenOptions, type StoreKeys } from "@skywake/engine";
+import { Index, type IndexOpenOptions, Store, type StoreKeys } from "@skywake/engine";
 
 import { badRequest } from "../http/errors.ts";
 import type { Builds } from "./builds.ts";
@@ -32,29 +32,21 @@ export class Stores {
   readonly #regions: Map<string, string>;
   readonly #own = new Map<string, OwnStore>();
   #find: FindStore | undefined;
-  readonly #engines = new Map<string, Engine>();
   readonly #indexes = new Map<string, Index>();
   readonly #held = new Set<string>();
   // The region each open folder came from, so forgetting a region closes them.
   readonly #opened = new Map<string, string>();
   readonly #max: number;
-  readonly #roots = new Map<string, Engine>();
+  readonly #roots = new Map<string, Store>();
   readonly #leases: Leases | undefined;
-  readonly #heads: boolean;
   #builds: Builds | undefined;
   readonly defaultRegion: string;
 
-  constructor(
-    regions: [name: string, store: string][],
-    max = OPEN_ENGINES,
-    leases?: Leases,
-    heads = false,
-  ) {
+  constructor(regions: [name: string, store: string][], max = OPEN_ENGINES, leases?: Leases) {
     if (regions.length === 0) throw new Error("at least one region is needed");
     this.#regions = new Map(regions);
     this.#max = max;
     this.#leases = leases;
-    this.#heads = heads;
     this.defaultRegion = regions[0]![0];
   }
 
@@ -75,7 +67,7 @@ export class Stores {
     return this.#regions.has(region);
   }
 
-  /** Makes a customer's bucket usable under its region, before `location`, `engine` or `index`. */
+  /** Makes a customer's bucket usable under its region, before `location` or `index`. */
   async ready(region: string) {
     if (this.#regions.has(region) || this.#own.has(region)) return;
     const found = this.#find ? await this.#find(region) : null;
@@ -103,19 +95,6 @@ export class Stores {
     const store = this.#regions.get(region) ?? this.#own.get(region)?.store;
     if (!store) throw new Error(`region \`${region}\` is not served here`);
     return inFolder(store, folder);
-  }
-
-  engine(region: string, folder: string): Engine {
-    const heads = this.#heads && region === this.defaultRegion;
-    const keys = this.keysOf(region);
-    this.#opened.set(folder, region);
-    return this.#reuse(this.#engines, folder, () =>
-      Engine.open(this.location(region, folder), {
-        heads,
-        keys,
-        cacheFolder: region === this.defaultRegion ? folder : undefined,
-      }),
-    );
   }
 
   splitBuilds(builds: Builds) {
@@ -160,7 +139,6 @@ export class Stores {
   }
 
   #drop(folder: string) {
-    this.#engines.delete(folder);
     this.#indexes.delete(folder);
     this.#opened.delete(folder);
   }
@@ -184,8 +162,8 @@ export class Stores {
     for (const [region, store] of this.#regions) {
       try {
         let root = this.#roots.get(region);
-        if (!root) this.#roots.set(region, (root = Engine.open(store)));
-        await root.branches();
+        if (!root) this.#roots.set(region, (root = Store.open(store)));
+        await root.check();
       } catch (error) {
         throw new Error(`the store of region \`${region}\` does not answer`, { cause: error });
       }

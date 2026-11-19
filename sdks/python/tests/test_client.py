@@ -1,6 +1,5 @@
 import asyncio
 import json
-from datetime import datetime
 
 import httpx
 import pytest
@@ -99,11 +98,11 @@ def test_a_429_is_retried_as_asked_then_reported_with_retry_after(monkeypatch):
 
 
 def test_a_merge_that_cannot_finish_is_a_merge_conflict():
-    seen, transport = fake(lambda *_: failure(409, "conflict", conflicts=["README.md"]))
+    seen, transport = fake(lambda *_: failure(409, "conflict", conflicts=["cup"]))
     with pytest.raises(MergeConflict) as raised:
-        client(transport).disk("app", branch="agent-1").merge_into(dry_run=False)
-    assert raised.value.conflicts == ["README.md"]
-    assert body(seen[0]) == {"from": "agent-1", "into": "main", "dry_run": False}
+        client(transport).index("products", branch="draft").merge_into()
+    assert raised.value.conflicts == ["cup"]
+    assert body(seen[0]) == {"from": "draft", "into": "main"}
 
 
 def test_lists_follow_next_until_the_last_page():
@@ -113,7 +112,7 @@ def test_lists_follow_next_until_the_last_page():
         return ok({"data": [{"name": "a"}, {"name": "b"}], "next": "b"})
 
     seen, transport = fake(reply)
-    assert [disk["name"] for disk in client(transport).list_disks()] == ["a", "b", "c"]
+    assert [index["name"] for index in client(transport).list_indexes()] == ["a", "b", "c"]
 
 
 def test_upsert_takes_any_number_of_rows_in_batches():
@@ -165,65 +164,16 @@ def test_query_takes_text_first_and_options_by_keyword():
     assert body(seen[0]) == {"text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft"}
 
 
-def test_files_are_read_and_written_by_path():
-    def reply(request, _):
-        if request.method == "GET":
-            return httpx.Response(200, content=b"hello")
-        return ok({"commit": "c1", "changed": True})
-
-    seen, transport = fake(reply)
-    app = client(transport).disk("app")
-    assert app.read("/docs/a b.md", at="c0") == "hello"
-    assert app.read("x", binary=True) == b"hello"
-    app.write({"a.md": "one", "b.bin": b"\xff\x00"}, message="two")
-    assert seen[0].url.raw_path.decode().split("?")[0] == "/v2/disks/app/files/docs/a%20b.md"
-    assert seen[0].url.params["at"] == "c0"
-    assert body(seen[2]) == {
-        "message": "two",
-        "branch": "main",
-        "changes": [{"path": "a.md", "text": "one"}, {"path": "b.bin", "base64": "/wA="}],
-    }
-
-
-def test_a_large_file_goes_up_in_parts_before_its_commit():
-    def reply(request, _):
-        if request.url.path.endswith("/uploads"):
-            return ok({"part": f"p{len(request.content)}", "size": len(request.content)}, 201)
-        return ok({"commit": "c1", "changed": True})
-
-    seen, transport = fake(reply)
-    client(transport).disk("app").write("big.bin", bytes(20 * 1024 * 1024))
-    sizes = [len(r.content) for r in seen if r.url.path.endswith("/uploads")]
-    assert sizes == [16 * 1024 * 1024, 4 * 1024 * 1024]
-    assert body(seen[-1])["changes"] == [{"path": "big.bin", "parts": [f"p{16 * 1024 * 1024}", f"p{4 * 1024 * 1024}"]}]
-
-
 def test_a_fork_is_a_handle_and_destroy_removes_just_the_branch():
     def reply(request, _):
         return httpx.Response(204) if request.method == "DELETE" else ok({"name": "agent-1"}, 201)
 
     seen, transport = fake(reply)
-    work = client(transport).disk("app").fork("agent-1", at="c3")
+    work = client(transport).index("products").fork("agent-1", at="2026-01-02T00:00:00Z")
     assert work.branch == "agent-1"
     work.destroy()
-    assert body(seen[0]) == {"name": "agent-1", "from": "main", "at": "c3"}
-    assert (seen[1].method, seen[1].url.path) == ("DELETE", "/v2/disks/app/branches/agent-1")
-
-
-def test_restore_to_a_time_picks_the_newest_commit_at_or_before_it():
-    commits = [
-        {"id": "c3", "message": "", "created": "2026-01-03T00:00:00Z", "merged": None},
-        {"id": "c2", "message": "", "created": "2026-01-02T00:00:00Z", "merged": None},
-    ]
-
-    def reply(request, _):
-        if request.method == "GET":
-            return ok({"data": commits, "next": None})
-        return ok({"commit": "c4", "changed": True})
-
-    seen, transport = fake(reply)
-    client(transport).disk("app").restore(datetime.fromisoformat("2026-01-02T12:00:00+00:00"))
-    assert body(seen[1]) == {"to": "c2", "branch": "main"}
+    assert body(seen[0]) == {"name": "agent-1", "from": "main", "at": "2026-01-02T00:00:00Z"}
+    assert (seen[1].method, seen[1].url.path) == ("DELETE", "/v2/indexes/products/branches/agent-1")
 
 
 def test_the_async_client_has_the_same_handles():
@@ -237,6 +187,6 @@ def test_the_async_client_has_the_same_handles():
     async def main():
         async with AsyncSkywake(url="http://api", key="sw_key", transport=transport) as sky:
             assert await sky.index("products").delete([1, 2]) == 2
-            return [disk["name"] async for disk in sky.list_disks()]
+            return [index["name"] async for index in sky.list_indexes()]
 
     assert asyncio.run(main()) == ["a"]

@@ -8,7 +8,7 @@ test("a bad email link sends a signed-out person to sign-in with the reason", ()
   assert.equal(query.get("next"), "/?error=INVALID_TOKEN");
   assert.equal(query.get("error"), "INVALID_TOKEN");
   assert.match(authError(query), /expired or was already used/);
-  assert.equal(signInQuery(new URL("http://console.test/n/x")).get("error"), null);
+  assert.equal(signInQuery(new URL("http://console.test/e/prod")).get("error"), null);
 });
 
 test("other errors are shown as they came", () => {

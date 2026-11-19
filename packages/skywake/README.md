@@ -1,15 +1,13 @@
 # skywake
 
-Skywake in one package:
+The open-source search index on object storage. Vector, full-text and hybrid
+search over rows kept in your own bucket, with filters and branches you can
+fork and merge.
+
+This package holds the TypeScript SDK, the `skywake` command and an MCP server.
 
 ```bash
 npm install skywake
-```
-
-```ts
-import { Skywake } from "skywake"; // the SDK: disks and search indexes
-import { shell } from "skywake/bash"; // a bash shell for agents over a disk
-import { bashTool } from "skywake/ai"; // that shell as a Vercel AI SDK tool
 ```
 
 Set `SKYWAKE_API_KEY` (or run `skywake login`), then:
@@ -22,24 +20,7 @@ const sky = new Skywake();
 const products = sky.index("products");
 await products.upsert({ id: 1, text: "red running shoes", price: 89 });
 await products.query("shoes for running", { filter: { price: { lt: 100 } } });
-
-const app = sky.disk("app");
-await app.write("notes.md", "hello");
-const work = await app.fork("agent-1");
-await work.write("notes.md", "changed");
-await work.mergeInto("main");
 ```
-
-For agents, give the shell or the tool a disk handle:
-
-```ts
-import { shell } from "skywake/bash";
-
-const sh = shell(work);
-await sh.run("grep -r TODO .");
-```
-
-It also installs the `skywake` command.
 
 ## The CLI
 
@@ -64,12 +45,6 @@ skywake query products "running shoes" --filter "price < 100" --limit 5
 skywake fork products draft
 skywake upsert products@draft changes.jsonl
 skywake merge products@draft
-
-skywake upload ./project app -m "base"
-skywake fork app agent-1
-skywake write app@agent-1/notes.md notes.md
-skywake diff app@agent-1
-skywake merge app@agent-1
 ```
 
 `NAME@BRANCH` names a branch, and no `@` means `main`. Every command takes `--json`, `--env` and
@@ -86,8 +61,8 @@ with spaces. The API's JSON form works too.
 ## MCP
 
 `skywake mcp` (or `npx skywake mcp`) runs the MCP server. It reads `SKYWAKE_API_KEY` and
-`SKYWAKE_URL`, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where the file tools work. Without
-`SKYWAKE_BRANCH` it forks a branch for the session instead of writing to `main`.
+`SKYWAKE_URL`, and gives agents tools to query an index, upsert rows and delete them. A read-only
+key gets only the query tool.
 
 ```json
 {
@@ -95,7 +70,7 @@ with spaces. The API's JSON form works too.
     "skywake": {
       "command": "npx",
       "args": ["-y", "skywake", "mcp"],
-      "env": { "SKYWAKE_API_KEY": "sw_...", "SKYWAKE_DISK": "app" }
+      "env": { "SKYWAKE_API_KEY": "sw_..." }
     }
   }
 }

@@ -1,21 +1,21 @@
 import { PermissionError, Skywake } from "skywake";
 
 const sky = new Skywake();
-await sky.createDisk("app");
+await sky.index("products").upsert({ id: 1, text: "red running shoes" });
 
 const made = await sky.createKey({
   name: "agent-1",
   role: "write",
   environment: "default",
-  only: ["app"],
+  only: ["products"],
   expiresInDays: 30,
 });
 
 const agent = new Skywake({ key: made.key });
-await agent.disk("app").write("notes.md", "hello");
+await agent.index("products").upsert({ id: 2, text: "waterproof hiking boots" });
 
 try {
-  await agent.disk("billing").write("notes.md", "hello");
+  await agent.index("billing").upsert({ id: 1, text: "hello" });
 } catch (error) {
   if (!(error instanceof PermissionError)) throw error;
   console.log("billing:", error.message);

@@ -1,36 +1,4 @@
 @import "@skywake/ui/globals.css";
-@import "fumadocs-ui/css/preset.css";
-
-/* Fumadocs' parts, used by the use case guides, on the site's own colours.
-   Not `inline`: Fumadocs' CSS reads these variables directly. Same as the docs app. */
-@theme static {
-  --color-fd-background: var(--background);
-  --color-fd-foreground: var(--foreground);
-  --color-fd-muted: var(--muted);
-  --color-fd-muted-foreground: var(--muted-foreground);
-  --color-fd-popover: var(--popover);
-  --color-fd-popover-foreground: var(--popover-foreground);
-  --color-fd-card: var(--card);
-  --color-fd-card-foreground: var(--card-foreground);
-  --color-fd-border: var(--border);
-  --color-fd-primary: var(--signal);
-  --color-fd-primary-foreground: var(--background);
-  --color-fd-secondary: var(--secondary);
-  --color-fd-secondary-foreground: var(--secondary-foreground);
-  --color-fd-accent: var(--soft);
-  --color-fd-accent-foreground: var(--foreground);
-  --color-fd-ring: var(--signal);
-  --color-fd-info: var(--muted-foreground);
-  --color-fd-idea: var(--signal);
-  --color-fd-warning: var(--amber);
-  --color-fd-error: var(--destructive);
-  --color-fd-success: var(--green);
-  --color-fd-overlay: rgb(0 0 0 / 0.2);
-  --color-fd-diff-remove: color-mix(in oklab, var(--destructive) 12%, transparent);
-  --color-fd-diff-remove-symbol: var(--destructive);
-  --color-fd-diff-add: color-mix(in oklab, var(--green) 12%, transparent);
-  --color-fd-diff-add-symbol: var(--green);
-}
 
 @theme inline {
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
@@ -380,14 +348,9 @@ html {
 /* The glow is for the dark page only. On the light page it looks like a smudge. */
 :root {
   --stage-light: transparent;
-  /* Code colours in guides: strings and numbers. Keywords use the accent. */
-  --code-string: #2f8a5f;
-  --code-number: #b26a12;
 }
 .dark {
   --stage-light: color-mix(in oklab, var(--foreground) 10%, transparent);
-  --code-string: #5cc495;
-  --code-number: #e3a857;
 }
 /* A console screenshot's frame: a bright top edge catches the light. The edge sits
    on top, or the image would hide it. With a shadow, fade it out with a mask on its

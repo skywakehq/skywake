@@ -46,14 +46,12 @@ test("whoami names the organization, environment and role", { skip }, async () =
 test("a key of one environment can't reach another", { skip }, async () => {
   const { s, make } = await setup();
   const staging = await make({ environment: "staging", role: "admin" });
-  assert.equal((await s.call("POST", "/namespaces", staging, { name: "staging/app" })).status, 201);
-  const denied = await s.call("POST", "/namespaces", staging, { name: "prod/app" });
-  assert.equal(denied.status, 403);
-  assert.match(denied.body.error, /works in `staging`/);
-  assert.equal((await s.call("POST", "/namespaces", staging, { name: "app" })).status, 403);
   const index = (name: string) => s.call("POST", "/indexes", staging, { name, schema: SCHEMA });
   assert.equal((await index("staging/products")).status, 201);
-  assert.equal((await index("prod/products")).status, 403);
+  const denied = await index("prod/products");
+  assert.equal(denied.status, 403);
+  assert.match(denied.body.error, /works in `staging`/);
+  assert.equal((await index("products")).status, 403);
   const listed = await s.call("GET", "/environments", staging);
   assert.deepEqual(
     listed.body.map((env: { name: string }) => env.name),
@@ -69,7 +67,8 @@ test("a key reaches only the names it was given", { skip }, async () => {
     ["prod/app", 201],
     ["prod/web", 403],
   ] as const) {
-    assert.equal((await s.call("POST", "/namespaces", docs, { name })).status, status, name);
+    const made = await s.call("POST", "/indexes", docs, { name, schema: SCHEMA });
+    assert.equal(made.status, status, name);
   }
 });
 

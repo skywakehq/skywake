@@ -3,8 +3,8 @@ require_relative "lib/skywake/version"
 Gem::Specification.new do |spec|
   spec.name = "skywake"
   spec.version = Skywake::VERSION
-  spec.summary = "Files with branches and search indexes, for AI agents"
-  spec.description = "Skywake for Ruby: disks you fork and merge, and indexes you upsert to and query. No dependencies."
+  spec.summary = "Open-source vector and full-text search index on your own bucket"
+  spec.description = "Skywake for Ruby: indexes you upsert to, query with vectors, text and filters, and fork and merge. No dependencies."
   spec.homepage = "https://skywake.dev"
   spec.metadata = {
     "homepage_uri" => "https://skywake.dev",

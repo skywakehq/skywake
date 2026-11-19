@@ -29,7 +29,7 @@ After that, use it like any other index: `sky.index("products")` with a `prod` k
 
 ## The whole bucket
 
-To encrypt everything with your own KMS key, disks included, set that key as the bucket's default encryption. On the [Helm chart](../self-hosting/kubernetes.mdx), the pods' role then also needs `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey` on the key.
+To encrypt everything with your own KMS key, set that key as the bucket's default encryption. On the [Helm chart](../self-hosting/kubernetes.mdx), the pods' role then also needs `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey` on the key.
 
 ## Next
 

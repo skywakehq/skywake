@@ -66,5 +66,5 @@ export async function roleIn(caller: Caller, org: string) {
   return member?.role ?? null;
 }
 
-/** A namespace or branch name as it goes in an API path. */
+/** A name as it goes in an API path. */
 export const part = encodeURIComponent;

@@ -8,10 +8,6 @@ module Skywake
       ERB::Util.url_encode(name.to_s)
     end
 
-    def self.file_path(path)
-      path.sub(%r{\A/+}, "").split("/", -1).map { |part| segment(part) }.join("/")
-    end
-
     def initialize(base, headers, transport)
       @base = base
       @headers = headers
@@ -22,24 +18,17 @@ module Skywake
       Http.new(@base, @headers.merge("skywake-environment" => environment), @transport)
     end
 
-    def raw(method, path, query: nil, json: nil, bytes: nil)
+    def call(method, path, query: nil, json: nil)
       headers = @headers.dup
       body = nil
-      if !json.nil?
+      unless json.nil?
         headers["content-type"] = "application/json"
         body = JSON.generate(json)
-      elsif bytes
-        headers["content-type"] = "application/octet-stream"
-        body = bytes
       end
       response = @transport.deliver(method, uri(path, query), headers, body)
       raise Errors.from(response) if response.status >= 400
 
-      response
-    end
-
-    def call(method, path, **request)
-      body = raw(method, path, **request).body
+      body = response.body
       body.empty? ? nil : JSON.parse(body.dup.force_encoding(Encoding::UTF_8))
     end
 

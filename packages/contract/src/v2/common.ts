@@ -102,18 +102,11 @@ export const BranchQuery = {
   branch: BranchName.optional().openapi({ description: "`main` by default." }),
 };
 
-export const AtQuery = {
-  at: z.string().min(1).max(100).optional().openapi({
-    description: "Read the past: a commit of a disk, or a version of an index.",
-  }),
-};
-
 export const Time = z.string().openapi({ format: "date-time" });
 
 const nameParam = (name: string, example: string) =>
   ShortName.openapi({ param: { name, in: "path" }, example });
 
-export const DiskParams = z.object({ disk: nameParam("disk", "app") });
 export const IndexParams = z.object({ index: nameParam("index", "products") });
 
 export const Branch = z
@@ -129,7 +122,7 @@ export const NewBranch = z
     name: BranchName.openapi({ example: "agent-1" }),
     from: BranchName.optional().openapi({ description: "The branch to fork. `main` by default." }),
     at: z.string().min(1).max(100).optional().openapi({
-      description: "Fork this commit or version of `from` instead of its newest.",
+      description: "Fork this version of `from` instead of its newest.",
     }),
   })
   .openapi("NewBranch");

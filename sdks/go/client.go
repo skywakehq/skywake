@@ -28,21 +28,8 @@ func branchOf(branch []string) string {
 	return firstSet(first(branch), Main)
 }
 
-func (c *Client) Disk(name string, branch ...string) *Disk {
-	return &Disk{Name: name, Branch: branchOf(branch), http: c.http}
-}
-
 func (c *Client) Index(name string, branch ...string) *Index {
 	return &Index{Name: name, Branch: branchOf(branch), http: c.http}
-}
-
-func (c *Client) CreateDisk(ctx context.Context, name string, options ...DiskOptions) (*Disk, error) {
-	o := first(options)
-	body := map[string]any{"name": name, "region": o.Region, "search": o.Search, "visibility": o.Visibility}
-	if err := c.http.post(ctx, "/disks", compact(body), nil, nil); err != nil {
-		return nil, err
-	}
-	return c.Disk(name), nil
 }
 
 func (c *Client) CreateIndex(ctx context.Context, name string, options ...IndexOptions) (*Index, error) {
@@ -55,10 +42,6 @@ func (c *Client) CreateIndex(ctx context.Context, name string, options ...IndexO
 		return nil, err
 	}
 	return c.Index(name), nil
-}
-
-func (c *Client) ListDisks(ctx context.Context) iter.Seq2[DiskSummary, error] {
-	return listing[DiskSummary](ctx, c.http, "/disks", nil)
 }
 
 func (c *Client) ListIndexes(ctx context.Context) iter.Seq2[IndexSummary, error] {

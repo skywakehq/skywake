@@ -18,7 +18,7 @@ exists; a variable already set wins. The schema is `apiEnv` in `packages/env`.
 | `SKYWAKE_API_DATABASE_POOL`                            | Postgres connections per process. `16`.                                                                                                                                                                                          |
 | `SKYWAKE_STORE`                                        | The default region's store: a folder or `s3://bucket/folder`. Needed.                                                                                                                                                            |
 | `SKYWAKE_API_REGION`                                   | The default region's name. `local`.                                                                                                                                                                                              |
-| `SKYWAKE_API_REGIONS`                                  | More regions, `name=store` split by commas. Each filesystem and index picks one.                                                                                                                                                 |
+| `SKYWAKE_API_REGIONS`                                  | More regions, `name=store` split by commas. Each index picks one.                                                                                                                                                                |
 | `SKYWAKE_API_ADMIN_TOKEN`                              | Needed to create organizations. At least 16 characters.                                                                                                                                                                          |
 | `SKYWAKE_API_JWKS_URL`, `_JWT_ISSUER`, `_JWT_AUDIENCE` | Accept console sign-in tokens. With the URL, the issuer and audience are needed too.                                                                                                                                             |
 | `SKYWAKE_API_LISTEN`                                   | `0.0.0.0:8080`.                                                                                                                                                                                                                  |
@@ -28,9 +28,7 @@ exists; a variable already set wins. The schema is `apiEnv` in `packages/env`.
 | `SKYWAKE_API_BODY_LIMIT_MB`                            | `64`.                                                                                                                                                                                                                            |
 | `SKYWAKE_API_TRUST_PROXY`                              | How many proxies in front add to `X-Forwarded-For`. `0`; `true` means `1`.                                                                                                                                                       |
 | `SKYWAKE_API_AUDIT_DAYS`                               | How many days the audit log keeps events. `365`; `0` keeps them forever.                                                                                                                                                         |
-| `SKYWAKE_API_STS_ROLE_ARN`                             | An IAM role to mint credentials for one namespace with. Without it, `/credentials` answers 501.                                                                                                                                  |
-| `SKYWAKE_API_STS_ENDPOINT`                             | The STS endpoint of an S3-compatible store, such as MinIO or RustFS.                                                                                                                                                             |
-| `SKYWAKE_API_STS_SECONDS`                              | How long minted credentials last, 900 to 3600. `900`.                                                                                                                                                                            |
+| `SKYWAKE_API_STS_ENDPOINT`                             | The STS endpoint of an S3-compatible store, such as MinIO or RustFS, for buckets customers bring.                                                                                                                                |
 | `SKYWAKE_API_EMBED_URL`                                | An OpenAI-compatible API, such as `https://api.openai.com/v1` or Ollama's `http://localhost:11434/v1`. The API calls `{url}/embeddings` to embed text given for a vector column with `embed`. Off by default.                    |
 | `SKYWAKE_API_EMBED_KEY`                                | Its key, sent as a bearer token. Not needed by a local model server.                                                                                                                                                             |
 | `SKYWAKE_API_RERANK_URL`                               | A Cohere-style rerank API, such as `https://api.cohere.com/v2` or `https://api.jina.ai/v1`. The API calls `{url}/rerank` for queries with `rerank`. Off by default.                                                              |
@@ -39,7 +37,7 @@ exists; a variable already set wins. The schema is `apiEnv` in `packages/env`.
 | `SKYWAKE_INDEX_COLUMNS`                                | `on` stores index attributes as column pages, so counts, aggregates and order by read them instead of rows. Takes effect at each index's next build. `off` by default.                                                           |
 | `SKYWAKE_INDEX_POSTINGS`                               | `on` builds Skywake's own posting files beside each text part and ranks full-text search from them. Takes effect at each index's next build, which builds the text again once. `off` by default.                                 |
 | `SKYWAKE_INDEX_CACHE_GB`                               | How much that folder may hold. `10`.                                                                                                                                                                                             |
-| `SKYWAKE_CACHE_NODES`                                  | Cache nodes (`skywake-cache`) that read the default region's store, as for skywaked: `http://10.0.0.5:7070,...`. Index blobs the folder above lacks are asked from them before object storage.                                   |
+| `SKYWAKE_CACHE_NODES`                                  | Cache nodes (`skywake-cache`) that read the default region's store: `http://10.0.0.5:7070,...`. Index blobs the folder above lacks are asked from them before object storage.                                                    |
 | `SKYWAKE_CACHE_TOKEN`                                  | The cache nodes' token.                                                                                                                                                                                                          |
 | `SKYWAKE_HEADS`                                        | `tier`: the cache nodes own the default region's branch heads and serve its whole bucket. Credentials then come with a pass for them and may not write `refs/`. Default `bucket`.                                                |
 | `SKYWAKE_API_PRICES`                                   | Invoice prices that differ from the defaults, in dollars per unit: `queries=0.000004,writes=0.000002,deletes=0.000002,embeddings=0.00001,reranks=0.00002,storage=0.33,pinned=0.001`; storage per GB-month, pinned per GB-hour.   |
@@ -81,9 +79,9 @@ src/
   config.ts        settings
   http/            the request context, errors, rate limit, request helpers
   auth/            keys, console tokens, sign-in, roles, and access.ts:
-                   who may reach a namespace, the one place the rule lives
+                   who may reach an index, the one place the rule lives
   db/              the client, the tables (schema.ts) and running migrations
-  engine/          regions with an engine per namespace, and merge turns
+  engine/          regions, the indexes open in each, builds and turns
   features/        one folder per part of the contract, named the same:
     <feature>/
       routes.ts    the route handlers
@@ -105,7 +103,7 @@ Never edit a migration that has been committed; add another.
 2. Implement it with `api.openapi(route, handler)` in `features/<feature>/routes.ts`, and list a
    new feature in `app.ts`. The handler's inputs and outputs
    are typed from the contract, so it can't drift.
-3. Reach namespaces only through `readable` or `changeable` in `http/request.ts`, so access stays in
+3. Reach indexes only through `indexFor` in `http/request.ts`, so access stays in
    one place.
 4. Add a test. `e2e/conformance` holds the tests every server must pass.
 

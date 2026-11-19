@@ -8,5 +8,4 @@ const s = await server({
   bodyLimit: 64 * 1024 * 1024,
 });
 await listen(s);
-s.services.syncer.start();
 console.log(`SCENARIO ${JSON.stringify({ url: s.services.config.peer.url, admin: ADMIN })}`);

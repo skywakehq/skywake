@@ -71,9 +71,7 @@ services:
       SKYWAKE_API_CONSOLE_URL: ${SKYWAKE_API_CONSOLE_URL:-${CONSOLE_URL:-http://localhost:3100}${CONSOLE_BASE_PATH:-}}
       # Prometheus metrics, on the compose network only.
       SKYWAKE_API_METRICS_LISTEN: 0.0.0.0:9464
-      # Set an IAM role (and SKYWAKE_API_STS_ENDPOINT for an S3-compatible
-      # store) to hand out credentials limited to one namespace.
-      SKYWAKE_API_STS_ROLE_ARN: ${SKYWAKE_API_STS_ROLE_ARN:-}
+      # The STS endpoint of an S3-compatible store, for buckets customers bring.
       SKYWAKE_API_STS_ENDPOINT: ${SKYWAKE_API_STS_ENDPOINT:-}
       # An OpenAI-compatible embeddings API and a Cohere-style rerank API,
       # to give vectors as text and to rerank hits.

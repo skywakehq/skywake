@@ -1,14 +1,17 @@
 # Self-hosting Skywake
 
+`skywake deploy` plans and runs all of this for you, on this machine or a cloud. This page is
+the same thing by hand.
+
 `compose.yaml`, at the repository's root, runs all of Skywake on one machine:
 
-| Service    | What it is                                                        | Port |
-| ---------- | ----------------------------------------------------------------- | ---- |
-| `api`      | The API that agents, the SDKs and the console talk to             | 8080 |
-| `console`  | The web console                                                   | 3100 |
-| `zero`     | zero-cache, which keeps the console up to date as agents work     | 4848 |
-| `postgres` | The API's and the console's database                              |      |
-| `s3`       | [RustFS](https://rustfs.com), an S3 server for the branches' data |      |
+| Service    | What it is                                                | Port |
+| ---------- | --------------------------------------------------------- | ---- |
+| `api`      | The API that the SDKs, the CLI and the console talk to    | 8080 |
+| `console`  | The web console                                           | 3100 |
+| `zero`     | zero-cache, which keeps the console up to date            | 4848 |
+| `postgres` | The API's and the console's database                      |      |
+| `s3`       | [RustFS](https://rustfs.com), an S3 server for index data |      |
 
 The docs are optional and need none of these: `docker compose --profile
 docs up -d` adds them at http://localhost:3200 (or `docker compose
@@ -36,12 +39,12 @@ http://localhost:3100, sign up, and make an organization. (On a new
 database the console logs one Better Auth "schema mismatch" just before it
 makes its tables; that is expected.)
 
-In the console, make an environment and a filesystem, then an API key on
-the API keys page.
+In the console, make an environment, then an API key on the API keys page.
 
-Agents use the API at http://localhost:8080 with that key. A key with the
-`write` role can fork, write and merge; making environments and
-filesystems needs `admin`.
+The SDKs and the CLI use the API at http://localhost:8080 with that key. A
+key with the `write` role can upsert, delete, fork and merge; making
+environments and indexes needs `admin`. The first write to a new name
+makes the index.
 
 ## Database roles
 
@@ -83,35 +86,6 @@ The bundled S3 server is fine to try Skywake. For real use, point
 `SKYWAKE_STORE` at a bucket in AWS S3, Cloudflare R2 or any S3 with
 conditional writes, set its keys, and set `AWS_ENDPOINT` (for AWS,
 `https://s3.<region>.amazonaws.com`).
-
-## Credentials for one namespace
-
-By default the API, and any daemon you give the bucket's keys, can reach
-the whole bucket. To hand daemons and the CLI credentials that reach only
-their own namespace, give the API an IAM role it may assume
-(`SKYWAKE_API_STS_ROLE_ARN`; with an S3-compatible store, also its STS
-endpoint in `SKYWAKE_API_STS_ENDPOINT`). The role needs read, write and list
-on the bucket; each credential gets a session policy that narrows it to one
-namespace's folder, for 15 minutes (`SKYWAKE_API_STS_SECONDS`, at most an
-hour).
-
-What the credentials can do:
-
-- Read and write objects in the namespace's folder, and nothing outside it.
-- Never delete: deleting a branch writes an empty ref, and garbage
-  collection runs in the API with its own credentials.
-- Never write the ref of a protected branch, so it changes only through a
-  merge in the API.
-- Never write under `gc/`, so they cannot hold garbage collection's lock
-  and make every writer of the namespace wait.
-- Still overwrite the refs of other branches, the content objects of that
-  namespace, and its `deleted/` records. Content is checked against its hash
-  when read, so a bad write is detected, not silent: it can break reads (a
-  denial of service), but not change data unnoticed.
-
-Credentials already handed out keep working until they expire (900 seconds
-by default). Revoking a key, or protecting a branch, takes full effect only
-then.
 
 ## Health and metrics
 

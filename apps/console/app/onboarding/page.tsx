@@ -29,7 +29,7 @@ export default function Onboarding() {
         <Logo className="mb-8 size-6" />
         <AuthForm title="Name your organization" submit="Create organization" action={create}>
           <p className="-mt-2 text-sm text-muted-foreground">
-            Your team, its environments and its agents live here.
+            Your team, its environments and their indexes live here.
           </p>
           <Field label="Name">
             <Input name="name" placeholder="Acme" required autoFocus />

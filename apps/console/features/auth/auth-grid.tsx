@@ -58,7 +58,7 @@ function pick(): Kind {
 let nextId = 0;
 
 /** The grid behind the sign-in panel: brighter under the cursor, and now and
- * then a cell fills in and fades, like a file being written. */
+ * then a cell fills in and fades, like a row being written. */
 export function AuthGrid() {
   const box = useRef<HTMLDivElement>(null);
   const [pulses, setPulses] = useState<Pulse[]>([]);

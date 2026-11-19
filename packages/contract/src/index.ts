@@ -2,42 +2,18 @@ import { OpenAPIHono } from "@hono/zod-openapi";
 
 import * as audit from "./audit.ts";
 import * as billing from "./billing.ts";
-import * as branches from "./branches.ts";
-import * as credentials from "./credentials.ts";
 import * as environments from "./environments.ts";
-import * as files from "./files.ts";
-import * as history from "./history.ts";
 import * as indexes from "./indexes/index.ts";
 import * as keys from "./keys.ts";
-import * as links from "./links.ts";
 import * as logins from "./logins.ts";
-import * as namespaces from "./namespaces.ts";
 import * as orgs from "./orgs.ts";
-import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
 import * as v2 from "./v2/index.ts";
 
 export * from "./http.ts";
 export * from "./names.ts";
 export * from "./schemas.ts";
-export {
-  audit,
-  billing,
-  branches,
-  credentials,
-  environments,
-  files,
-  history,
-  indexes,
-  keys,
-  links,
-  logins,
-  namespaces,
-  orgs,
-  sessions,
-  sso,
-  v2,
-};
+export { audit, billing, environments, indexes, keys, logins, orgs, sso, v2 };
 
 export const routes = {
   orgs: [
@@ -76,47 +52,6 @@ export const routes = {
     environments.setEnvironmentStore,
     environments.removeEnvironmentStore,
   ],
-  namespaces: [
-    namespaces.listNamespaces,
-    namespaces.createNamespace,
-    namespaces.getNamespace,
-    namespaces.updateNamespace,
-    namespaces.deleteNamespace,
-  ],
-  links: [
-    links.linkIndex,
-    links.getLinkDefaults,
-    links.getIndexLink,
-    links.getLinkOfIndex,
-    links.unlinkIndex,
-    links.getBranchIndex,
-    links.branchAdvanced,
-  ],
-  credentials: [credentials.createCredentials],
-  branches: [
-    branches.listBranches,
-    branches.createBranch,
-    branches.getBranch,
-    branches.updateBranch,
-    branches.deleteBranch,
-  ],
-  files: [
-    files.listFiles,
-    files.readFile,
-    files.searchFiles,
-    files.findFiles,
-    files.commitFiles,
-    files.uploadPart,
-  ],
-  history: [
-    history.listCommits,
-    history.listChanges,
-    history.fileHistory,
-    history.diffBranches,
-    history.mergeBranches,
-    history.revertCommit,
-    history.resetBranch,
-  ],
   indexes: [
     indexes.listIndexes,
     indexes.createIndex,
@@ -151,15 +86,6 @@ export const routes = {
     indexes.checkRecall,
     indexes.getIndexUsage,
   ],
-  sessions: [
-    sessions.listSessions,
-    sessions.startSession,
-    sessions.renewSession,
-    sessions.endSession,
-    sessions.listClaims,
-    sessions.claimPath,
-    sessions.releaseClaim,
-  ],
 };
 
 export const BASE_PATH = "/v1";
@@ -170,10 +96,8 @@ export const info = {
     title: "Skywake API",
     version: "1.0.0",
     description:
-      "Branches of whole filesystems, and search indexes, for agents. Namespace, index and branch " +
-      "names may hold `/`; encode it " +
-      "as `%2F` in paths. Send `Authorization: Bearer <API key or token>`. Public namespaces can be " +
-      "read without one.",
+      "Search indexes on object storage, with branches. Index and branch names may hold `/`; " +
+      "encode it as `%2F` in paths. Send `Authorization: Bearer <API key or token>`.",
   },
   servers: [{ url: BASE_PATH }],
 };

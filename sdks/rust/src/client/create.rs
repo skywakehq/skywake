@@ -4,58 +4,7 @@ use serde_json::{Value, json};
 use super::Skywake;
 use super::types::{CreatedKey, Role};
 use crate::shared::awaitable;
-use crate::{Disk, Index, Result, Visibility};
-
-#[derive(Serialize)]
-struct NewDisk {
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    region: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    search: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    visibility: Option<Visibility>,
-}
-
-#[must_use]
-pub struct CreateDisk<'a> {
-    sky: &'a Skywake,
-    body: NewDisk,
-}
-
-impl<'a> CreateDisk<'a> {
-    pub(crate) fn new(sky: &'a Skywake, name: &str) -> Self {
-        let body = NewDisk {
-            name: name.to_string(),
-            region: None,
-            search: None,
-            visibility: None,
-        };
-        CreateDisk { sky, body }
-    }
-
-    pub fn region(mut self, region: impl Into<String>) -> Self {
-        self.body.region = Some(region.into());
-        self
-    }
-
-    pub fn search(mut self, search: bool) -> Self {
-        self.body.search = Some(search);
-        self
-    }
-
-    pub fn visibility(mut self, visibility: Visibility) -> Self {
-        self.body.visibility = Some(visibility);
-        self
-    }
-
-    pub async fn send(self) -> Result<Disk> {
-        let _: Value = self.sky.http.post("/disks", &self.body).await?;
-        Ok(self.sky.disk(&self.body.name))
-    }
-}
-
-awaitable!(CreateDisk => Disk);
+use crate::{Index, Result};
 
 #[derive(Serialize)]
 struct NewIndex {

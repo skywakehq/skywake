@@ -12,9 +12,7 @@ license = "Apache-2.0"
 # This workspace's crates.
 skywake-cache = { path = "crates/cache" }
 skywake-core = { path = "crates/core" }
-skywake-daemon = { path = "crates/daemon" }
 skywake-index = { path = "crates/index" }
-skywake-mount = { path = "crates/mount" }
 
 # Everything else, in alphabetical order.
 anyhow = "1.0.104"

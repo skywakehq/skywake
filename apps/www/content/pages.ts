@@ -2,28 +2,10 @@ export type Page = { title: string; description: string; priority: number };
 
 export const pages = {
   "/": {
-    title: "Skywake: Fast filesystem and search on S3 for AI agents",
+    title: "Skywake: open-source search on object storage",
     description:
-      "Open-source filesystem and search on your own S3 bucket. Mount it like a local disk, give every AI agent its own copy in 10 ms, and search it.",
+      "Vector, full-text and hybrid search that keeps its data in your own S3, R2, GCS or Azure bucket. An open-source alternative to turbopuffer, under Apache-2.0.",
     priority: 1,
-  },
-  "/filesystem": {
-    title: "S3 filesystem for AI agents: mount, copy and merge",
-    description:
-      "Mount S3 or any object storage as a fast local disk. Give every agent its own copy of 20,000 files in 10 ms, then diff and merge the changes like git.",
-    priority: 0.9,
-  },
-  "/search": {
-    title: "Vector and full-text search on S3",
-    description:
-      "Vector, full-text and hybrid search straight from your own object storage. 10 ms warm queries over 10M vectors, and no separate database to run.",
-    priority: 0.9,
-  },
-  "/use-cases": {
-    title: "Use cases: knowledge bases, agent memory, coding agents and more",
-    description:
-      "How teams use Skywake for knowledge bases, agent memory, sandboxes, coding and document agents, evals, CI and datasets, step by step.",
-    priority: 0.7,
   },
   "/pricing": {
     title: "Pricing",
@@ -34,7 +16,7 @@ export const pages = {
   "/benchmarks": {
     title: "Benchmarks",
     description:
-      "Measured on AWS with the bucket in the same region: agent copies, uploads and builds, and search over 10M vectors.",
+      "Search over 10M vectors on S3, measured on AWS with the bucket in the same region: cold and warm queries, filters, recall and freshness.",
     priority: 0.7,
   },
   "/privacy": {

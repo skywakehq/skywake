@@ -13,7 +13,7 @@ scripts/start.sh
 
 It installs Docker if it is missing (asking first), writes `.env` with every secret filled in, builds the images, starts everything and waits until it answers: the console on `http://localhost:3100`, the API on `:8080`. Docker needs about 6 GB of memory to build; on a Mac with Colima, the script offers to give it that. `scripts/start.sh stop` stops it and keeps the data. If a port is taken, set `CONSOLE_PORT`, `API_PORT` or `ZERO_PORT` in `.env` and run it again.
 
-The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key, as `SKYWAKE_URL` and `SKYWAKE_API_KEY`. Disks and indexes are created by the first write.
+The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment, then an [API key](../security/api-keys.mdx) on the API keys page. The SDKs and the CLI call the [API](/reference/api) at `http://localhost:8080` with that key, as `SKYWAKE_URL` and `SKYWAKE_API_KEY`. Indexes are created by the first write.
 
 To use the CLI with this server, sign in on a profile of its own:
 
@@ -42,9 +42,9 @@ Compose starts these services:
 
 | Service    | What it is                                                                    | Port |
 | ---------- | ----------------------------------------------------------------------------- | ---- |
-| `api`      | The API that agents, the SDKs and the console talk to                         | 8080 |
+| `api`      | The API that the SDKs, the CLI and the console talk to                        | 8080 |
 | `console`  | The web console                                                               | 3100 |
-| `zero`     | zero-cache, which keeps the console up to date as agents work                 | 4848 |
+| `zero`     | zero-cache, which keeps the console up to date                                | 4848 |
 | `postgres` | The API's and the console's database                                          |      |
 | `s3`       | RustFS, an object storage server for the data                                 |      |
 | `docs`     | These docs, only with `--profile docs`. See [What to run](./what-to-run.mdx). | 3200 |
@@ -64,7 +64,7 @@ Compose starts these services:
 
 ## Your own bucket
 
-The bundled object storage server is fine for trying Skywake. For real use, point it at your own bucket: set `SKYWAKE_STORE=s3://your-bucket`, the bucket's keys, and `AWS_ENDPOINT` (such as `https://s3.us-east-1.amazonaws.com` for AWS, or the account's endpoint for R2). The bucket must support [conditional writes](../getting-started/install.mdx#where-data-goes).
+The bundled object storage server is fine for trying Skywake. For real use, point it at your own bucket: set `SKYWAKE_STORE=s3://your-bucket`, the bucket's keys, and `AWS_ENDPOINT` (such as `https://s3.us-east-1.amazonaws.com` for AWS, or the account's endpoint for R2). The bucket must support [conditional writes](../getting-started/index.mdx#how-it-sits-on-object-storage).
 
 ## On a server
 
@@ -74,12 +74,11 @@ Put the console, the API and zero-cache behind HTTPS, and set `CONSOLE_URL`, `AP
 
 Set these only when you need the feature.
 
-| Variable                                               | What it does                                                                                                                            |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                                                      |
-| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, so `query("words")` searches indexes and disks by [meaning](../indexes/embeddings-and-rerank.mdx). |
-| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                                              |
-| `SKYWAKE_API_PROVIDERS`                                | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.                                        |
+| Variable                                           | What it does                                                                                                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`   | An OpenAI-compatible embeddings API, so `query("words")` searches indexes by [meaning](../indexes/embeddings-and-rerank.mdx). |
+| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY` | A Cohere-style rerank API.                                                                                                    |
+| `SKYWAKE_API_PROVIDERS`                            | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.                              |
 
 ## Health and metrics
 

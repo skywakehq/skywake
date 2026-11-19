@@ -11,7 +11,7 @@ const database = zeroNodePg(schema, pool);
 export async function POST(request: Request) {
   const who = await caller(request.headers, { forwarded: true });
   if (!who) return new Response("sign in first", { status: 401 });
-  const ctx = { userID: who.userID, org: who.org, role: who.role };
+  const ctx = { userID: who.userID, org: who.org };
   const mutators = serverMutators(who);
   const result = await handleMutateRequest({
     dbProvider: database,

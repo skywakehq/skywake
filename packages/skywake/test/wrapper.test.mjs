@@ -13,11 +13,11 @@ test("the wrapper runs the binary with the same arguments and exit code", () => 
   const fake = join(dir, "skywake");
   writeFileSync(fake, '#!/bin/sh\necho "args: $*"\nexit 3\n');
   chmodSync(fake, 0o755);
-  const run = spawnSync(process.execPath, [wrapper, "new", "agent-1", "--from", "main"], {
+  const run = spawnSync(process.execPath, [wrapper, "query", "products", "shoes", "--limit", "5"], {
     env: { ...process.env, SKYWAKE_BINARY: fake },
     encoding: "utf8",
   });
-  assert.equal(run.stdout, "args: new agent-1 --from main\n");
+  assert.equal(run.stdout, "args: query products shoes --limit 5\n");
   assert.equal(run.status, 3);
 });
 

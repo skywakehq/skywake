@@ -1,5 +1,5 @@
 # Skywake in one AWS region: the bucket, Postgres and the cluster that runs
-# the API all sit in this provider's region. Commits make several bucket
+# the API all sit in this provider's region. Writes make several bucket
 # requests one after another and every API write waits on Postgres, so a
 # cross-region hop would be paid many times per operation.
 

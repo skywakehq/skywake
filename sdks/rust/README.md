@@ -1,7 +1,7 @@
 # Skywake for Rust
 
-An async client for Skywake: disks of files and search indexes, both with
-branches.
+An async client for Skywake, the open-source search index: vector and
+full-text search over rows kept in your own bucket, with branches.
 
 ```toml
 [dependencies]
@@ -14,27 +14,25 @@ use skywake::Skywake;
 
 let sky = Skywake::new()?;
 
-let products = sky.index("products");
+let products = sky.create_index("products").await?;
 products.upsert(json!({ "id": 1, "text": "red running shoes", "price": 89 })).await?;
 let hits = products.query("shoes for running").limit(5).await?;
 
-let app = sky.disk("app");
-app.write("notes.md", "hello").await?;
-let work = app.fork("agent-1").await?;
-work.write("notes.md", "changed").await?;
-work.merge_into("main").await?;
+let draft = products.fork("draft").await?;
+draft.upsert(json!({ "id": 2, "text": "blue trail shoes", "price": 120 })).await?;
+draft.merge_into("main").await?;
 ```
 
 - **Settings.** `Skywake::new()` reads the key from `SKYWAKE_API_KEY`, or the
   profile `skywake login` saved. `Skywake::builder()` sets `key`, `url`,
   `environment`, `profile`, `retries` and `timeout`.
-- **Handles.** `sky.disk(name)` and `sky.index(name)` make no network call.
-  `.on(branch)` is a handle on another branch; `fork` makes one.
+- **Handles.** `sky.index(name)` makes no network call. `.on(branch)` is a
+  handle on another branch; `fork` makes one.
 - **Options** are builder methods, and a builder is awaited directly:
   `products.query("words").limit(5).await?`.
 - **Rows and hits** are `serde_json::Map`. Filters are `serde_json::Value`.
-- **Lists** (`list_disks`, `list_indexes`, `list_keys`, `rows().stream()`,
-  `log().stream()`) are `futures::Stream`s.
+- **Lists** (`list_indexes`, `list_keys`, `rows().stream()`) are
+  `futures::Stream`s.
 - **Errors.** `Error::Api` carries `kind` (`Auth`, `Permission`, `NotFound`,
   `Conflict`, `MergeConflict { conflicts }`, `InvalidRequest`,
   `RateLimited { retry_after }`, `Server`), `status`, `code`, `message`,

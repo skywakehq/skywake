@@ -38,7 +38,7 @@ class ClientTest < ApiTest
 
   def test_a_merge_that_cannot_finish_is_a_merge_conflict_listing_what_conflicts
     api = fake { failure(409, "conflict", conflicts: ["README.md"]) }
-    work = api.sky.disk("app", branch: "agent-1")
+    work = api.sky.index("products", branch: "agent-1")
     error = assert_raises(Skywake::MergeConflict) { work.merge_into }
     assert_equal ["README.md"], error.conflicts
     assert_kind_of Skywake::Conflict, error
@@ -53,10 +53,10 @@ class ClientTest < ApiTest
         { body: { data: [{ name: "a" }, { name: "b" }], next: "b" } }
       end
     end
-    disks = api.sky.list_disks
-    assert_kind_of Enumerator, disks
+    indexes = api.sky.list_indexes
+    assert_kind_of Enumerator, indexes
     assert_empty api.seen
-    assert_equal %w[a b c], disks.map { |disk| disk["name"] }
+    assert_equal %w[a b c], indexes.map { |index| index["name"] }
   end
 
   def test_upsert_takes_any_number_of_rows_and_sends_them_in_batches
@@ -118,64 +118,13 @@ class ClientTest < ApiTest
     )
   end
 
-  def test_files_are_read_and_written_by_path_each_part_of_it_encoded
-    api = fake { |seen| seen.method == "GET" ? { raw: "hello" } : { body: { commit: "c1", changed: true } } }
-    app = api.sky.disk("app")
-    text = app.read("/docs/a b.md", at: "c0")
-    assert_equal "hello", text
-    assert_equal Encoding::UTF_8, text.encoding
-    bytes = app.read("x", binary: true)
-    assert_equal Encoding::BINARY, bytes.encoding
-    app.write({ "a.md" => "one", "b.bin" => "\xFF\x00".b }, message: "two")
-    assert_equal "/v2/disks/app/files/docs/a%20b.md", api.seen[0].path
-    assert_equal "c0", api.seen[0].query["at"]
-    assert_equal(
-      {
-        "message" => "two",
-        "branch" => "main",
-        "changes" => [{ "path" => "a.md", "text" => "one" }, { "path" => "b.bin", "base64" => "/wA=" }]
-      },
-      api.seen[2].json
-    )
-  end
-
-  def test_a_large_file_goes_up_in_parts_before_its_commit
-    api = fake do |seen|
-      if seen.path.end_with?("/uploads")
-        { status: 201, body: { part: "p#{seen.body.bytesize}", size: seen.body.bytesize } }
-      else
-        { body: { commit: "c1", changed: true } }
-      end
-    end
-    api.sky.disk("app").write("big.bin", "\0".b * (20 * 1024 * 1024))
-    parts = api.seen.select { |seen| seen.path.end_with?("/uploads") }
-    assert_equal [16 * 1024 * 1024, 4 * 1024 * 1024], parts.map { |seen| seen.body.bytesize }
-    assert_equal "application/octet-stream", parts[0].headers["content-type"]
-    assert_equal(
-      [{ "path" => "big.bin", "parts" => ["p#{16 * 1024 * 1024}", "p#{4 * 1024 * 1024}"] }],
-      api.seen.last.json["changes"]
-    )
-  end
-
   def test_a_fork_is_a_handle_on_the_new_branch_and_destroy_removes_just_the_branch
     api = fake { |seen| seen.method == "DELETE" ? { status: 204 } : { status: 201, body: { name: "agent-1" } } }
-    work = api.sky.disk("app").fork("agent-1", at: "c3")
+    work = api.sky.index("products").fork("agent-1", at: "c3")
     assert_equal "agent-1", work.branch
     work.destroy
     assert_equal({ "name" => "agent-1", "from" => "main", "at" => "c3" }, api.seen[0].json)
-    assert_equal ["DELETE", "/v2/disks/app/branches/agent-1"], [api.seen[1].method, api.seen[1].path]
-  end
-
-  def test_restore_to_a_time_picks_the_newest_commit_at_or_before_it
-    commits = [
-      { id: "c3", message: "", created: "2026-01-03T00:00:00Z", merged: nil },
-      { id: "c2", message: "", created: "2026-01-02T00:00:00Z", merged: nil }
-    ]
-    api = fake do |seen|
-      seen.method == "GET" ? { body: { data: commits, next: nil } } : { body: { commit: "c4", changed: true } }
-    end
-    api.sky.disk("app").restore(Time.utc(2026, 1, 2, 12))
-    assert_equal({ "to" => "c2", "branch" => "main" }, api.seen[1].json)
+    assert_equal ["DELETE", "/v2/indexes/products/branches/agent-1"], [api.seen[1].method, api.seen[1].path]
   end
 
   def test_a_delete_that_may_have_landed_counts_as_done_when_it_then_finds_nothing

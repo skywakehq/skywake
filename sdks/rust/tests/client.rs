@@ -193,7 +193,7 @@ async fn a_429_is_retried_as_the_server_asks_then_reported_with_retry_after() {
 async fn a_merge_that_cant_finish_is_a_merge_conflict_listing_what_conflicts() {
     let api = fake(|_, _| failure(409, "conflict", json!({ "conflicts": ["README.md"] }))).await;
     let sky = api.sky().build().unwrap();
-    let work = sky.disk("app").on("agent-1");
+    let work = sky.index("docs").on("agent-1");
     let error = work.merge_into("main").await.unwrap_err();
     assert_eq!(
         error.kind(),
@@ -216,15 +216,15 @@ async fn lists_follow_next_until_the_last_page() {
         },
     )
     .await;
-    let disks: Vec<_> = api
+    let indexes: Vec<_> = api
         .sky()
         .build()
         .unwrap()
-        .list_disks()
+        .list_indexes()
         .try_collect()
         .await
         .unwrap();
-    let names: Vec<_> = disks.iter().map(|disk| disk.name.as_str()).collect();
+    let names: Vec<_> = indexes.iter().map(|index| index.name.as_str()).collect();
     assert_eq!(names, ["a", "b", "c"]);
 }
 
@@ -356,69 +356,6 @@ async fn query_takes_text_first_and_options_on_their_own() {
 }
 
 #[tokio::test]
-async fn files_are_read_and_written_by_path_each_part_of_it_encoded() {
-    let api = fake(|seen, _| {
-        if seen.method == Method::GET {
-            (StatusCode::OK, "hello").into_response()
-        } else {
-            ok(json!({ "commit": "c1", "changed": true }))
-        }
-    })
-    .await;
-    let sky = api.sky().build().unwrap();
-    let app = sky.disk("app");
-    assert_eq!(app.read("/docs/a b.md").at("c0").await.unwrap(), "hello");
-    assert_eq!(app.read("x").bytes().await.unwrap(), b"hello");
-    app.write_files([
-        ("a.md", skywake::Content::from("one")),
-        ("b.bin", vec![0xff, 0x00].into()),
-    ])
-    .message("two")
-    .await
-    .unwrap();
-    let seen = api.seen();
-    assert_eq!(seen[0].path, "/v2/disks/app/files/docs/a%20b.md");
-    assert_eq!(seen[0].query["at"], "c0");
-    assert_eq!(
-        seen[2].json(),
-        json!({
-            "message": "two",
-            "branch": "main",
-            "changes": [{ "path": "a.md", "text": "one" }, { "path": "b.bin", "base64": "/wA=" }],
-        })
-    );
-}
-
-#[tokio::test]
-async fn a_large_file_goes_up_in_parts_before_its_commit() {
-    let api = fake(|seen, _| {
-        if seen.path.ends_with("/uploads") {
-            let size = seen.body.len();
-            reply(201, json!({ "part": format!("p{size}"), "size": size }))
-        } else {
-            ok(json!({ "commit": "c1", "changed": true }))
-        }
-    })
-    .await;
-    let sky = api.sky().build().unwrap();
-    sky.disk("app")
-        .write("big.bin", vec![0u8; 20 * 1024 * 1024])
-        .await
-        .unwrap();
-    let seen = api.seen();
-    let parts: Vec<_> = seen
-        .iter()
-        .filter(|seen| seen.path.ends_with("/uploads"))
-        .map(|seen| seen.body.len())
-        .collect();
-    assert_eq!(parts, [16 * 1024 * 1024, 4 * 1024 * 1024]);
-    assert_eq!(
-        seen.last().unwrap().json()["changes"],
-        json!([{ "path": "big.bin", "parts": [format!("p{}", 16 * 1024 * 1024), format!("p{}", 4 * 1024 * 1024)] }])
-    );
-}
-
-#[tokio::test]
 async fn a_fork_is_a_handle_on_the_new_branch_and_destroy_removes_just_the_branch() {
     let api = fake(|seen, _| {
         if seen.method == Method::DELETE {
@@ -429,7 +366,7 @@ async fn a_fork_is_a_handle_on_the_new_branch_and_destroy_removes_just_the_branc
     })
     .await;
     let sky = api.sky().build().unwrap();
-    let work = sky.disk("app").fork("agent-1").at("c3").await.unwrap();
+    let work = sky.index("docs").fork("agent-1").at("c3").await.unwrap();
     assert_eq!(work.branch(), "agent-1");
     work.destroy().await.unwrap();
     let seen = api.seen();
@@ -439,31 +376,21 @@ async fn a_fork_is_a_handle_on_the_new_branch_and_destroy_removes_just_the_branc
     );
     assert_eq!(
         (seen[1].method.clone(), seen[1].path.as_str()),
-        (Method::DELETE, "/v2/disks/app/branches/agent-1")
+        (Method::DELETE, "/v2/indexes/docs/branches/agent-1")
     );
 }
 
 #[tokio::test]
-async fn restore_to_a_time_picks_the_newest_commit_at_or_before_it() {
-    let api = fake(|seen, _| {
-        if seen.method == Method::GET {
-            ok(json!({
-                "data": [
-                    { "id": "c3", "message": "", "created": "2026-01-03T00:00:00Z", "merged": null },
-                    { "id": "c2", "message": "", "created": "2026-01-02T00:00:00Z", "merged": null },
-                ],
-                "next": null,
-            }))
-        } else {
-            ok(json!({ "commit": "c4", "changed": true }))
-        }
-    })
-    .await;
+async fn restore_to_a_time_sends_it_as_an_instant_on_the_branch() {
+    let api =
+        fake(|_, _| ok(json!({ "id": "v2", "created": "2026-01-02T12:00:00Z", "rows": 3 }))).await;
     let sky = api.sky().build().unwrap();
     let noon = SystemTime::UNIX_EPOCH + Duration::from_secs(1_767_355_200);
-    sky.disk("app").restore(noon).await.unwrap();
+    sky.index("docs").restore(noon).await.unwrap();
+    let seen = api.seen();
+    assert_eq!(seen[0].path, "/v2/indexes/docs/restore");
     assert_eq!(
-        api.seen()[1].json(),
-        json!({ "to": "c2", "branch": "main" })
+        seen[0].json(),
+        json!({ "to": "2026-01-02T12:00:00.000Z", "branch": "main" })
     );
 }

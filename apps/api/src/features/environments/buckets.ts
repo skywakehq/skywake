@@ -1,4 +1,4 @@
-// Buckets customers bring. An environment with a store keeps every namespace and
+// Buckets customers bring. An environment with a store keeps every
 // index made in it there, under the region `bucket:<org>/<environment>`, so the
 // code that opens stores by region needs no other change. The API signs for the
 // bucket with a role the customer lets it assume, or with keys it keeps sealed.
@@ -6,7 +6,7 @@
 import { randomBytes } from "node:crypto";
 
 import { AssumeRoleCommand, STSClient } from "@aws-sdk/client-sts";
-import { Engine, Index, renewStoreKeys, type StoreKeys } from "@skywake/engine";
+import { renewStoreKeys, Store, type StoreKeys } from "@skywake/engine";
 import { and, eq } from "drizzle-orm";
 
 import type { Config } from "../../config.ts";
@@ -37,7 +37,7 @@ function parse(region: string) {
   return { org: rest.slice(0, at), environment: rest.slice(at + 1) };
 }
 
-/** Where in a customer's bucket a namespace or index goes: the bucket is theirs, so no org folder. */
+/** Where in a customer's bucket an index goes: the bucket is theirs, so no org folder. */
 export function bucketFolder(kind: "fs" | "ix", id: string) {
   return `${kind}/${id}`;
 }
@@ -165,20 +165,10 @@ export class Buckets {
 
 /**
  * Proves the API can use a bucket before anything is kept there: it must take
- * conditional writes (the store's first branch checks), and let the API list and
- * delete. Everything written goes in a throwaway folder that is removed after.
+ * conditional writes, and let the API list and delete. The check removes what it writes.
  */
 export async function verifyBucket(store: string, keys: StoreKeys) {
   const folder = `.skywake-check/${randomBytes(8).toString("hex")}`;
   const location = inFolder(store, folder);
-  const engine = Engine.open(location, { keys });
-  try {
-    await engine.createBranch("check");
-    const branches = await engine.branches();
-    if (!branches.includes("check")) throw new Error("a branch written could not be listed");
-  } finally {
-    await Index.open(location, { keys })
-      .destroy()
-      .catch(() => {});
-  }
+  await Store.open(location, { keys }).check();
 }

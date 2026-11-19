@@ -1,4 +1,4 @@
-import { BASE_PATH, describe, files, indexes, info, routes, v2 } from "@skywake/contract";
+import { BASE_PATH, describe, indexes, info, routes, v2 } from "@skywake/contract";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
@@ -27,12 +27,7 @@ import { StripePayments } from "./features/billing/stripe.ts";
 import { PREFIX } from "./features/compat/paths.ts";
 import { Places } from "./features/compat/places.ts";
 import { compatApp } from "./features/compat/routes.ts";
-import { branchesFeature } from "./features/branches/routes.ts";
-import { Credentials } from "./features/credentials/mint.ts";
-import { credentialsFeature } from "./features/credentials/routes.ts";
 import { environmentsFeature } from "./features/environments/routes.ts";
-import { filesFeature } from "./features/files/routes.ts";
-import { historyFeature } from "./features/history/routes.ts";
 import { indexBranchesFeature } from "./features/indexes/branches.ts";
 import { indexOperationsFeature } from "./features/indexes/operations.ts";
 import { indexReadsFeature } from "./features/indexes/reads.ts";
@@ -41,16 +36,12 @@ import { Models } from "./features/indexes/models.ts";
 import { IndexUsage } from "./features/indexes/usage.ts";
 import { indexWritesFeature } from "./features/indexes/writes.ts";
 import { keysFeature } from "./features/keys/routes.ts";
-import { linksFeature } from "./features/links/routes.ts";
 import { loginsFeature } from "./features/logins/routes.ts";
-import { Syncer } from "./features/links/sync.ts";
 import { Deleter } from "./features/deletions/worker.ts";
-import { namespacesFeature } from "./features/namespaces/routes.ts";
 import { Allowlists } from "./features/orgs/allowlist.ts";
 import { orgsFeature } from "./features/orgs/routes.ts";
 import { pinnedQueriesFeature } from "./features/pinning/routing.ts";
 import { Pinning, serverId } from "./features/pinning/service.ts";
-import { sessionsFeature } from "./features/sessions/routes.ts";
 import { ssoFeature } from "./features/sso/routes.ts";
 import type { AppEnv, Ctx, Feature, Services } from "./http/context.ts";
 import { errorBody, errorHandler, jsonPath, unauthorized } from "./http/errors.ts";
@@ -72,13 +63,6 @@ const FEATURES: Feature[] = [
   loginsFeature,
   auditFeature,
   environmentsFeature,
-  namespacesFeature,
-  linksFeature,
-  credentialsFeature,
-  branchesFeature,
-  filesFeature,
-  historyFeature,
-  sessionsFeature,
   indexesFeature,
   indexBranchesFeature,
   indexWritesFeature,
@@ -94,7 +78,6 @@ export function services(
   options: {
     log?: Log;
     metrics?: Metrics;
-    credentials?: Credentials | null;
     payments?: Payments;
     now?: () => Date;
   } = {},
@@ -103,7 +86,7 @@ export function services(
   const id = serverId();
   const leases = new Leases(db, id, config.peer, log);
   const changes = new Changes(db, log);
-  const stores = new Stores(config.regions, undefined, leases, config.heads !== undefined);
+  const stores = new Stores(config.regions, undefined, leases);
   const buckets = new Buckets(db, config, log);
   stores.findOwnStores(buckets.find);
   const billing = config.billing
@@ -128,7 +111,6 @@ export function services(
   const pinning = new Pinning(id, db, config.peer, stores, usage, log);
   const token = config.peer.token;
   const models = new Models(config);
-  const syncer = new Syncer(id, db, stores, usage, models, log);
   const deleter = new Deleter(id, db, stores, log);
   const builds =
     token === undefined ? null : new Builds(id, token, () => pinning.live(), stores, log);
@@ -142,17 +124,10 @@ export function services(
     admin: new AdminToken(config.adminToken),
     turns: new Turns(),
     limiter: config.rateLimit > 0 ? new RateLimiter(db, config.rateLimit) : null,
-    credentials:
-      options.credentials !== undefined
-        ? options.credentials
-        : config.sts
-          ? new Credentials(config.sts, config.s3.region)
-          : null,
     log,
     metrics: options.metrics ?? new Metrics(),
     usage,
     models,
-    syncer,
     deleter,
     allowlists: new Allowlists(db, changes),
     leases,
@@ -250,26 +225,12 @@ export function createApp(services: Services) {
       await next();
     });
   }
-  // Before the limit of all requests, so an upload stops at 16 MiB without reading more.
-  app.use(
-    `${BASE_PATH}/namespaces/:namespace/uploads`,
-    bodyLimit({
-      maxSize: files.PART_MAX,
-      onError: (c) => errorBody(c, 413, "a part holds at most 16 MiB"),
-    }),
-  );
+  // Before the limit of all requests, so an upsert stops at its limit without reading more.
   app.use(
     `${BASE_PATH}/indexes/:index/branches/:branch/documents`,
     bodyLimit({
       maxSize: indexes.UPSERT_BYTES_MAX,
       onError: (c) => errorBody(c, 413, "an upsert holds at most 32 MiB"),
-    }),
-  );
-  app.use(
-    `${v2.BASE_PATH}/disks/:disk/uploads`,
-    bodyLimit({
-      maxSize: files.PART_MAX,
-      onError: (c) => errorBody(c, 413, "a part holds at most 16 MiB"),
     }),
   );
   app.use(

@@ -58,19 +58,19 @@ Recording never slows a request down. Events are written in the background, at m
 
 ## Events
 
-| Field                               | Meaning                                                                                 |
-| ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `actor`, `actorKind`                | `key:ID` for an API key, the person's id for the console, `admin` for the operator.     |
-| `org`, `owner`                      | The caller's organization, and the one that owns what was used, when it differs.        |
-| `action`, `outcome`, `status`       | What was called and how it ended.                                                       |
-| `method`, `route`, `resource`       | The request. `resource` holds the route's disk (as `namespace`), index, branch or path. |
-| `details`                           | What changed, when the call changed something.                                          |
-| `ip`, `userAgent`                   | Where the call came from. Through the console, this is the person's own browser.        |
-| `requestId`, `clientRequestId`      | Our id for the request, and the `X-Request-Id` the caller sent.                         |
-| `durationMs`, `bytesIn`, `bytesOut` | How long it took and how much data moved.                                               |
-| `chain`, `seq`, `prev`, `hash`      | The tamper seal, described below.                                                       |
+| Field                               | Meaning                                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `actor`, `actorKind`                | `key:ID` for an API key, the person's id for the console, `admin` for the operator. |
+| `org`, `owner`                      | The caller's organization, and the one that owns what was used, when it differs.    |
+| `action`, `outcome`, `status`       | What was called and how it ended.                                                   |
+| `method`, `route`, `resource`       | The request. `resource` holds the route's index and branch.                         |
+| `details`                           | What changed, when the call changed something.                                      |
+| `ip`, `userAgent`                   | Where the call came from. Through the console, this is the person's own browser.    |
+| `requestId`, `clientRequestId`      | Our id for the request, and the `X-Request-Id` the caller sent.                     |
+| `durationMs`, `bytesIn`, `bytesOut` | How long it took and how much data moved.                                           |
+| `chain`, `seq`, `prev`, `hash`      | The tamper seal, described below.                                                   |
 
-`resource` uses v1 full names, with the environment first: `prod/app` is the disk `app` in `prod`, and plain `app` is in `default`. When someone from another organization uses one of your public disks, you see that call in your log too, with your organization's id as `owner`.
+`resource` uses v1 full names, with the environment first: `prod/products` is the index `products` in `prod`, and plain `products` is in `default`.
 
 ## Tamper evidence
 
@@ -89,5 +89,5 @@ For the full request and response, see [`auditLog`](/reference/api/audit/auditLo
 <Cards>
   <Card href="./encryption-keys.mdx" />
   <Card href="./ip-allowlist.mdx" />
-  <Card href="../filesystem/protection.mdx" />
+  <Card href="./api-keys.mdx" />
 </Cards>

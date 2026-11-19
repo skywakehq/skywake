@@ -32,7 +32,7 @@ import { SingleSignOn } from "./sso";
 import { withBase } from "@/lib/zone";
 import { Select } from "@/features/indexes/fields";
 import { useEnvironments } from "@/features/environments/use-environments";
-import { useEnvironment } from "@/hooks/use-ns";
+import { useEnvironment } from "@/hooks/use-environment";
 
 export function SettingsPage() {
   const { data: org } = authClient.useActiveOrganization();
@@ -41,7 +41,7 @@ export function SettingsPage() {
       narrow
       eyebrow={org?.name ?? "Organization"}
       title="Settings"
-      description="Who can reach your disks, and how."
+      description="Who can reach your indexes, and how."
     >
       <div className="grid gap-12">
         <Members />
@@ -559,7 +559,7 @@ function NewKey({
             ))}
           </Select>
         </Field>
-        <Field label="Only these disks and indexes">
+        <Field label="Only these indexes">
           <Input name="only" placeholder="All, or names like products, logs-*" />
         </Field>
         <Field label="Access">

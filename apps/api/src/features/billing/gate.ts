@@ -60,19 +60,15 @@ const LIMIT_NAME: Record<Limit, (amount: string) => string> = {
   reranks: (n) => `${n} reranked documents a month`,
   pinned: (n) => `${n} GB-hours of pinned replicas a month`,
   indexes: (n) => `${n} indexes`,
-  files_stored: (n) => `${n} GB of files`,
-  files_storage: (n) => `${n} GB-months of files`,
-  files_egress: (n) => `${n} GB of file downloads a month`,
-  filesystems: (n) => `${n} filesystems`,
 };
 
 const GiB = 1n << 30n;
 
 function amountOf(limit: Limit, value: bigint) {
-  if (limit === "stored" || limit === "files_stored") {
+  if (limit === "stored") {
     return shownNumber(Number(value) / Number(GiB));
   }
-  if (limit === "indexes" || limit === "filesystems") return value.toString();
+  if (limit === "indexes") return value.toString();
   return shownNumber(shown(limit, value));
 }
 
@@ -86,7 +82,6 @@ export class Gate {
   readonly #accounts = new Cache<Account | null>(ACCOUNT_MS);
   readonly #usage = new Cache<Map<Meter, bigint>>(USAGE_MS);
   readonly #stored = new Cache<bigint>(STORED_MS);
-  readonly #files = new Cache<bigint>(STORED_MS);
 
   constructor(db: Db, ledger: Ledger, upgradeUrl: string, now: () => Date = () => new Date()) {
     this.#db = db;
@@ -107,7 +102,6 @@ export class Gate {
     this.#accounts.drop(org);
     this.#usage.drop(org);
     this.#stored.drop(org);
-    this.#files.drop(org);
   }
 
   async require(org: string, feature: Feature) {
@@ -129,18 +123,6 @@ export class Gate {
   async admitIndex(org: string) {
     const plan = await this.plan(org);
     await this.#within(plan, "indexes", () => billing.indexCount(this.#db, org));
-  }
-
-  async admitFilesystem(org: string) {
-    const plan = await this.plan(org);
-    await this.#within(plan, "filesystems", () => billing.filesystemCount(this.#db, org));
-  }
-
-  async admitFiles(org: string) {
-    const plan = await this.plan(org);
-    await this.#within(plan, "files_stored", () =>
-      this.#files.get(org, () => billing.filesStored(this.#db, org)),
-    );
   }
 
   async usage(org: string) {

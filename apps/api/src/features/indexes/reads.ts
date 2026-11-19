@@ -1,17 +1,14 @@
 import { indexes as routes } from "@skywake/contract";
-import type { DocId, IndexDoc, IndexHybrid } from "@skywake/engine";
+import type { DocId, IndexDoc } from "@skywake/engine";
 
 import type { Feature } from "../../http/context.ts";
 import { badRequest, notFound } from "../../http/errors.ts";
 import { indexFor } from "../../http/request.ts";
-import { merged, perFile, planPartial, planSearch } from "../links/partial.ts";
 import { answer } from "./answer.ts";
 import { Texts } from "./embeddings.ts";
 import { kept, reranked, withField } from "./rerank.ts";
 import * as rules from "./rules/index.ts";
 import type { Bill } from "./usage.ts";
-
-type Schema = Parameters<typeof rules.search>[0];
 
 const SCAN_DEFAULT = 100;
 const { GROUPS_MAX } = routes;
@@ -119,7 +116,6 @@ export const indexReadsFeature: Feature = {
       const body = c.req.valid("json");
       const texts = new Texts("query");
       const query = rules.query(index.schema, body, texts);
-      query.per = perFile(index.schema, query.per);
       const plan = body.rerank && rules.rerank(index.schema, body.rerank, text(body.vector.value));
       if (plan) query.include = withField(query.include, plan.field);
       await texts.embed(c.var.services.models, bill);
@@ -141,16 +137,12 @@ export const indexReadsFeature: Feature = {
       const { index } = await indexFor(c, name, "read");
       const bill = c.var.services.usage.bill(index);
       const body = c.req.valid("json");
-      const { words, partial } = planSearch(index.schema, rules.search(index.schema, body));
+      const search = rules.search(index.schema, body);
       const plan = body.rerank && rules.rerank(index.schema, body.rerank, body.query);
-      if (plan) {
-        words.include = withField(words.include, plan.field);
-        if (partial) partial.include = withField(partial.include, plan.field);
-      }
-      const requests = partial ? [{ search: words }, { search: partial }] : [{ search: words }];
+      if (plan) search.include = withField(search.include, plan.field);
+      const requests = [{ search }];
       const { results, ...meta } = await answer(index, branch, requests, body.consistency, bill, 1);
-      const found = results[0]!.search!;
-      const hits = partial ? merged(found, results[1]!.search!, words.topK) : found;
+      const hits = results[0]!.search!;
       if (!plan) return c.json({ hits, ...meta }, 200);
       const ordered = await reranked(
         c.var.services.models,
@@ -168,7 +160,7 @@ export const indexReadsFeature: Feature = {
       const bill = c.var.services.usage.bill(index);
       const body = c.req.valid("json");
       const texts = new Texts("query");
-      const hybrid = withPartial(index.schema, rules.hybrid(index.schema, body, texts));
+      const hybrid = rules.hybrid(index.schema, body, texts);
       const searches = Object.values(body.searches);
       const words =
         searches.map((one) => ("query" in one ? one.query : undefined)).find(Boolean) ??
@@ -220,20 +212,6 @@ export const indexReadsFeature: Feature = {
 };
 
 const text = (value: routes.VectorValue) => (typeof value === "string" ? value : undefined);
-
-function withPartial(schema: Schema, hybrid: IndexHybrid): IndexHybrid {
-  const searches = hybrid.searches.flatMap((one) => {
-    if (!one.text) return [one];
-    const { words, partial } = planPartial(schema, one.text);
-    return partial
-      ? [
-          { ...one, text: words },
-          { name: `${one.name}.partial`, text: partial },
-        ]
-      : [{ ...one, text: words }];
-  });
-  return { ...hybrid, searches, per: perFile(schema, hybrid.per) };
-}
 
 const shown = (doc: IndexDoc) => ({ ...doc, attributes: doc.attributes ?? {} });
 

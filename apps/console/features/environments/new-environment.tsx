@@ -10,7 +10,7 @@ import { navigate } from "@/components/shell/router";
 
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 
-/** Makes an environment, then opens it. It has no region; its disks and indexes pick one each. */
+/** Makes an environment, then opens it. It has no region; its indexes pick one each. */
 export function NewEnvironment({
   open,
   onOpenChange,
@@ -24,7 +24,7 @@ export function NewEnvironment({
       open={open}
       onOpenChange={onOpenChange}
       title="New environment"
-      description="A group of disks and indexes, such as prod or staging. Keys can be limited to one."
+      description="A group of indexes, such as prod or staging. Keys can be limited to one."
       label="prod"
       submit="Create"
       onSubmit={async (name) => {

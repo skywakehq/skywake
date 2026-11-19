@@ -1,5 +1,13 @@
 {
   "title": "Self-hosting",
   "icon": "Server",
-  "pages": ["deploy-aws", "docker-compose", "kubernetes", "what-to-run", "local-api", "your-bucket"]
+  "pages": [
+    "deploy",
+    "deploy-aws",
+    "docker-compose",
+    "kubernetes",
+    "what-to-run",
+    "local-api",
+    "your-bucket"
+  ]
 }

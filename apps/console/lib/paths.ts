@@ -3,27 +3,10 @@ import { withBase } from "./zone";
 
 const enc = encodeURIComponent;
 
-const segments = (path: string) => path.split("/").map(enc).join("/");
-
-const place = (kind: "d" | "i", full: string) =>
-  `/e/${enc(envOf(full))}/${kind}/${enc(nameInEnv(full))}`;
-
-export const nsPath = (ns: string, page = "files") =>
-  `${place("d", ns)}${page === "files" ? "" : `/${page}`}`;
-
-export const branchPath = (ns: string, branch: string, query?: Record<string, string>) =>
-  `${place("d", ns)}@${segments(branch)}` + (query ? `?${new URLSearchParams(query)}` : "");
-
-export const apiPath = (ns: string, rest: string) =>
-  withBase(`/api/skywake/namespaces/${enc(ns)}/${rest}`);
-
-export const decode = decodeURIComponent;
-
-export const envPath = (env: string, page?: "activity" | "indexes") =>
-  `/e/${enc(env)}${page ? `/${page}` : ""}`;
+export const envPath = (env: string) => `/e/${enc(env)}`;
 
 export const indexPath = (index: string, tab = "overview") =>
-  `${place("i", index)}${tab === "overview" ? "" : `/${tab}`}`;
+  `/e/${enc(envOf(index))}/i/${enc(nameInEnv(index))}${tab === "overview" ? "" : `/${tab}`}`;
 
 export const isIndexPath = (path: string) => /^\/(i|e\/[^/]+\/i)\//.test(path);
 

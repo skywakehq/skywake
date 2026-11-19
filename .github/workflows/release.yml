@@ -33,16 +33,15 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
           test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, Cargo.toml $version"; exit 1; }
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfuse3-dev pkg-config
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
-      - run: cargo build --release --locked -p skywake-cli -p skywake-daemon -p skywake-cache
+      - run: cargo build --release --locked -p skywake-cli -p skywake-cache
       - name: Package
         run: |
           name=skywake-${GITHUB_REF_NAME}-${{ matrix.target }}
           mkdir -p "dist/$name"
-          cp target/release/skywake target/release/skywaked target/release/skywake-cache \
+          cp target/release/skywake target/release/skywake-cache \
             LICENSE README.md "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           cp target/release/skywake "dist/skywake-${{ matrix.npm }}"

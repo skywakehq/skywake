@@ -13,7 +13,7 @@ public sealed record Seen(string Method, string Path, NameValueCollection Query,
     public JsonNode? Json => Body.Length == 0 ? null : JsonNode.Parse(Body);
 }
 
-public sealed record Reply(int Status = 200, object? Body = null, IReadOnlyDictionary<string, string>? Headers = null, byte[]? Raw = null);
+public sealed record Reply(int Status = 200, object? Body = null, IReadOnlyDictionary<string, string>? Headers = null);
 
 public sealed class FakeApi : HttpMessageHandler
 {
@@ -57,11 +57,6 @@ public sealed class FakeApi : HttpMessageHandler
     private static HttpResponseMessage Response(Reply reply)
     {
         var response = new HttpResponseMessage((HttpStatusCode)reply.Status);
-        if (reply.Raw is not null)
-        {
-            response.Content = new ByteArrayContent(reply.Raw);
-            return response;
-        }
         var text = reply.Body is null ? "" : JsonSerializer.Serialize(reply.Body);
         response.Content = new StringContent(text, Encoding.UTF8, "application/json");
         foreach (var (name, value) in reply.Headers ?? new Dictionary<string, string>())

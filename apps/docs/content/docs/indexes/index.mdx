@@ -35,7 +35,7 @@ Object storage is the source of truth. Each write is stored as a segment, and it
 
 Rows written since the last build are searched exactly, so your queries see them without waiting for a build. Reads go through a memory cache and a disk cache.
 
-Any API server can serve any index. If you want an index to stay open on reserved servers, [pin](./pinning-and-replicas.mdx) it.
+Any API server can serve any index.
 
 ## Names and environments
 
@@ -43,7 +43,7 @@ An index has a short name, such as `products`. A name uses letters, digits, `.`,
 
 Your key decides the environment. A key belongs to one environment, such as `prod` or `staging`, so `sky.index("products")` with a `prod` key is the `products` index in `prod`. The same name in `staging` is a different index.
 
-- Names are unique within an environment, across disks and indexes together.
+- Names are unique within an environment.
 - An all-environments key names the environment with `environment` in the SDKs, `SKYWAKE_ENV` or `--env` in the CLI, or the `Skywake-Environment` header over HTTP.
 - A key may be narrowed to some indexes, such as `only: ["products", "docs-*"]`. What it can do depends on its [role](../security/api-keys.mdx): `read` to query, `write` to upsert, `admin` to create and destroy.
 - Each index picks its region when it is made, and it can't move later.
@@ -60,6 +60,5 @@ Your key decides the environment. A key belongs to one environment, such as `pro
   <Card title="Aggregations" href="./aggregations.mdx" />
   <Card title="Time travel and branches" href="./time-travel.mdx" />
   <Card title="Embeddings and rerank" href="./embeddings-and-rerank.mdx" />
-  <Card title="Pinning and replicas" href="./pinning-and-replicas.mdx" />
   <Card title="Consistency and limits" href="./consistency-and-limits.mdx" />
 </Cards>

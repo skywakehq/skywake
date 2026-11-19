@@ -1,36 +1,34 @@
-import { files, search, type StatGroup } from "@/content/numbers";
+import { search } from "@/content/numbers";
 import { pagePaths, pages } from "@/content/pages";
 import { site } from "@/content/site";
-import { en } from "@/content/messages/en";
-import { useCases } from "@/content/use-cases";
 
 const url = (path: string) => new URL(path, site.url).toString();
 const docs = new URL(site.docsUrl, site.url).toString().replace(/\/$/, "");
 
-const facts = (groups: StatGroup[]) =>
-  groups
-    .flatMap((group) => group.stats.map((stat) => `- ${stat.figure}: ${stat.label}`))
-    .join("\n");
+const facts = search.groups
+  .flatMap((group) => group.stats.map((stat) => `- ${stat.figure}: ${stat.label}`))
+  .join("\n");
 
 const text = `# ${site.name}
 
 > ${pages["/"].description}
 
-${site.name} is open source (Apache-2.0) and runs on any object storage with conditional writes, such as AWS S3, Cloudflare R2 or RustFS. It has two products on the same bucket:
+${site.name} is an open-source (Apache-2.0) search index that keeps its data in object storage you own: AWS S3, Cloudflare R2, Google Cloud Storage, Azure Blob or any store with conditional writes. It is an alternative to turbopuffer that you can run yourself.
 
-- **Filesystem**: a versioned filesystem. Mount any branch as a normal local folder, give each agent its own copy of a workspace in 10 ms, whatever its size, then diff and merge the changes like git. Saved writes survive a crash.
-- **Search**: vector, full-text (BM25) and hybrid search indexes, read straight from object storage, with branches and time travel like the filesystem.
+- **Search**: vector, full-text (BM25) and hybrid search in one query, with filters, counts and groups. Text is embedded for you, or bring your own vectors.
+- **Branches**: fork an index without copying it, write to the fork, and merge it back. Every change is kept as a version you can go back to.
+- **Storage**: rows live in your bucket at object storage prices. A cache on NVMe next to the servers keeps warm queries fast.
 
 Self-hosting is free today. A hosted version, Skywake Cloud, is coming soon: join the waitlist at ${url("/#waitlist")}.
 
-Agents use it through an MCP server (\`uvx skywake-mcp\`), the \`skywake\` CLI, an HTTP API, or SDKs in TypeScript, Python, Go, Rust, Ruby, Java and C#.
+Use it through the \`skywake\` CLI, an HTTP API, an MCP server (\`npx skywake mcp\`), or SDKs in TypeScript, Python, Go, Rust, Ruby, Java and C#.
 
 ## Docs
 
 - [Docs index](${docs}/llms.txt): every docs page, with a one-line summary
 - [Full docs](${docs}/llms-full.txt): all of the docs as one Markdown file
 - [OpenAPI document](${docs}/api/openapi/skywake): the HTTP API
-- [MCP server](${docs}/agents/mcp): connect an agent
+- [MCP server](${docs}/mcp): connect an agent
 - [Quickstart](${docs}/getting-started)
 - Any docs page as Markdown: add \`.md\` to its URL
 
@@ -38,17 +36,10 @@ Agents use it through an MCP server (\`uvx skywake-mcp\`), the \`skywake\` CLI, 
 
 ${pagePaths.map((path) => `- [${pages[path].title}](${url(path)}): ${pages[path].description}`).join("\n")}
 
-## Use case guides
-
-${useCases.map(({ id }) => `- [${en.guides.items[id]!.title}](${url(`/use-cases/${id}`)}): ${en.guides.items[id]!.lead}`).join("\n")}
-
 ## Benchmarks
 
-Filesystem (${files.setup}):
-${facts(files.groups)}
-
-Search (${search.setup}):
-${facts(search.groups)}
+${search.setup}:
+${facts}
 
 ## Optional
 

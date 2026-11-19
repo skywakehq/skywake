@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { navigate } from "@/components/shell/router";
 import { envPath } from "@/lib/paths";
-import { useEnvironment } from "@/hooks/use-ns";
+import { useEnvironment } from "@/hooks/use-environment";
 import { Button, Empty } from "@/components/kit";
 import { NewEnvironment } from "./new-environment";
 import { useEnvironments } from "./use-environments";
@@ -22,8 +22,10 @@ export function Home() {
 
   if (target || !loaded) return null;
   return (
-    <Empty title="Make your first environment" columns={["Environment", "Disks", "Updated"]}>
-      <p>An environment, such as prod or staging, holds disks. Agents fork and merge inside one.</p>
+    <Empty title="Make your first environment" columns={["Environment", "Indexes", "Updated"]}>
+      <p>
+        An environment, such as prod or staging, holds your indexes. Keys can be limited to one.
+      </p>
       <Button variant="primary" className="mt-4" onClick={() => setCreating(true)}>
         New environment
       </Button>

@@ -1,7 +1,7 @@
 {
   "name": "skywake",
   "private": true,
-  "description": "Skywake: a copy-on-write, versioned filesystem for agents, over S3.",
+  "description": "Skywake: open-source vector and full-text search on your own bucket.",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "scripts/dev.sh",

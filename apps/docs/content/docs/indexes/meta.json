@@ -15,7 +15,6 @@
     "aggregations",
     "---Data---",
     "time-travel",
-    "sync-with-branch",
     "embeddings-and-rerank",
     "pinning-and-replicas",
     "consistency-and-limits"

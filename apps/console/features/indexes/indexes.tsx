@@ -20,7 +20,7 @@ export function Indexes({ env }: { env: string }) {
     <Page
       eyebrow={env}
       title="Indexes"
-      description="Rows of fields and vectors, searched by meaning, keywords and filters. Each index has branches, like a disk."
+      description="Rows of fields and vectors, searched by meaning, keywords and filters. Each index has branches to try changes on before merging them."
       actions={
         <Button
           leadingIcon={Plus}

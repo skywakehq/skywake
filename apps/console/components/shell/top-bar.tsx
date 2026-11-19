@@ -1,61 +1,35 @@
 "use client";
 
 import { Link, useRoute } from "@/components/shell/router";
-import { usePathname } from "next/navigation";
 import {
   ShellSearch,
   ShellTopBar,
   ShellTrail,
   type TrailStep,
 } from "@skywake/ui/components/app-shell";
-import { envOf, nameInEnv } from "@/lib/names";
-import { envPath, nsPath } from "@/lib/paths";
-import { useEnvironment, useNamespace } from "@/hooks/use-ns";
-import { IndexMark, Orb } from "@/components/kit";
-
-const PAGES: Record<string, string> = {
-  activity: "Activity",
-  history: "History",
-  usage: "Usage",
-  settings: "Settings",
-  indexes: "Indexes",
-};
+import { nameInEnv } from "@/lib/names";
+import { envPath } from "@/lib/paths";
+import { useEnvironment } from "@/hooks/use-environment";
+import { IndexMark } from "@/components/kit";
 
 /** Where you are, as a trail of links. Switching happens in the sidebar. */
 export function TopBar() {
   const env = useEnvironment();
-  const ns = useNamespace();
-  const path = usePathname();
   const route = useRoute();
-  const branch = route.view === "branch" ? route.branch : undefined;
-  const page = PAGES[path.split("/").at(-1) ?? ""];
 
   const trail: TrailStep[] = [];
-  if (path === "/usage" || path === "/settings") trail.push({ label: page });
+  if (route.view === "settings") trail.push({ label: "Settings" });
   else if (route.view === "cli") trail.push({ label: "Sign in the CLI" });
   else if (route.view === "index") {
     if (env) trail.push({ label: env, href: envPath(env) });
-    trail.push({ label: "Indexes", href: env && envPath(env, "indexes") });
+    trail.push({ label: "Indexes", href: env && envPath(env) });
     trail.push({
       label: nameInEnv(route.index),
       lead: <IndexMark name={route.index} className="size-3.5" />,
     });
-  } else {
-    if (env) trail.push({ label: env, href: envPath(env) });
-    if (ns)
-      trail.push(
-        { label: "Disks", href: env && envPath(env) },
-        {
-          label: nameInEnv(ns),
-          href: nsPath(ns),
-          lead: <Orb name={ns} className="size-3.5" />,
-        },
-      );
-    if (branch) trail.push({ label: branch });
-    else if (page) trail.push({ label: page });
-    else if (!ns) trail.push({ label: "Disks" });
+  } else if (route.view === "indexes") {
+    trail.push({ label: route.env, href: envPath(route.env) }, { label: "Indexes" });
   }
-  if (ns && env !== envOf(ns)) trail.shift();
 
   return (
     <ShellTopBar

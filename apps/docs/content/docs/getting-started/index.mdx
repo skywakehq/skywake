@@ -1,67 +1,50 @@
 ---
 title: What is Skywake
 icon: Sparkles
-description: Skywake stores disks of files and search indexes in object storage, and both can be forked and merged.
+description: An open-source search index for vector and full-text search, kept in your own bucket.
 ---
 
-Skywake stores two things:
+Skywake is a search index. You write rows to it and search them by meaning, by keywords, or both, with filters, sorting and aggregations. Every byte of an index lives in object storage, such as an S3 bucket you own. The servers hold only caches, which you can throw away at any time.
 
-- A **disk** holds files, with branches and history.
-- An **index** holds rows that you search by meaning, keywords and filters.
+You get an index by its name, such as `products`, and call a few verbs on it: `upsert`, `query`, `get`, `delete`, `count` and `aggregate`. The first write creates the index and works out its schema from the rows.
 
-You get a disk or an index by its name, such as `app` or `products`, and call a few verbs on it. Both can be **forked** into an instant copy and **merged** back. A fork copies no data, however big the disk or index is.
+## What a query can do
 
-## Disks
+- **Vector search.** Text fields are embedded for you, or you bring your own vectors. See [search by vector](../indexes/vector.mdx).
+- **Full-text search.** BM25 over every text field, with languages, stopwords and phrases. See [full-text search](../indexes/full-text.mdx).
+- **Hybrid.** A string query searches by meaning and keywords together and merges the results. See [hybrid search](../indexes/hybrid.mdx).
+- **Filters and sorting.** Keep only matching rows, or order by a field instead of by score. See [filters](../indexes/filters.mdx).
+- **Aggregations.** Count, sum, average, minimum and maximum, overall or by group. See [aggregations](../indexes/aggregations.mdx).
 
-A branch of a disk is a whole folder tree with its history. Every disk starts with `main`. Forking a branch writes one small object, so if a hundred agents each fork the same 20 GB disk, you store about 20 GB plus whatever they change.
+## Branches and versions
 
-You can work with a disk in several ways:
-
-- With the SDKs and the CLI: `read`, `write`, `list`, `grep`, `find` and `query`, over HTTP, with nothing to mount. [`skywake upload`](/reference/cli/upload) saves a folder as one commit and [`skywake download`](/reference/cli/download) copies a branch to a folder.
-- On Linux, [`skywake mount`](../filesystem/mount.mdx) serves a branch as a live folder. Files are fetched chunk by chunk as they are read, and changes are saved every 2 seconds.
-- From agents, through the [MCP server](../agents/mcp.mdx) or the [bash tool](../agents/bash.mdx).
-
-When a fork is ready, you [merge](../filesystem/diff-and-merge.mdx) it back. The merge is three-way, and text files are merged line by line. If both sides changed the same lines, the merge lists the conflicting files and saves nothing.
-
-A disk can be searched too. When your environment has an embedding model, `app.query("where is auth handled")` finds files by meaning, with nothing to set up.
-
-## Indexes
-
-An index is a table of rows. Each row is `{ id, ...fields }`. The first write creates the index and works out its schema from the row. Text fields are embedded for you, so one `query` searches by meaning and keywords together, with filters and sorting. Indexes have branches too: you can fork one, write to the fork, and `main` never sees those writes until you merge. See [search indexes](../indexes/index.mdx), or make [your first index](./first-index.mdx).
+Every index starts with a `main` branch. Forking a branch copies no data, however big the index is. Writes to a fork stay there until you merge it back, so you can try a reindex or a bulk delete without touching `main`. Every write makes a new version, and you can read, fork from or restore an older one. See [time travel and branches](../indexes/time-travel.mdx).
 
 ## Environments and keys
 
-An organization has environments, such as `prod`, `staging` and `dev`. Each is a separate world of disks, indexes and keys, so `products` in `prod` and `products` in `staging` are different indexes. A key belongs to one environment, so a name alone says which disk or index you mean. See [install](./install.mdx) to sign in.
+An organization has environments, such as `prod`, `staging` and `dev`. Each is a separate set of indexes and keys, so `products` in `prod` and `products` in `staging` are different indexes. A key belongs to one environment, so a name alone says which index you mean. See [install](./install.mdx) to sign in.
 
 ## How it sits on object storage
 
-Skywake keeps all of its data in object storage. Your machines hold only a cache, which you can throw away at any time. A disk's folder in the bucket looks like this:
+Object storage is the source of truth. Each write is stored as a segment, and it is durable by the time the call returns. A background build groups rows into clusters, so a search by meaning reads a few clusters instead of every row. Rows written since the last build are searched exactly, so a query sees every write that finished before it.
 
-```text
-chunks/<blake3>          file content, split at content-defined boundaries
-commits/<blake3>         commits
-objects/<blake3>         packs of trees (directories)
-refs/<branch>            the branch head: its current commit
-```
-
-- Files are cut into chunks (FastCDC, about 1 MiB on average), compressed with zstd and named by their BLAKE3 hash. Identical data is stored only once, across every file and branch.
-- Folders are stored as trees named by the hash of their contents. A diff can therefore skip every folder that didn't change.
-- Branch heads are the only objects that ever change. Moving a head is a conditional write (`If-Match`), so when two writers race, exactly one of them wins. Skywake needs no other locking.
-- Any object storage with conditional writes works, such as AWS S3, Cloudflare R2 or RustFS. A local folder works too.
+- Branch heads are the only objects that ever change. Moving a head is a conditional write (`If-Match`), so when two writers race, exactly one of them wins.
+- Any object storage with conditional writes works, such as AWS S3, Cloudflare R2 or RustFS.
+- API servers read through a memory cache, a local disk cache and, when you run them, shared cache nodes.
 
 ## The pieces
 
-| Piece        | What it does                                                                            |
-| ------------ | --------------------------------------------------------------------------------------- |
-| `skywake`    | The CLI: disks, indexes, branches, mounts, keys, and `skywake mcp` for agents.          |
-| `skywaked`   | One daemon per Linux machine. It runs every mount and its chunk cache.                  |
-| API          | Organizations, environments, keys, disks and indexes. Postgres holds the control plane. |
-| Console      | The web app: sign-in, the fork tree, merges, API keys.                                  |
-| SDKs and MCP | Clients for the API in seven languages, and an MCP server for agents.                   |
+| Piece        | What it does                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| API          | Indexes, queries, organizations, environments and keys. Postgres holds the control plane. |
+| Console      | The web app: sign-in, indexes, API keys, usage.                                           |
+| `skywake`    | The CLI: indexes, branches, keys, `skywake deploy` to run your own, and `skywake mcp`.    |
+| SDKs and MCP | Clients for the API in seven languages, and an MCP server.                                |
 
 ## Next
 
 <Cards>
   <Card href="./install.mdx" />
-  <Card href="./first-branch.mdx" />
+  <Card href="./first-index.mdx" />
+  <Card href="../self-hosting/deploy.mdx" />
 </Cards>

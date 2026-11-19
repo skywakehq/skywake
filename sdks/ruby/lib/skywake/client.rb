@@ -10,26 +10,13 @@ module Skywake
       @http = Http.new("#{@url}/v2", headers(settings[:key]), transport)
     end
 
-    def disk(name, branch: nil)
-      Disk.new(@http, name, branch || MAIN)
-    end
-
     def index(name, branch: nil)
       Index.new(@http, name, branch || MAIN)
-    end
-
-    def create_disk(name, region: nil, search: nil, visibility: nil)
-      @http.call("POST", "/disks", json: { name: name, region: region, search: search, visibility: visibility }.compact)
-      disk(name)
     end
 
     def create_index(name, schema: nil, region: nil, embed: nil)
       @http.call("POST", "/indexes", json: { name: name, schema: schema, region: region, embed: embed }.compact)
       index(name)
-    end
-
-    def list_disks
-      @http.pages("/disks")
     end
 
     def list_indexes

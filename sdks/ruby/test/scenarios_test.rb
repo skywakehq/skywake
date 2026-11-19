@@ -1,5 +1,4 @@
 require "minitest/autorun"
-require "tmpdir"
 require "skywake"
 
 class ScenariosTest < Minitest::Test
@@ -42,20 +41,6 @@ class ScenariosTest < Minitest::Test
 
   def products
     sky.index("products")
-  end
-
-  def app
-    sky.disk("app")
-  end
-
-  def eventually
-    100.times do
-      found = yield
-      return found if found
-
-      sleep 0.2
-    end
-    yield
   end
 
   def test_01_with_only_skywake_api_key_set_whoami_shows_the_environment
@@ -109,53 +94,7 @@ class ScenariosTest < Minitest::Test
     assert_equal 7, products.get("cup")["price"]
   end
 
-  def test_07_a_file_written_to_a_new_disk_reads_back_and_is_listed
-    app.write("README.md", "# App\n")
-    assert_equal "# App\n", app.read("README.md")
-    assert_equal [["README.md", "file"]], app.list.map { |entry| [entry["path"], entry["kind"]] }
-  end
-
-  def test_08_many_files_written_together_are_one_commit
-    before = app.log.count
-    app.write(
-      { "src/a.ts" => "export const a = 1;\n", "src/b.ts" => "export const b = 2;\n", "notes.txt" => "hi" },
-      message: "three files"
-    )
-    log = app.log.to_a
-    assert_equal before + 1, log.size
-    assert_equal "three files", log.first["message"]
-  end
-
-  def test_09_both_sides_changing_one_file_make_the_merge_a_merge_conflict
-    work = app.fork("agent-1")
-    work.write("notes.txt", "from the agent")
-    app.write("notes.txt", "from main")
-    error = assert_raises(Skywake::MergeConflict) { work.merge_into("main") }
-    assert_equal ["notes.txt"], error.conflicts
-    settled = work.merge_into("main", prefer: "theirs")
-    assert settled["commit"]
-    assert_equal "from the agent", app.read("notes.txt")
-  end
-
-  def test_10_grep_find_and_query_on_a_disk_find_a_file
-    app.write("docs/coffee.md", "How to brew coffee at home.\n")
-    assert_equal [["docs/coffee.md", 1]], app.grep("brew").map { |line| [line["path"], line["line"]] }
-    assert_equal ["docs/coffee.md"], app.find("*.md", path: "docs").map { |entry| entry["path"] }
-    hits = eventually do
-      found = app.query("coffee")
-      found if found.any? { |hit| hit["path"] == "docs/coffee.md" }
-    end
-    assert_equal "docs/coffee.md", hits.first["path"]
-  end
-
-  def test_11_read_with_at_returns_the_old_content_after_a_change
-    old = app.head
-    app.write("README.md", "# App, changed\n")
-    assert_equal "# App\n", app.read("README.md", at: old)
-    assert_equal "# App, changed\n", app.read("README.md")
-  end
-
-  def test_12_keys_stay_in_their_environment_and_their_role
+  def test_07_keys_stay_in_their_environment_and_their_role
     staging = Skywake.new(key: keys[:staging], environment: "prod")
     assert_raises(Skywake::PermissionError) { staging.index("products").query("coffee") }
     reader = Skywake.new(key: keys[:read])
@@ -163,35 +102,15 @@ class ScenariosTest < Minitest::Test
     assert_raises(Skywake::PermissionError) { reader.index("products").upsert({ id: "x", text: "nope" }) }
   end
 
-  def test_13_a_wrong_name_is_not_found_with_a_suggestion
+  def test_08_a_wrong_name_is_not_found_with_a_suggestion
     error = assert_raises(Skywake::NotFound) { sky.index("prodcts").query("coffee") }
     assert_match(/products/, error.hint.to_s)
-    error = assert_raises(Skywake::NotFound) { sky.disk("ap").read("README.md") }
-    assert_match(/`app`/, error.hint.to_s)
   end
 
-  def test_14_destroying_a_branch_then_the_index_and_the_disk_empties_the_lists
+  def test_09_destroying_a_branch_then_the_indexes_empties_the_list
     products.on("draft").destroy
     assert_equal ["main"], products.branches.map { |branch| branch["name"] }
-    app.on("agent-1").destroy
     %w[products bulk].each { |name| sky.index(name).destroy }
-    app.destroy
     assert_equal [], sky.list_indexes.map { |index| index["name"] }
-    assert_equal [], sky.list_disks.map { |disk| disk["name"] }
-  end
-
-  def test_15_a_folder_goes_up_as_one_commit_and_comes_back_the_same
-    Dir.mktmpdir("skywake-up-") do |dir|
-      File.write(File.join(dir, "a.txt"), "alpha")
-      File.binwrite(File.join(dir, "b.bin"), [0, 1, 2, 255].pack("C*"))
-      site = sky.disk("site")
-      site.upload(dir, message: "site")
-      Dir.mktmpdir("skywake-down-") do |back|
-        site.download(back)
-        assert_equal "alpha", File.read(File.join(back, "a.txt"))
-        assert_equal [0, 1, 2, 255], File.binread(File.join(back, "b.bin")).bytes
-      end
-      site.destroy
-    end
   end
 end

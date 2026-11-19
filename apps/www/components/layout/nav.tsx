@@ -14,9 +14,7 @@ const LINK =
 
 export function Nav({ locale, messages: t }: { locale: Locale; messages: HomeMessages }) {
   const links = [
-    { href: "/filesystem", label: t.nav.filesystem },
-    { href: "/search", label: t.nav.search },
-    { href: "/use-cases", label: t.footer.useCases },
+    { href: "/#features", label: t.nav.features },
     { href: "/benchmarks", label: t.nav.benchmarks },
     { href: "/pricing", label: t.nav.pricing },
     { href: site.docsUrl, label: t.nav.docs },

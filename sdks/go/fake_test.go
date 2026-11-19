@@ -35,7 +35,6 @@ type reply struct {
 	status  int
 	body    any
 	headers map[string]string
-	raw     []byte
 }
 
 type api struct {
@@ -74,12 +73,6 @@ func fake(t *testing.T, handler func(seen, int) reply) *api {
 		status := answer.status
 		if status == 0 {
 			status = http.StatusOK
-		}
-		if answer.raw != nil {
-			w.Header().Set("content-type", "application/octet-stream")
-			w.WriteHeader(status)
-			w.Write(answer.raw)
-			return
 		}
 		w.Header().Set("content-type", "application/json")
 		for name, value := range answer.headers {

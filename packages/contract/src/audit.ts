@@ -32,7 +32,7 @@ export const AuditEvent = z
     method: z.string(),
     route: z.string(),
     resource: z.record(z.string(), z.string()).openapi({
-      description: "The route's parameters: the namespace, branch, index, path and so on.",
+      description: "The route's parameters: the index, branch and so on.",
     }),
     details: z.record(z.string(), z.unknown()).nullable(),
     requestId: z.string(),

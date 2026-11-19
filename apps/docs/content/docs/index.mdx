@@ -1,7 +1,7 @@
 ---
 title: Skywake
 icon: House
-description: Disks of files and search indexes for agents, with branches, on object storage.
+description: Vector and full-text search on your own bucket. Open source.
 full: true
 ---
 
@@ -13,8 +13,9 @@ full: true
     { label: "API reference", href: "/reference/api" },
   ]}
 >
-  Skywake keeps disks of files and search indexes in object storage, and gives every agent its own
-  branch. A fork copies only a pointer, so no data is copied.
+  Skywake is an open-source search index that keeps its data in object storage you own. One query
+  searches by meaning, keywords and filters. Run it yourself with `skywake deploy`, or use Skywake
+  Cloud.
 </Hero>
 
 Set `SKYWAKE_API_KEY`, then:
@@ -31,46 +32,43 @@ Set `SKYWAKE_API_KEY`, then:
   ../../examples/quickstart/quickstart.sh
 </include>
 
+The first upsert makes the index and works out its fields. Text is embedded for you, so you don't need to bring vectors.
+
 <Section title="Start here">
   <Cards>
     <Card href="./getting-started/index.mdx" />
     <Card href="./getting-started/install.mdx" />
-    <Card href="./getting-started/first-branch.mdx" />
     <Card href="./getting-started/first-index.mdx" />
+    <Card href="./self-hosting/deploy.mdx" />
   </Cards>
 </Section>
 
-<Section title="Guides">
+<Section title="Search">
   <Cards wide>
-    <Card
-      href="./filesystem/branches.mdx"
-      title="Disks"
-      icon="FolderTree"
-      description="Files with branches: fork, merge, mount, autosave and protection."
-    />
-    <Card
-      href="./indexes/index.mdx"
-      title="Search indexes"
-      description="Rows searched by meaning, keywords and filters, with branches."
-    />
-    <Card
-      href="./agents/mcp.mdx"
-      title="Agents"
-      icon="Bot"
-      description="The MCP server, the bash tool, and the CLI from agents."
-    />
+    <Card href="./indexes/vector.mdx" />
+    <Card href="./indexes/full-text.mdx" />
+    <Card href="./indexes/hybrid.mdx" />
+    <Card href="./indexes/filters.mdx" />
+    <Card href="./indexes/aggregations.mdx" />
+    <Card href="./indexes/time-travel.mdx" />
+  </Cards>
+</Section>
+
+<Section title="Run and secure it">
+  <Cards wide>
     <Card
       href="./self-hosting/what-to-run.mdx"
       title="Self-hosting"
       icon="Server"
-      description="Docker Compose on one machine, or Helm in your own cloud."
+      description="skywake deploy, Docker Compose on one machine, or Helm in your own cloud."
     />
     <Card
       href="./security/sso.mdx"
       title="Security"
       icon="Shield"
-      description="SSO, API keys, scoped credentials, IP allowlist, audit log, encryption keys."
+      description="SSO, API keys, IP allowlist, audit log, encryption keys."
     />
+    <Card href="./mcp.mdx" />
     <Card href="./benchmarks.mdx" />
   </Cards>
 </Section>

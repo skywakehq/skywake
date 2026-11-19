@@ -8,7 +8,7 @@ on:
       group:
         description: What to run
         type: choice
-        options: [micro, index, filesystem, pinning, aws]
+        options: [micro, index, pinning, aws]
         default: micro
       dataset:
         description: "index: a set from benchmarks/datasets/fetch.py list"
@@ -30,11 +30,6 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - name: Install FUSE
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends fuse3 libfuse3-dev pkg-config
-          sudo modprobe fuse || true
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
@@ -55,8 +50,6 @@ jobs:
         run: |
           uv run --script benchmarks/datasets/fetch.py get "$DATASET"
           scripts/bench.sh index "benchmarks/datasets/data/$DATASET" --store slow
-      - if: inputs.group == 'filesystem'
-        run: scripts/bench.sh filesystem --allow-dirty --client "github ubuntu-24.04 runner"
       - if: inputs.group == 'pinning'
         run: |
           pnpm install --frozen-lockfile --filter @skywake/api... --filter @skywake/engine

@@ -10,201 +10,19 @@ export declare class EngineError extends Error {
   readonly kind: ErrorKind;
 }
 
-/**
- * One change. Give at most one of `content`, `chunks`, `from` or `folder`;
- * with none of them, the path is removed (`null` is refused).
- */
-export interface FileEdit {
-  path: string;
-  /** The new content. */
-  content?: Buffer;
-  /** A file made of chunks that `storePart` stored, in order. */
-  chunks?: FileChunk[];
-  /** A copy of another path, without copying data. */
-  from?: CopySource;
-  /** An empty folder, unless a folder is already there. */
-  folder?: boolean;
-  executable?: boolean | null;
-}
-
-export interface FileChunk {
-  hash: string;
-  size: number;
-}
-
-export interface CopySource {
-  path: string;
-  /** Copy from this commit. By default, from the branch before this commit. */
-  at?: string;
-}
-
-export interface FileInfo {
-  name: string;
-  kind: "file" | "folder" | "symlink";
-  size: number;
-  executable: boolean;
-  target?: string;
-  /** Milliseconds since the Unix epoch, for a file. 0 otherwise. */
-  modified: number;
-}
-
-export interface Listing {
-  info: FileInfo;
-  entries: FileInfo[];
-}
-
-export interface SearchMatch {
-  path: string;
-  line: number;
-  text: string;
-}
-
-export interface FoundPath {
-  path: string;
-  kind: "file" | "folder" | "symlink";
-  size: number;
-}
-
-export interface GrepOptions {
-  folder?: Maybe<string>;
-  glob?: Maybe<string>;
-  ignoreCase?: Maybe<boolean>;
-  only?: Maybe<string[]>;
-  limit?: Maybe<number>;
-  at?: Maybe<string>;
-}
-
-export interface CommitInfo {
-  hash: string;
-  message: string;
-  /** Seconds since the Unix epoch. */
-  time: number;
-  session?: string;
-  parent?: string;
-  merged?: string;
-}
-
-export interface Changed {
-  kind: "added" | "removed" | "modified";
-  path: string;
-}
-
-export interface CommitChanges {
-  commit: CommitInfo;
-  changes: Changed[];
-}
-
-export interface FileVersion {
-  commit: CommitInfo;
-  /** Missing when the commit removed the file. */
-  size?: number;
-}
-
-/**
- * What one path becomes in a merge: `take` one side, or new `content` or
- * `chunks`. With none of them, the path is removed. A resolution of a folder
- * settles the conflicts inside it.
- */
-export interface MergeResolution {
-  path: string;
-  take?: "ours" | "theirs";
-  content?: Buffer;
-  chunks?: FileChunk[];
-  executable?: boolean | null;
-}
-
-export interface MergeResult {
-  head?: string;
-  conflicts: string[];
-}
-
 type Maybe<T> = T | null | undefined;
 
-/** One store: a local folder or `s3://bucket/folder`. */
-export interface Engine {
-  createBranch(name: string, from?: Maybe<string>): Promise<string>;
-  forkAt(name: string, at: string): Promise<string>;
-  deleteBranch(name: string): Promise<void>;
-  head(branch: string): Promise<string>;
-  branches(): Promise<string[]>;
-  /** Every object this store holds, and their bytes, as the bucket bills them. Stops after about `budgetMs` and returns null; the next call carries on where this one stopped. */
+/** A store folder: a local folder or `s3://bucket/folder`. */
+export interface Store {
+  /** Every object this folder holds, and their bytes, as the bucket bills them. Stops after about `budgetMs` and returns null; the next call carries on where this one stopped. */
   stored(budgetMs: number): Promise<Stored | null>;
-  /** A file or folder; of a folder, its entries in name order, `limit` of them after `after` when given, or all of them. */
-  list(
-    branch: string,
-    path: string,
-    at?: Maybe<string>,
-    after?: Maybe<string>,
-    limit?: Maybe<number>,
-  ): Promise<Listing>;
-  read(
-    branch: string,
-    path: string,
-    offset?: Maybe<number>,
-    length?: Maybe<number>,
-    at?: Maybe<string>,
-  ): Promise<Buffer>;
-  search(
-    branch: string,
-    pattern: string,
-    folder?: Maybe<string>,
-    limit?: Maybe<number>,
-  ): Promise<SearchMatch[]>;
-  find(
-    branch: string,
-    glob: string,
-    folder?: Maybe<string>,
-    wanted?: Maybe<"files" | "folders" | "any">,
-    limit?: Maybe<number>,
-    at?: Maybe<string>,
-  ): Promise<FoundPath[]>;
-  grep(branch: string, pattern: string, options: GrepOptions): Promise<SearchMatch[]>;
-  commitFiles(
-    branch: string,
-    message: string,
-    edits: FileEdit[],
-    session?: Maybe<string>,
-  ): Promise<string>;
-  /** Stores `data` as chunks, for a later edit's `chunks`. */
-  storePart(data: Buffer): Promise<FileChunk[]>;
-  log(branch: string, limit?: Maybe<number>): Promise<CommitInfo[]>;
-  commit(hash: string): Promise<CommitChanges>;
-  changesSince(
-    branch: string,
-    since?: Maybe<string>,
-    limit?: Maybe<number>,
-  ): Promise<CommitChanges[]>;
-  fileHistory(
-    branch: string,
-    path: string,
-    after?: string | undefined | null,
-    limit?: number | undefined | null,
-  ): Promise<FileVersion[]>;
-  diff(from: string, to: string): Promise<Changed[]>;
-  /** What changed from one commit to another. */
-  diffCommits(from: string, to: string): Promise<Changed[]>;
-  /** The newest commit both branches have, or null if they share none. */
-  mergeBase(a: string, b: string): Promise<string | null>;
-  /** Conflicts that no resolution covers stop the merge, and nothing is saved. */
-  merge(
-    into: string,
-    from: string,
-    message: string,
-    session?: Maybe<string>,
-    resolved?: Maybe<MergeResolution[]>,
-  ): Promise<MergeResult>;
-  conflicts(into: string, from: string): Promise<string[]>;
+  /** Proves the folder takes conditional writes and can be listed and deleted from. */
+  check(): Promise<void>;
 }
 
-export interface EngineOpenOptions {
-  /**
-   * Branch heads are kept by the cache servers in `SKYWAKE_CACHE_NODES`, which
-   * serve the whole bucket of this `s3://` location.
-   */
-  heads?: Maybe<boolean>;
+export interface StoreOpenOptions {
   /** Keys for an `s3://` bucket the process has no credentials for. */
   keys?: Maybe<StoreKeys>;
-  cacheFolder?: Maybe<string>;
 }
 
 /** Keys for a bucket the process has no credentials for, such as a customer's. Stores opened with the same `id` share them. */
@@ -223,8 +41,8 @@ export declare function renewStoreKeys(keys: StoreKeys): void;
 /** Forgets keys no store should use any more. */
 export declare function forgetStoreKeys(id: string): void;
 
-export declare const Engine: {
-  open(location: string, options?: Maybe<EngineOpenOptions>): Engine;
+export declare const Store: {
+  open(location: string, options?: Maybe<StoreOpenOptions>): Store;
 };
 
 /** A vector column: every document has `dims` numbers in it. */

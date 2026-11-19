@@ -13,7 +13,7 @@ export const Key = z
     }),
     only: z.array(z.string()).openapi({
       description:
-        "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+        "Which indexes in its environment it reaches: names, prefixes ending in `*`, " +
         "or `*` for all.",
     }),
     namespaces: z.string().openapi({
@@ -55,7 +55,7 @@ export const NewKey = z
       .optional()
       .openapi({
         description:
-          "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+          "Which indexes in its environment it reaches: names, prefixes ending in `*`, " +
           "or `*` for all, the default.",
       }),
     namespaces: NamespacePattern.optional().openapi({
@@ -98,7 +98,7 @@ export const createKey = createRoute({
   path: "/keys",
   operationId: "createKey",
   tags: ["keys"],
-  summary: "Creates an API key. It can reach only namespaces the caller can reach.",
+  summary: "Creates an API key. It can reach only indexes the caller can reach.",
   security: signedIn,
   request: { body: body(NewKey) },
   responses: { 201: json(CreatedKey, "The new key."), ...errors(400, 401, 403) },

@@ -1,15 +1,10 @@
 use std::io::{BufRead, IsTerminal, Write};
 
 use anyhow::{Result, bail};
-use skywake::{ErrorKind, Skywake};
+use skywake::Skywake;
 
 use crate::cli::Global;
 use crate::target::Target;
-
-pub(crate) enum Place {
-    Disk(skywake::Disk),
-    Index(skywake::Index),
-}
 
 pub(crate) struct Session {
     pub(crate) sky: Skywake,
@@ -37,30 +32,8 @@ impl Session {
         })
     }
 
-    pub(crate) fn disk(&self, target: &Target) -> skywake::Disk {
-        self.sky.disk(&target.name).on(target.branch())
-    }
-
     pub(crate) fn index(&self, target: &Target) -> skywake::Index {
         self.sky.index(&target.name).on(target.branch())
-    }
-
-    pub(crate) async fn place(&self, target: &Target) -> Result<Place> {
-        let disk = self.disk(target);
-        match disk.info().await {
-            Ok(_) => return Ok(Place::Disk(disk)),
-            Err(error) if error.kind() != Some(&ErrorKind::NotFound) => return Err(error.into()),
-            Err(_) => {}
-        }
-        let index = self.index(target);
-        match index.info().await {
-            Ok(_) => Ok(Place::Index(index)),
-            Err(error) if error.kind() == Some(&ErrorKind::NotFound) => bail!(
-                "no disk or index named `{}`; see `skywake disks` and `skywake indexes`",
-                target.name
-            ),
-            Err(error) => Err(error.into()),
-        }
     }
 }
 

@@ -1,7 +1,7 @@
 # Skywake on Kubernetes
 
 This chart runs Skywake in your own cloud account. Your data never leaves
-it: branches and indexes stay in your bucket, and the control plane stays
+it: indexes stay in your bucket, and the control plane stays
 in your Postgres.
 
 | Runs in the cluster | What it is                                                       |

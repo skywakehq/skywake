@@ -13,5 +13,4 @@ deploy/helm/*/templates/
 sdks/typescript/src/generated/
 sdks/csharp/**/bin/
 sdks/csharp/**/obj/
-apps/www/.guide-programs/
 apps/docs/.example-runs/

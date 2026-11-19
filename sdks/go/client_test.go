@@ -92,14 +92,14 @@ func TestA5xxIsRetriedForAGetButNotForAPost(t *testing.T) {
 
 func TestAMergeThatCantFinishIsAMergeConflictListingWhatConflicts(t *testing.T) {
 	a := fake(t, func(seen, int) reply {
-		return failure(409, "conflict", map[string]any{"conflicts": []string{"README.md"}})
+		return failure(409, "conflict", map[string]any{"conflicts": []string{"mug"}})
 	})
-	_, err := a.sky(t).Disk("app", "agent-1").MergeInto(ctx, "")
+	_, err := a.sky(t).Index("products", "agent-1").MergeInto(ctx, "")
 	var merge *skywake.MergeConflict
 	if !errors.As(err, &merge) {
 		t.Fatalf("want MergeConflict, got %v", err)
 	}
-	same(t, merge.Conflicts, []string{"README.md"})
+	same(t, merge.Conflicts, []string{"mug"})
 	var conflict *skywake.Conflict
 	if !errors.As(err, &conflict) {
 		t.Fatal("a MergeConflict is also a Conflict")
@@ -115,11 +115,11 @@ func TestListsFollowNextUntilTheLastPage(t *testing.T) {
 		return reply{body: map[string]any{"data": []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}}, "next": "b"}}
 	})
 	var names []string
-	for disk, err := range a.sky(t).ListDisks(ctx) {
+	for index, err := range a.sky(t).ListIndexes(ctx) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		names = append(names, disk.Name)
+		names = append(names, index.Name)
 	}
 	same(t, names, []string{"a", "b", "c"})
 }
@@ -209,53 +209,6 @@ func TestQueryTakesTextFirstAndOptionsOnTheirOwn(t *testing.T) {
 	})
 }
 
-func TestFilesAreReadAndWrittenByPathEachPartOfItEncoded(t *testing.T) {
-	a := fake(t, func(s seen, _ int) reply {
-		if s.method == "GET" {
-			return reply{raw: []byte("hello")}
-		}
-		return reply{body: map[string]any{"commit": "c1", "changed": true}}
-	})
-	app := a.sky(t).Disk("app")
-	same(t, must(app.Read(ctx, "/docs/a b.md", skywake.ReadOptions{At: "c0"})), "hello")
-	same(t, must(app.ReadBytes(ctx, "x")), []byte("hello"))
-	must(app.WriteFiles(ctx, map[string][]byte{"a.md": []byte("one"), "b.bin": {0xff, 0x00}}, skywake.WriteOptions{Message: "two"}))
-	got := a.requests()
-	same(t, got[0].path, "/v2/disks/app/files/docs/a%20b.md")
-	same(t, got[0].query.Get("at"), "c0")
-	same(t, got[2].json(t), map[string]any{
-		"message": "two",
-		"branch":  "main",
-		"changes": []any{
-			map[string]any{"path": "a.md", "text": "one"},
-			map[string]any{"path": "b.bin", "base64": "/wA="},
-		},
-	})
-}
-
-func TestALargeFileGoesUpInPartsBeforeItsCommit(t *testing.T) {
-	a := fake(t, func(s seen, _ int) reply {
-		if strings.HasSuffix(s.path, "/uploads") {
-			return reply{status: 201, body: map[string]any{"part": fmt.Sprintf("p%d", len(s.body)), "size": len(s.body)}}
-		}
-		return reply{body: map[string]any{"commit": "c1", "changed": true}}
-	})
-	must(a.sky(t).Disk("app").Write(ctx, "big.bin", make([]byte, 20*1024*1024)))
-	var parts []int
-	got := a.requests()
-	for _, s := range got {
-		if strings.HasSuffix(s.path, "/uploads") {
-			parts = append(parts, len(s.body))
-			same(t, s.headers.Get("content-type"), "application/octet-stream")
-		}
-	}
-	same(t, parts, []int{16 * 1024 * 1024, 4 * 1024 * 1024})
-	commit := got[len(got)-1].json(t).(map[string]any)
-	same(t, commit["changes"], []any{
-		map[string]any{"path": "big.bin", "parts": []string{fmt.Sprintf("p%d", 16*1024*1024), fmt.Sprintf("p%d", 4*1024*1024)}},
-	})
-}
-
 func TestAForkIsAHandleOnTheNewBranchAndDestroyRemovesJustTheBranch(t *testing.T) {
 	a := fake(t, func(s seen, _ int) reply {
 		if s.method == "DELETE" {
@@ -263,27 +216,12 @@ func TestAForkIsAHandleOnTheNewBranchAndDestroyRemovesJustTheBranch(t *testing.T
 		}
 		return reply{status: 201, body: map[string]any{"name": "agent-1"}}
 	})
-	work := must(a.sky(t).Disk("app").Fork(ctx, "agent-1", skywake.ForkOptions{At: "c3"}))
+	work := must(a.sky(t).Index("products").Fork(ctx, "agent-1", skywake.ForkOptions{At: "v3"}))
 	same(t, work.Branch, "agent-1")
 	if err := work.Destroy(ctx); err != nil {
 		t.Fatal(err)
 	}
 	got := a.requests()
-	same(t, got[0].json(t), map[string]any{"name": "agent-1", "from": "main", "at": "c3"})
-	same(t, []string{got[1].method, got[1].path}, []string{"DELETE", "/v2/disks/app/branches/agent-1"})
-}
-
-func TestRestoreToATimePicksTheNewestCommitAtOrBeforeIt(t *testing.T) {
-	a := fake(t, func(s seen, _ int) reply {
-		if s.method == "GET" {
-			return reply{body: map[string]any{"data": []any{
-				map[string]any{"id": "c3", "message": "", "created": "2026-01-03T00:00:00Z", "merged": nil},
-				map[string]any{"id": "c2", "message": "", "created": "2026-01-02T00:00:00Z", "merged": nil},
-			}, "next": nil}}
-		}
-		return reply{body: map[string]any{"commit": "c4", "changed": true}}
-	})
-	at := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
-	must(a.sky(t).Disk("app").RestoreTo(ctx, at))
-	same(t, a.requests()[1].json(t), map[string]any{"to": "c2", "branch": "main"})
+	same(t, got[0].json(t), map[string]any{"name": "agent-1", "from": "main", "at": "v3"})
+	same(t, []string{got[1].method, got[1].path}, []string{"DELETE", "/v2/indexes/products/branches/agent-1"})
 }

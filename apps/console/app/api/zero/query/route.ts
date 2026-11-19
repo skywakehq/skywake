@@ -9,7 +9,7 @@ import { schema } from "@/zero/schema";
 export async function POST(request: Request) {
   const who = await caller(request.headers, { forwarded: true });
   if (!who) return new Response("sign in first", { status: 401 });
-  const ctx = { userID: who.userID, org: who.org, role: who.role };
+  const ctx = { userID: who.userID, org: who.org };
   const result = await handleQueryRequest({
     handler: (name, args) => mustGetQuery(queries, name).fn({ args, ctx }),
     schema,

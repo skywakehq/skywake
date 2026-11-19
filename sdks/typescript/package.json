@@ -1,23 +1,20 @@
 {
   "name": "@skywake/sdk",
   "version": "0.2.0",
-  "description": "Skywake for TypeScript: a filesystem with branches for AI agents, and vector, full-text and hybrid search, on your own S3 bucket.",
+  "description": "Skywake for TypeScript: the open-source search index, with vector, full-text and hybrid search on your own S3 bucket.",
   "keywords": [
     "skywake",
-    "ai-agents",
-    "agents",
-    "filesystem",
-    "s3",
-    "object-storage",
-    "copy-on-write",
-    "branching",
+    "search",
+    "search-index",
     "vector-search",
     "full-text-search",
     "hybrid-search",
     "bm25",
     "embeddings",
     "rag",
-    "mcp"
+    "s3",
+    "object-storage",
+    "branching"
   ],
   "homepage": "https://skywake.dev",
   "repository": {

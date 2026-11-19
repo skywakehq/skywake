@@ -6,9 +6,6 @@ internal static class Urls
 {
     internal static string Segment(string name) => Uri.EscapeDataString(name);
 
-    internal static string FilePath(string path) =>
-        string.Join("/", path.TrimStart('/').Split('/').Select(Uri.EscapeDataString));
-
     internal static string Root(string url)
     {
         var trimmed = url.TrimEnd('/');

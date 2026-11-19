@@ -7,10 +7,10 @@ the page changes first.
 
 ## The idea in one paragraph
 
-Skywake stores two things. A **disk** holds files. An **index** holds rows you
-search. You sign in with a key that already knows your company and your
-environment. You get a disk or an index by its name and call a few verbs on it.
-Both can be **forked** into an instant copy and **merged** back.
+Skywake stores **indexes**: rows you search by meaning, keywords and filters.
+You sign in with a key that already knows your company and your environment.
+You get an index by its name and call a few verbs on it. An index can be
+**forked** into an instant copy and **merged** back.
 
 ```ts
 import { Skywake } from "skywake";
@@ -21,41 +21,35 @@ const products = sky.index("products");
 await products.upsert({ id: 1, text: "red running shoes", price: 89 });
 await products.query("shoes for running");
 
-const app = sky.disk("app");
-await app.write("notes.md", "hello");
-const work = await app.fork("agent-1");
-await work.write("notes.md", "changed");
-await work.mergeInto("main");
+const draft = await products.fork("draft");
+await draft.upsert({ id: 2, text: "trail running shoes", price: 95 });
+await draft.mergeInto("main");
 ```
 
 ## Words
 
-| Word        | Means                                                                                   | Never call it                        |
-| ----------- | --------------------------------------------------------------------------------------- | ------------------------------------ |
-| environment | prod, staging, dev: a separate world of disks, indexes and keys inside one organization | a name prefix, a folder              |
-| disk        | a set of files with branches and history                                                | namespace, store, filesystem, bucket |
-| index       | a table of rows searched by meaning, keywords and filters                               | collection, namespace                |
-| row         | one entry in an index: `{ id, ...fields }`                                              | document, vector, record             |
-| field       | a named value on a row                                                                  | attribute, column                    |
-| branch      | a named line of changes on a disk or an index; every one starts with `main`             | ref, version                         |
-| fork        | make a branch from another, instantly, at any size                                      | copy, new, create branch             |
-| merge       | bring a branch's changes into another                                                   | —                                    |
-| commit      | one saved change to a disk, with an id                                                  | —                                    |
-| version     | one saved change to an index, with an id                                                | —                                    |
-| `at`        | read the past: a commit, a version, or a time                                           | a branch                             |
-| query       | search: meaning, keywords, filters, sorting                                             | search, hybrid, rank, order          |
-| grep / find | match file contents / file paths on a disk                                              | search                               |
-| key         | an API key: one organization, one environment, one role                                 | token                                |
+| Word        | Means                                                                            | Never call it               |
+| ----------- | -------------------------------------------------------------------------------- | --------------------------- |
+| environment | prod, staging, dev: a separate world of indexes and keys inside one organization | a name prefix, a folder     |
+| index       | a table of rows searched by meaning, keywords and filters                        | collection, namespace       |
+| row         | one entry in an index: `{ id, ...fields }`                                       | document, vector, record    |
+| field       | a named value on a row                                                           | attribute, column           |
+| branch      | a named line of changes on an index; every one starts with `main`                | ref, version                |
+| fork        | make a branch from another, instantly, at any size                               | copy, new, create branch    |
+| merge       | bring a branch's changes into another                                            | —                           |
+| version     | one saved change to an index, with an id                                         | —                           |
+| `at`        | read the past: a version or a time                                               | a branch                    |
+| query       | search: meaning, keywords, filters, sorting                                      | search, hybrid, rank, order |
+| key         | an API key: one organization, one environment, one role                          | token                       |
 
 ## Rules
 
 1. **No setup.** A key is enough. Every other setting has a default.
-2. **Two levels.** The client gives you a handle (`sky.disk(name)`,
-   `sky.index(name)`). You call verbs on the handle. Getting a handle never
+2. **Two levels.** The client gives you a handle (`sky.index(name)`). You call verbs on the handle. Getting a handle never
    calls the network.
 3. **Branch and time are options**, not extra calls: `{ branch, at }` on any
    read or write. `fork()` returns a handle to the new branch, and
-   `sky.disk(name, { branch })` gets one for an existing branch.
+   `sky.index(name, { branch })` gets one for an existing branch.
 4. **One item or many, same call.** Pass a row or an array of rows, an id or an
    array of ids. Never a wrapper object around data.
 5. **`delete` removes things inside; `destroy` removes the thing itself.**
@@ -67,19 +61,18 @@ await work.mergeInto("main");
 7. **Plain data.** Rows go in and come out flat. Filters are objects. Results
    are arrays.
 8. **Errors say how to fix it.**
-9. **The first write creates it.** Writing to a disk or index that doesn't exist
+9. **The first write creates it.** Writing to an index that doesn't exist
    creates it. `create*` is only for choosing settings up front.
 
 ## Auth and environments
 
 - A key belongs to one organization and one environment, and has a role:
-  `read`, `write` or `admin`. It may also be narrowed to some disks and indexes
-  (`only: ["app", "docs-*"]`).
+  `read`, `write` or `admin`. It may also be narrowed to some indexes
+  (`only: ["products", "docs-*"]`).
 - An organization admin may make an **all-environments** key. Requests with it
   name the environment: `new Skywake({ environment: "staging" })`, header
   `Skywake-Environment`, CLI `--env`.
-- Names are unique within an environment, across disks and indexes together,
-  so a name alone says which one you mean. `products` in prod and `products` in
+- Names are unique within an environment, so a name alone says which one you mean. `products` in prod and `products` in
   staging are different indexes. A name has no `/` in it.
 - The console signs in as the person and shows one environment at a time.
 
@@ -104,12 +97,9 @@ The credentials file is `~/.config/skywake/credentials.toml` (Windows:
 ```ts
 new Skywake(options?: { key?, url?, environment?, profile?, timeout?, retries? })
 
-sky.disk(name, { branch? })            // handle
 sky.index(name, { branch? })           // handle
 
-sky.createDisk(name, { region?, search? })            // → Disk handle
 sky.createIndex(name, { schema?, region?, embed? })   // → Index handle
-sky.listDisks()        // async iterable of { name, region, created }
 sky.listIndexes()      // async iterable of { name, region, rows, created }
 
 sky.createKey({ name, role, environment?, only?, expires? })  // → { id, key } (key shown once)
@@ -176,79 +166,21 @@ await products.destroy()
 `query({ rank })` for a ranking expression, `products.build()`,
 `products.warm()`, `products.recall()`, `products.usage()`.
 
-### Disk
-
-```ts
-const app = sky.disk("app");
-
-await app.read(path, { branch?, at?, as? })    // → string (as: "bytes" | "stream")
-await app.write(path, content, { message?, branch? })     // one file; every write is a commit
-await app.write({ [path]: content }, { message?, branch? }) // many files, one commit
-await app.delete(pathOrPaths, { message? })
-await app.move(from, to, { message? })
-await app.list(path?, { recursive?, branch?, at? })        // → [{ path, kind, size, modified }]
-await app.exists(path)
-
-await app.grep(pattern, { path?, glob?, ignoreCase?, limit? })   // → [{ path, line, text }]
-await app.find(glob, { path?, kind? })                            // → [{ path, kind }]
-await app.query(text, { limit?, path?, branch? })                 // → [{ path, score, snippet }]
-
-const work = await app.fork("agent-1", { at? })   // → Disk handle on the new branch
-await work.mergeInto("main", { message?, dryRun?, prefer? })     // → { commit } ; conflict → MergeConflict
-await work.destroy()
-await app.branches()
-
-await app.log({ path?, limit? })           // async iterable of commits
-await app.diff(otherBranchOrCommit)        // → [{ path, change }]
-await app.revert(commit)
-await app.restore(commitOrTime)            // make the branch look like it did then
-
-await app.download(localDir, { branch? })  // whole branch to a folder
-await app.upload(localDir, { message? })   // a folder as one commit
-await app.info()
-await app.configure({ search? })
-await app.destroy()
-```
-
-**Automatic behaviour**
-
-- The first write creates the disk.
-- `search` is on by default when the environment has an embedding model:
-  `app.query` then works with nothing else to do. Turning it off keeps `grep`
-  and `find`.
-- Large files upload in parts on their own.
-
-**Advanced:** sessions and claims (`app.session()`, `app.claim(path)`) for many
-agents writing one branch; `app.credentials()` for direct S3 access.
-
-### Agents
-
-```ts
-import { bashTool } from "skywake/ai";
-import { shell } from "skywake/bash";
-
-tools: {
-  bash: bashTool(work);
-} // AI SDK tool on a disk handle
-const sh = shell(work);
-await sh.run("rg TODO src");
-```
-
 ### Errors
 
 Every error has `code`, `message`, `hint` and `requestId`. Classes, the same in
 every SDK (named per language):
 
-| Class             | When                                                        |
-| ----------------- | ----------------------------------------------------------- |
-| `AuthError`       | no key, bad key, expired key                                |
-| `PermissionError` | the key's role or environment doesn't allow it              |
-| `NotFound`        | the name doesn't exist; `hint` suggests the closest name    |
-| `Conflict`        | a write lost a race, or a name is taken                     |
-| `MergeConflict`   | merge couldn't finish; `.conflicts` lists the files or rows |
-| `InvalidRequest`  | bad input; `hint` names the field                           |
-| `RateLimited`     | retried and still limited; `.retryAfter`                    |
-| `ServerError`     | our fault; retried first                                    |
+| Class             | When                                                     |
+| ----------------- | -------------------------------------------------------- |
+| `AuthError`       | no key, bad key, expired key                             |
+| `PermissionError` | the key's role or environment doesn't allow it           |
+| `NotFound`        | the name doesn't exist; `hint` suggests the closest name |
+| `Conflict`        | a write lost a race, or a name is taken                  |
+| `MergeConflict`   | merge couldn't finish; `.conflicts` lists the rows       |
+| `InvalidRequest`  | bad input; `hint` names the field                        |
+| `RateLimited`     | retried and still limited; `.retryAfter`                 |
+| `ServerError`     | our fault; retried first                                 |
 
 ### Types (TypeScript)
 
@@ -271,7 +203,7 @@ Same objects and verbs, written the way each language writes them.
 | options | keyword args                 | option structs             | builder           | builder         | option objects     | keyword args  |
 | lists   | iterator                     | iterator                   | stream            | `Iterable`      | `IAsyncEnumerable` | `Enumerator`  |
 
-Every SDK has disks and indexes. Python returns plain dicts for rows.
+Python returns plain dicts for rows.
 
 ## CLI
 
@@ -280,34 +212,22 @@ skywake login                       # paste a key or sign in through the browser
 skywake whoami
 skywake env [NAME]                  # show or switch the profile's environment
 
-skywake disks                       # list
 skywake indexes
-skywake create disk app [--region eu]
 skywake create index products [--schema schema.json]
-skywake destroy app[@branch]        # asks first; --yes
-
-skywake list app[@branch][/path]   # alias: ls
-skywake read app/notes.md          # alias: cat
-skywake write app/notes.md [FILE|-] [-m MESSAGE]
-skywake delete app/notes.md        # alias: rm
-skywake grep PATTERN app[/path]
-skywake find GLOB app
-skywake upload ./dir app[@branch] [-m MESSAGE]
-skywake download app[@branch] ./dir
-skywake mount app[@branch] ./dir    # Linux; FUSE
+skywake destroy products[@branch]   # asks first; --yes
 
 skywake upsert products rows.jsonl|rows.csv|-
 skywake get products 1
 skywake delete products 1 2 3
-skywake query products|app "words" [--filter "price < 100"] [--limit 10]
+skywake query products "words" [--filter "price < 100"] [--limit 10]
 
-skywake fork app agent-1 [--from main]
-skywake merge app@agent-1 [--into main]
-skywake branches app
-skywake log app[@branch] [--path P]
-skywake diff app@agent-1 [main]
+skywake fork products draft [--from main]
+skywake merge products@draft [--into main]
+skywake branches products
+skywake log products[@branch]
 
-skywake keys | keys create --role write [--only app] | keys revoke ID
+skywake keys | keys create --role write [--only products] | keys revoke ID
+skywake deploy                       # run your own: plan, cost, deploy, look after it
 skywake mcp                          # the MCP server
 skywake types                        # write TypeScript types
 ```
@@ -316,22 +236,15 @@ skywake types                        # write TypeScript types
 - Every command takes `--json`, `--env` and `--profile`.
 - Destructive commands ask first unless `--yes`.
 - Linux (glibc and musl) and macOS (x86_64 and arm64) binaries.
-- `--local[=DIR]` (or `SKYWAKE_STORE`) runs disk commands against a bucket or
-  folder with no server: `fork`, `merge`, `branches`, `log`, `diff`,
-  `destroy NAME@BRANCH`, `upload` and `download`, plus `gc` and `recover`. The
-  store is one disk, so only the branch in `NAME@BRANCH` is used.
 
 ## MCP server
 
 One server, `skywake mcp` (also `npx skywake mcp`, `uvx skywake mcp`). Same
-settings as above, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where file
-tools work. It is written in TypeScript, because `bash` runs on just-bash; the
-Python package's `skywake` command starts it through `npx`, so it needs Node.
+settings as above. It is written in TypeScript; the Python package's `skywake`
+command starts it through `npx`, so it needs Node.
 
-Tools: `read`, `write`, `delete`, `list`, `grep`, `find`, `query`, `bash`,
-`fork`, `merge`, `log`, `diff`, `index_query`, `index_upsert`, `index_delete`.
-A read-only key hides the write tools. Without `SKYWAKE_BRANCH` the server forks
-a branch for the session instead of writing to `main`.
+Tools: `index_query`, `index_upsert`, `index_delete`. A read-only key hides the
+write tools.
 
 ## HTTP API (v2)
 
@@ -346,37 +259,24 @@ a branch for the session instead of writing to `main`.
 - Errors: `{ "error": { "code", "message", "hint", "request_id" } }`.
 - Writes take `Idempotency-Key`.
 
-| Route                                                   | Does                                    |
-| ------------------------------------------------------- | --------------------------------------- |
-| `GET /whoami`                                           | organization, environment, role, key    |
-| `GET/POST /disks`                                       | list / create                           |
-| `GET/PATCH/DELETE /disks/{disk}`                        | info / settings / destroy               |
-| `GET /disks/{disk}/files?path=`                         | list a folder                           |
-| `GET/PUT/DELETE /disks/{disk}/files/{path}`             | read / write one file / delete one file |
-| `POST /disks/{disk}/commits`                            | many changes as one commit              |
-| `GET /disks/{disk}/commits`                             | log                                     |
-| `GET /disks/{disk}/diff?against=`                       | diff                                    |
-| `POST /disks/{disk}/grep` · `/find` · `/query`          | contents / paths / meaning              |
-| `POST /disks/{disk}/revert` · `/restore`                | undo a commit / go back                 |
-| `POST /disks/{disk}/uploads`                            | a large file part                       |
-| `GET/POST /disks/{disk}/branches`                       | list / fork                             |
-| `GET/DELETE /disks/{disk}/branches/{branch}`            | a branch and its head / destroy it      |
-| `POST /disks/{disk}/merges`                             | merge `{ from, into }`                  |
-| `GET/POST /indexes`                                     | list / create                           |
-| `GET/PATCH/DELETE /indexes/{index}`                     | info / settings / destroy               |
-| `POST /indexes/{index}/rows`                            | upsert (creates the index if missing)   |
-| `PATCH /indexes/{index}/rows`                           | update by ids or filter                 |
-| `POST /indexes/{index}/rows/delete`                     | delete by ids or filter                 |
-| `GET /indexes/{index}/rows/{id}`                        | get                                     |
-| `GET /indexes/{index}/rows`                             | every row, paged (export)               |
-| `POST /indexes/{index}/query` · `/count` · `/aggregate` | read                                    |
-| `GET/POST /indexes/{index}/branches`                    | list / fork                             |
-| `DELETE /indexes/{index}/branches/{branch}`             | destroy a branch                        |
-| `POST /indexes/{index}/merges`                          | merge `{ from, into }`                  |
-| `GET /indexes/{index}/versions` · `POST …/restore`      | history / go back                       |
-| `POST /indexes/{index}/copy`                            | a new index                             |
-| `GET/POST /keys` · `DELETE /keys/{id}`                  | keys                                    |
-| `GET/POST /environments`                                | environments                            |
+| Route                                                   | Does                                  |
+| ------------------------------------------------------- | ------------------------------------- |
+| `GET /whoami`                                           | organization, environment, role, key  |
+| `GET/POST /indexes`                                     | list / create                         |
+| `GET/PATCH/DELETE /indexes/{index}`                     | info / settings / destroy             |
+| `POST /indexes/{index}/rows`                            | upsert (creates the index if missing) |
+| `PATCH /indexes/{index}/rows`                           | update by ids or filter               |
+| `POST /indexes/{index}/rows/delete`                     | delete by ids or filter               |
+| `GET /indexes/{index}/rows/{id}`                        | get                                   |
+| `GET /indexes/{index}/rows`                             | every row, paged (export)             |
+| `POST /indexes/{index}/query` · `/count` · `/aggregate` | read                                  |
+| `GET/POST /indexes/{index}/branches`                    | list / fork                           |
+| `DELETE /indexes/{index}/branches/{branch}`             | destroy a branch                      |
+| `POST /indexes/{index}/merges`                          | merge `{ from, into }`                |
+| `GET /indexes/{index}/versions` · `POST …/restore`      | history / go back                     |
+| `POST /indexes/{index}/copy`                            | a new index                           |
+| `GET/POST /keys` · `DELETE /keys/{id}`                  | keys                                  |
+| `GET/POST /environments`                                | environments                          |
 
 Organization, billing, SSO and audit routes keep their v1 shapes under `/v2`.
 The turbopuffer-compatible API stays where it is.
@@ -391,8 +291,6 @@ The turbopuffer-compatible API stays where it is.
 - Keys: a key for `prod/*` becomes a `prod` key. A key for `prod/app` becomes a
   `prod` key with `only: ["app"]`. A key for `*` becomes an all-environments
   key.
-- Linked indexes stop being their own resource: they become a disk's `search`
-  setting, and leave index lists.
 
 ## The scenario list
 
@@ -405,24 +303,17 @@ isn't done until all pass.
 4. Query with a filter, a limit and `mode: "keywords"`.
 5. `update(id, …)`, `get(id)` shows the change; `delete(id)`, `get(id)` is null.
 6. Fork the index, change the fork, query both, merge; main has the change.
-7. Write a file to a new disk; read it back; `list` shows it.
-8. Write many files in one commit; `log` shows one commit.
-9. Fork the disk, write on both sides to the same file, merge: `MergeConflict`
-   lists it.
-10. `grep`, `find` and `query` on a disk find a file.
-11. `read` with `at` returns the old content after a change.
-12. A staging key gets `PermissionError` on a prod index; a read key gets
-    `PermissionError` on write.
-13. A wrong name gets `NotFound` with a suggestion.
-14. `destroy` a branch, then the index and the disk; lists are empty.
+7. `query` with `at` returns the old rows after a change.
+8. A staging key gets `PermissionError` on a prod index; a read key gets
+   `PermissionError` on write.
+9. A wrong name gets `NotFound` with a suggestion.
+10. `destroy` a branch, then the index; lists are empty.
 
 ## Use cases page
 
 The docs get one page with a short, runnable example for each, built only from
 the verbs above:
 
-- **Give each AI agent its own copy of a codebase:** fork, bash tool, merge.
-- **Chat with your files:** write files to a disk, `app.query`.
 - **Product search:** upsert products, `query` with filters.
 - **Try a change before it's live:** fork an index, re-embed or re-rank, compare,
   merge.

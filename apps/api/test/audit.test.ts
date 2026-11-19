@@ -111,7 +111,7 @@ test(
       (
         await s.call(
           "GET",
-          "/namespaces/prod%2Fapp/branches/main/files/content?path=a.txt",
+          "/indexes/prod%2Fapp/branches/main/documents/1",
           reader.key,
           undefined,
           { "user-agent": "agent-7" },
@@ -119,14 +119,16 @@ test(
       ).status,
       200,
     );
-    assert.equal((await s.call("POST", "/namespaces", reader.key, { name: "x" })).status, 403);
+    const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [] };
+    const refused = await s.call("POST", "/indexes", reader.key, { name: "x", schema });
+    assert.equal(refused.status, 403);
 
     const log = (await s.call("GET", "/audit?limit=3", key)).body;
     assert.deepEqual(
       log.events.map((e: any) => [e.action, e.outcome, e.actor]),
       [
-        ["createNamespace", "denied", `key:${reader.id}`],
-        ["readFile", "ok", `key:${reader.id}`],
+        ["createIndex", "denied", `key:${reader.id}`],
+        ["getDocument", "ok", `key:${reader.id}`],
         ["createKey", "ok", log.events[2].actor],
       ],
     );
@@ -135,10 +137,9 @@ test(
     assert.equal(read.org, id);
     assert.equal(read.actorKind, "key");
     assert.equal(read.userAgent, "agent-7");
-    assert.deepEqual(read.resource, { namespace: "prod/app", branch: "main" });
+    assert.deepEqual(read.resource, { index: "prod/app", branch: "main", id: "1" });
     assert.equal(read.method, "GET");
     assert.ok(read.durationMs >= 0 && read.requestId && read.hash);
-    assert.equal(JSON.stringify(read).includes("hello"), false, "no file contents");
 
     const next = (await s.call("GET", `/audit?limit=3&after=${log.next}`, key)).body;
     assert.equal(Number(next.events[0].id) < Number(log.next), true);
@@ -146,7 +147,7 @@ test(
     const denied = (await s.call("GET", "/audit?outcome=denied", key)).body.events;
     assert.deepEqual(
       denied.map((e: any) => e.action),
-      ["createNamespace"],
+      ["createIndex"],
     );
 
     const created = (await s.call("GET", "/audit?action=createOrg", key)).body.events;
@@ -158,14 +159,16 @@ test(
 test("with reads sent to the log, only writes reach Postgres", { skip }, async () => {
   const s = await server({ auditReads: "log" });
   const { key } = await s.ready();
-  const path = "/namespaces/prod%2Fapp/branches/main/files/content?path=a.txt";
-  assert.equal((await s.call("GET", path, key)).status, 200);
+  assert.equal(
+    (await s.call("GET", "/indexes/prod%2Fapp/branches/main/documents/1", key)).status,
+    200,
+  );
   await s.services.audit.flush();
   const kept = (await s.call("GET", "/audit?limit=50", key)).body.events;
-  assert.ok(!kept.some((e: any) => e.action === "readFile"), "the read is not in Postgres");
-  assert.ok(kept.some((e: any) => e.action === "createKey" || e.action === "createNamespace"));
+  assert.ok(!kept.some((e: any) => e.action === "getDocument"), "the read is not in Postgres");
+  assert.ok(kept.some((e: any) => e.action === "createIndex"));
   const logged = s.logs.filter(
-    (entry: any) => entry.msg === "audit" && entry.action === "readFile",
+    (entry: any) => entry.msg === "audit" && entry.action === "getDocument",
   );
   assert.equal(logged.length, 1);
   assert.equal(logged[0]?.outcome, "ok");
@@ -175,7 +178,7 @@ test("another organization's events and the audit log itself stay apart", { skip
   const s = await server();
   const one = await s.ready();
   const two = await s.org();
-  await s.call("GET", "/namespaces", two.key);
+  await s.call("GET", "/indexes", two.key);
   const seen = (await s.call("GET", "/audit?limit=1000", one.key)).body.events;
   assert.ok(seen.every((e: any) => e.org === one.id || e.owner === one.id));
   assert.equal((await s.call("GET", "/audit?since=not-a-time", one.key)).status, 400);
@@ -183,37 +186,16 @@ test("another organization's events and the audit log itself stay apart", { skip
   assert.ok(reads.length >= 2);
 });
 
-test("owners of a public namespace see who else used it", { skip }, async () => {
-  const s = await server();
-  const one = await s.ready();
-  const two = await s.org();
-  const shared = { visibility: "public" };
-  assert.equal((await s.call("PATCH", "/namespaces/prod%2Fapp", one.key, shared)).status, 204);
-  const path = `/namespaces/${one.id}:prod%2Fapp/branches/main/files/content?path=a.txt`;
-  assert.equal((await s.call("GET", path, two.key)).status, 200);
-  assert.equal((await s.call("GET", path)).status, 200);
-
-  const reads = (await s.call("GET", "/audit?action=readFile", one.key)).body.events;
-  const theirs = reads.filter((e: any) => e.org !== one.id);
-  assert.deepEqual(theirs.map((e: any) => [e.org, e.owner]).sort(), [
-    [null, one.id],
-    [two.id, one.id],
-  ]);
-  assert.ok(reads.filter((e: any) => e.org === one.id).every((e: any) => e.owner === null));
-  const seen = (await s.call("GET", "/audit?limit=1000", two.key)).body.events;
-  assert.ok(seen.every((e: any) => e.org === two.id));
-});
-
 test("old events are pruned", { skip }, async () => {
   const s = await server();
   const { key } = await s.org();
-  await s.call("GET", "/namespaces", key);
+  await s.call("GET", "/indexes", key);
   await s.services.audit.flush();
   await s.db.execute(
-    sql`update api.audit set at = now() - interval '400 days' where action = 'listNamespaces'`,
+    sql`update api.audit set at = now() - interval '400 days' where action = 'listIndexes'`,
   );
   assert.ok((await prune(s.db, 365)) >= 1);
-  const left = (await s.call("GET", "/audit?action=listNamespaces", key)).body.events;
+  const left = (await s.call("GET", "/audit?action=listIndexes", key)).body.events;
   assert.equal(left.length, 0);
 });
 
@@ -221,7 +203,7 @@ test("events read back from the database still verify", { skip }, async () => {
   const s = await server();
   const { key } = await s.ready();
   await s.call("POST", "/keys", key, { name: "r", role: "read" });
-  await s.call("GET", "/namespaces/prod%2Fapp/branches/main/files/content?path=a.txt", key);
+  await s.call("GET", "/indexes/prod%2Fapp/branches/main/documents/1", key);
   await s.services.audit.flush();
   const rows = await s.db
     .select()

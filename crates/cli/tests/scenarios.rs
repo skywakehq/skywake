@@ -1,7 +1,6 @@
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use skywake::{ErrorKind, Role, Skywake};
@@ -22,7 +21,6 @@ impl Cli {
             .env("SKYWAKE_API_KEY", &self.key)
             .env("HOME", self.home.path())
             .env("XDG_CONFIG_HOME", self.home.path().join("config"))
-            .env("SKYWAKE_ROOT", self.home.path().join("root"))
             .env_remove("SKYWAKE_KEY")
             .env_remove("SKYWAKE_ENV")
             .env_remove("SKYWAKE_PROFILE")
@@ -110,34 +108,12 @@ fn ids(hits: &Value) -> Vec<i64> {
         .collect()
 }
 
-fn eventually(mut check: impl FnMut() -> bool) -> bool {
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(20) {
-        if check() {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(250));
-    }
-    false
-}
-
-fn same_files(left: &Path, right: &Path, name: &str) {
-    assert_eq!(
-        std::fs::read_to_string(left.join(name)).unwrap(),
-        std::fs::read_to_string(right.join(name)).unwrap()
-    );
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn scenarios() {
     let Some(cli) = cli().await else { return };
     account(&cli);
     index_rows(&cli);
     index_branches(&cli);
-    disk_files(&cli);
-    disk_branches(&cli);
-    folders(&cli);
-    disk_query(&cli);
     keys(&cli);
     types(&cli);
     destroy(&cli);
@@ -255,135 +231,12 @@ fn index_branches(cli: &Cli) {
     );
 }
 
-fn disk_files(cli: &Cli) {
-    assert!(
-        cli.ok_with(
-            &["write", "app/notes.md", "-m", "add notes"],
-            Some("hello\nworld\n")
-        )
-        .contains("wrote app")
-    );
-    let other = cli.file("todo.md", "ship it\n");
-    cli.ok(&["write", "app/docs/todo.md", &other]);
-    assert_eq!(cli.ok(&["read", "app/notes.md"]), "hello\nworld\n");
-    assert_eq!(cli.ok(&["cat", "app/docs/todo.md"]), "ship it\n");
-
-    let listed = cli.ok(&["ls", "app"]);
-    assert!(
-        listed.contains("notes.md") && listed.contains("docs/"),
-        "{listed}"
-    );
-    let deep = cli.json(&["list", "app", "--recursive"]);
-    let paths: Vec<&str> = deep
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|entry| entry["path"].as_str())
-        .collect();
-    assert!(paths.contains(&"docs/todo.md"), "{paths:?}");
-
-    assert_eq!(cli.ok(&["grep", "world", "app"]).trim(), "notes.md:2:world");
-    assert!(
-        cli.ok(&["find", "*.md", "app/docs"])
-            .contains("docs/todo.md")
-    );
-    assert!(cli.ok(&["disks"]).contains("app"));
-
-    let error = cli.fails(&["read", "app/missing.md"]);
-    assert!(
-        error.to_lowercase().contains("not found") || error.contains("missing.md"),
-        "{error}"
-    );
-    let error = cli.fails(&["read", "app"]);
-    assert!(error.contains("needs a file path"), "{error}");
-}
-
-fn disk_branches(cli: &Cli) {
-    cli.ok(&["fork", "app", "agent-1"]);
-    cli.ok_with(&["write", "app@agent-1/notes.md"], Some("changed\n"));
-    assert_eq!(cli.ok(&["diff", "app@agent-1"]).trim(), "~ notes.md");
-    assert!(
-        cli.ok(&["merge", "app@agent-1", "-m", "take it"])
-            .contains("→ main")
-    );
-    assert_eq!(cli.ok(&["read", "app/notes.md"]), "changed\n");
-    assert!(
-        cli.ok(&["log", "app", "--path", "notes.md"])
-            .contains("take it")
-    );
-
-    cli.ok(&["fork", "app", "one"]);
-    cli.ok(&["fork", "app", "two"]);
-    cli.ok_with(&["write", "app@one/notes.md"], Some("one\n"));
-    cli.ok_with(&["write", "app@two/notes.md"], Some("two\n"));
-    cli.ok(&["merge", "app@one"]);
-    let error = cli.fails(&["merge", "app@two"]);
-    assert!(
-        error.contains("conflict: notes.md") && error.contains("nothing was merged"),
-        "{error}"
-    );
-
-    assert!(
-        cli.ok(&["delete", "app/docs/todo.md", "-m", "done"])
-            .contains("deleted docs/todo.md")
-    );
-    assert!(!cli.fails(&["read", "app/docs/todo.md"]).is_empty());
-    assert!(
-        cli.ok(&["destroy", "app@two", "--yes"])
-            .contains("branch two")
-    );
-    let branches = cli.ok(&["branches", "app"]);
-    assert!(
-        branches.contains("agent-1") && !branches.contains("two"),
-        "{branches}"
-    );
-}
-
-fn folders(cli: &Cli) {
-    cli.file("site/index.html", "<h1>hi</h1>\n");
-    cli.file("site/css/main.css", "body {}\n");
-    let site = cli.path("site");
-    assert!(
-        cli.fails(&["upload", site.to_str().unwrap(), "app@site"])
-            .contains("does not exist")
-    );
-    cli.ok(&["fork", "app", "site"]);
-    assert!(
-        cli.ok(&["upload", site.to_str().unwrap(), "app@site", "-m", "site"])
-            .contains("uploaded")
-    );
-    let copy = cli.path("copy");
-    assert!(
-        cli.ok(&["download", "app@site", copy.to_str().unwrap()])
-            .contains("downloaded")
-    );
-    same_files(&site, &copy, "index.html");
-    same_files(&site, &copy, "css/main.css");
-}
-
-fn disk_query(cli: &Cli) {
-    assert!(
-        cli.ok(&["create", "disk", "docs", "--search"])
-            .contains("Made disk docs")
-    );
-    cli.ok_with(
-        &["write", "docs/auth.md"],
-        Some("Sign in happens in the auth service with tokens.\n"),
-    );
-    let found = eventually(|| {
-        let (ok, out, _) = cli.run(&["query", "docs", "auth service", "--json"], None);
-        ok && out.contains("auth.md")
-    });
-    assert!(found, "the disk query never found auth.md");
-    assert!(cli.fails(&["query", "docs"]).contains("needs words"));
-}
-
 fn keys(cli: &Cli) {
     let org = ["--key", cli.admin.as_str(), "--env", "prod"];
     let made = cli.json(
         &[
             &[
-                "keys", "create", "--role", "read", "--name", "reader", "--only", "app",
+                "keys", "create", "--role", "read", "--name", "reader", "--only", "products",
             ][..],
             &org,
         ]
@@ -422,14 +275,8 @@ fn types(cli: &Cli) {
 }
 
 fn destroy(cli: &Cli) {
-    assert!(cli.fails(&["destroy", "app"]).contains("--yes"));
-    assert!(
-        cli.fails(&["destroy", "nothing-here", "--yes"])
-            .contains("no disk or index named")
-    );
-    for name in ["app", "docs", "products"] {
-        cli.ok(&["destroy", name, "--yes"]);
-    }
-    assert_eq!(cli.json(&["disks"]), Value::Array(vec![]));
+    assert!(cli.fails(&["destroy", "products"]).contains("--yes"));
+    cli.fails(&["destroy", "nothing-here", "--yes"]);
+    cli.ok(&["destroy", "products", "--yes"]);
     assert_eq!(cli.json(&["indexes"]), Value::Array(vec![]));
 }

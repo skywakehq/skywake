@@ -85,18 +85,6 @@ export class Billing {
     return this.gate.admitIndex(org);
   }
 
-  admitFilesystem(org: string) {
-    return this.gate.admitFilesystem(org);
-  }
-
-  admitFiles(org: string) {
-    return this.gate.admitFiles(org);
-  }
-
-  changed(folder: string) {
-    return billing.markStale(this.#db, folder);
-  }
-
   start() {
     this.#timer = setInterval(() => void this.tick(), TICK_MS);
     this.#timer.unref();
@@ -213,8 +201,6 @@ export class Billing {
       totals: await billing.usageSince(this.#db, org, from),
       storedBytes: await billing.storedBytes(this.#db, org),
       indexes: await billing.indexCount(this.#db, org),
-      filesBytes: await billing.filesStored(this.#db, org),
-      filesystems: await billing.filesystemCount(this.#db, org),
     });
   }
 

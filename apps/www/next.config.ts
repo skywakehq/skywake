@@ -1,6 +1,7 @@
 import "@skywake/env/load";
 
 import type { NextConfig } from "next";
+import { locales } from "./lib/i18n";
 import { zoneRewrites } from "./lib/rewrites";
 
 const docs = { url: process.env.DOCS_URL, path: process.env.DOCS_BASE_PATH || "/docs" };
@@ -34,6 +35,15 @@ const nextConfig: NextConfig = {
     SITE_URL: siteUrl,
     // Skywake Cloud: off shows the waitlist, on (`1`) links to the console.
     CLOUD_OPEN: process.env.CLOUD_OPEN ?? "",
+  },
+  async redirects() {
+    return [
+      {
+        source: `/:locale(${locales.join("|")})/:page(filesystem|search|use-cases)/:rest*`,
+        destination: "/:locale",
+        permanent: true,
+      },
+    ];
   },
   async rewrites() {
     return [docs, dashboard].flatMap((zone) => (zone.url ? zoneRewrites(zone.path, zone.url) : []));

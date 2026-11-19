@@ -1,13 +1,10 @@
 "use client";
 
 import {
-  Activity,
   BookOpen,
-  ChartColumn,
   ChevronsUpDown,
   CreditCard,
   KeyRound,
-  LayoutGrid,
   LogOut,
   Moon,
   Plus,
@@ -38,7 +35,7 @@ import {
 import { authClient } from "@/features/auth/auth-client";
 import { envPath, isIndexPath } from "@/lib/paths";
 import { useEnvironments } from "@/features/environments/use-environments";
-import { useEnvironment, useNamespace } from "@/hooks/use-ns";
+import { useEnvironment } from "@/hooks/use-environment";
 import { Count, Glide } from "@/components/kit";
 import { Logo } from "@skywake/ui/components/logo";
 import {
@@ -65,7 +62,6 @@ const SETTINGS_ROWS: Record<string, string> = {
 /** The console's pages, grouped, for the current environment. */
 export function AppSidebar() {
   const env = useEnvironment() ?? "default";
-  const ns = useNamespace();
   const path = usePathname();
   const hash = useHash();
   const billing = useBillingEnabled();
@@ -82,29 +78,12 @@ export function AppSidebar() {
           <Group label="Data">
             <NavItem
               href={envPath(env)}
-              active={path === envPath(env) || !!ns}
-              icon={<LayoutGrid />}
-            >
-              Disks
-            </NavItem>
-            <NavItem
-              href={envPath(env, "indexes")}
-              active={path === envPath(env, "indexes") || isIndexPath(path)}
+              active={
+                path === envPath(env) || path === `${envPath(env)}/indexes` || isIndexPath(path)
+              }
               icon={<ScanSearch />}
             >
               Indexes
-            </NavItem>
-          </Group>
-          <Group label="Observe">
-            <NavItem
-              href={envPath(env, "activity")}
-              active={path === envPath(env, "activity")}
-              icon={<Activity />}
-            >
-              Activity
-            </NavItem>
-            <NavItem href="/usage" active={path === "/usage"} icon={<ChartColumn />}>
-              Usage
             </NavItem>
           </Group>
           <Group label="Access">
@@ -298,7 +277,7 @@ function OrgSwitcher() {
   );
 }
 
-/** Environments, such as prod and staging, each hold their own disks and indexes. */
+/** Environments, such as prod and staging, each hold their own indexes. */
 function EnvironmentSwitcher({ current }: { current: string }) {
   const { envs } = useEnvironments();
   const [creating, setCreating] = useState(false);

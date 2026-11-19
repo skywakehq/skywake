@@ -58,9 +58,9 @@ class FakeApi
   end
 
   def reply(socket, answer)
-    payload = answer[:raw] || (answer.key?(:body) ? JSON.generate(answer[:body]) : "")
+    payload = answer.key?(:body) ? JSON.generate(answer[:body]) : ""
     head = {
-      "content-type" => answer[:raw] ? "application/octet-stream" : "application/json",
+      "content-type" => "application/json",
       "content-length" => payload.bytesize,
       "connection" => "close"
     }.merge(answer.fetch(:headers, {}))

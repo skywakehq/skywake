@@ -402,7 +402,7 @@ Outputs:
     Description: Open this, sign up, and make an organization.
     Value: !Sub http://${Address}:3100
   ApiUrl:
-    Description: Where agents and the SDKs connect. Run them in this region.
+    Description: Where the SDKs and the CLI connect. Run them in this region.
     Value: !Sub http://${Address}:8080
   Region:
     Description: Where the instance, the bucket and the database are.

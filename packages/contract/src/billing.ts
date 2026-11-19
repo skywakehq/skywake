@@ -21,16 +21,7 @@ export const Feature = z
 export type Feature = z.infer<typeof Feature>;
 
 export const Meter = z
-  .enum([
-    "storage",
-    "writes",
-    "queries",
-    "embeddings",
-    "reranks",
-    "pinned",
-    "files_storage",
-    "files_egress",
-  ])
+  .enum(["storage", "writes", "queries", "embeddings", "reranks", "pinned"])
   .openapi("Meter");
 export type Meter = z.infer<typeof Meter>;
 
@@ -80,10 +71,6 @@ export const Billing = z
     meters: z.array(MeterUsage),
     stored: z.object({ gb: z.number(), limit_gb: z.number().nullable() }),
     indexes: z.object({ count: z.number().int(), limit: z.number().int().nullable() }),
-    files: z
-      .object({ gb: z.number(), limit_gb: z.number().nullable() })
-      .openapi({ description: "Bytes stored by the organization's filesystems." }),
-    filesystems: z.object({ count: z.number().int(), limit: z.number().int().nullable() }),
     features: z.array(Feature),
     plans: z.array(PlanOffer),
     customer: z.boolean().openapi({ description: "Whether the portal can be opened." }),

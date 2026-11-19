@@ -19,12 +19,11 @@ export interface Config {
   trustProxy: number;
   s3: { region: string; endpoint: string | null };
   placementCheck: boolean;
-  sts?: { roleArn: string; endpoint?: string; seconds: number };
+  sts?: { endpoint: string };
   /** Seals secrets kept in Postgres, such as the keys of a customer's bucket. */
   secretKey?: Buffer;
   /** What customers trust in the role of a bucket they bring. */
   byobPrincipal?: string;
-  heads?: { nodes: string[]; token: string };
   embed?: Provider;
   embedModel?: string;
   rerank?: Provider;
@@ -141,16 +140,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       endpoint: values.AWS_ENDPOINT || values.AWS_ENDPOINT_URL || null,
     },
     placementCheck: values.SKYWAKE_API_PLACEMENT_CHECK === "true",
-    sts: values.SKYWAKE_API_STS_ROLE_ARN
-      ? {
-          roleArn: values.SKYWAKE_API_STS_ROLE_ARN,
-          endpoint: values.SKYWAKE_API_STS_ENDPOINT,
-          seconds: values.SKYWAKE_API_STS_SECONDS,
-        }
+    sts: values.SKYWAKE_API_STS_ENDPOINT
+      ? { endpoint: values.SKYWAKE_API_STS_ENDPOINT }
       : undefined,
     secretKey: secretKey(values.SKYWAKE_API_SECRET_KEY),
     byobPrincipal: values.SKYWAKE_API_BYOB_PRINCIPAL,
-    heads: heads(values.SKYWAKE_HEADS, values.SKYWAKE_CACHE_NODES, values.SKYWAKE_CACHE_TOKEN),
     embed: provider(values.SKYWAKE_API_EMBED_URL, values.SKYWAKE_API_EMBED_KEY),
     embedModel: values.SKYWAKE_API_EMBED_MODEL,
     rerank: provider(values.SKYWAKE_API_RERANK_URL, values.SKYWAKE_API_RERANK_KEY),
@@ -163,15 +157,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       token: values.SKYWAKE_API_PEER_TOKEN,
     },
   };
-}
-
-function heads(where: "bucket" | "tier", nodes: string, token: string | undefined) {
-  if (where === "bucket") return undefined;
-  const urls = list(nodes);
-  if (urls.length === 0 || !token) {
-    throw new Error("SKYWAKE_HEADS=tier needs SKYWAKE_CACHE_NODES and SKYWAKE_CACHE_TOKEN");
-  }
-  return { nodes: urls, token };
 }
 
 function prices(text: string) {

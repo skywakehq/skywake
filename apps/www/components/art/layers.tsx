@@ -47,16 +47,11 @@ function Box({
   );
 }
 
-const products = [
-  { y: 40, key: "filesystem" },
-  { y: 176, key: "index" },
-] as const;
-
 export function Layers({ t }: { t: HomeMessages["layers"] }) {
   return (
     <figure className="reveal hidden rounded-3xl border border-border bg-card sm:block">
       <svg
-        viewBox="0 0 960 330"
+        viewBox="0 88 960 244"
         role="img"
         aria-label={t.alt}
         className="mx-auto block w-full max-w-5xl px-6 py-14"
@@ -76,25 +71,19 @@ export function Layers({ t }: { t: HomeMessages["layers"] }) {
         </defs>
 
         <g fill="none" stroke={signal} strokeWidth={1} markerEnd="url(#head)">
-          {products.map(({ y }) => (
-            <g key={y}>
-              <path d={`M560 140H520V${y + 32}H476`} />
-              <path d={`M276 ${y + 32}H236V140H196`} />
-            </g>
-          ))}
+          <path d="M560 140H476" />
+          <path d="M276 140H196" />
           <path d="M800 140H736" />
           <path d="M116 172V290H872V178" strokeDasharray="4 4" className="dash-flow" />
         </g>
 
         <Box x={56} y={108} w={140} title={t.agents[0]} note={t.agents[1]} />
-        {products.map((p) => (
-          <Box key={p.key} x={276} y={p.y} w={200} title={t[p.key][0]} note={t[p.key][1]} />
-        ))}
+        <Box x={276} y={108} w={200} title={t.index[0]} note={t.index[1]} />
         <Box x={560} y={108} w={176} title={t.cache[0]} note={t.cache[1]} />
         <Box x={800} y={108} w={144} title={t.storage[0]} note={t.storage[1]} />
 
         <text x={494} y={316} textAnchor="middle" fill={muted} fontFamily={mono} fontSize={12.5}>
-          only changes go up, every 2 s
+          {t.note}
         </text>
       </svg>
     </figure>

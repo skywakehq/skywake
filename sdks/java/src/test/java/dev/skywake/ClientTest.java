@@ -1,7 +1,6 @@
 package dev.skywake;
 
 import static dev.skywake.FakeApi.Reply.failure;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -10,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.skywake.FakeApi.Reply;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -78,10 +76,10 @@ class ClientTest {
     @Test
     void aMergeThatCantFinishIsAMergeConflictListingWhatConflicts() throws Exception {
         try (FakeApi api = new FakeApi((seen, count) ->
-                failure(409, "conflict", Map.of("conflicts", List.of("README.md"))))) {
-            Disk work = api.sky().disk("app", "agent-1");
+                failure(409, "conflict", Map.of("conflicts", List.of("p1"))))) {
+            Index work = api.sky().index("products", "agent-1");
             MergeConflictException error = assertThrows(MergeConflictException.class, work::mergeInto);
-            assertEquals(List.of("README.md"), error.conflicts());
+            assertEquals(List.of("p1"), error.conflicts());
             assertTrue(error instanceof ConflictException);
             same(Map.of("from", "agent-1", "into", "main"), api.at(0).json());
         }
@@ -93,8 +91,8 @@ class ClientTest {
                 ? Reply.json(page(List.of(Map.of("name", "c")), null))
                 : Reply.json(page(List.of(Map.of("name", "a"), Map.of("name", "b")), "b")))) {
             List<String> names = new ArrayList<>();
-            for (DiskSummary disk : api.sky().listDisks()) {
-                names.add(disk.name());
+            for (IndexSummary index : api.sky().listIndexes()) {
+                names.add(index.name());
             }
             assertEquals(List.of("a", "b", "c"), names);
         }
@@ -168,68 +166,16 @@ class ClientTest {
     }
 
     @Test
-    void filesAreReadAndWrittenByPathEachPartOfItEncoded() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> seen.method().equals("GET")
-                ? Reply.raw("hello".getBytes())
-                : Reply.json(Map.of("commit", "c1", "changed", true)))) {
-            Disk app = api.sky().disk("app");
-            assertEquals("hello", app.read("/docs/a b.md", new ReadOptions().at("c0")));
-            assertArrayEquals("hello".getBytes(), app.readBytes("x"));
-            Map<String, Object> files = new LinkedHashMap<>();
-            files.put("a.md", "one");
-            files.put("b.bin", new byte[] {(byte) 0xff, 0x00});
-            app.write(files, new WriteOptions().message("two"));
-            assertEquals("/v2/disks/app/files/docs/a%20b.md", api.at(0).path());
-            assertEquals("c0", api.at(0).query().get("at"));
-            same(Map.of(
-                            "message", "two",
-                            "branch", "main",
-                            "changes", List.of(
-                                    Map.of("path", "a.md", "text", "one"),
-                                    Map.of("path", "b.bin", "base64", "/wA="))),
-                    api.at(2).json());
-        }
-    }
-
-    @Test
-    void aLargeFileGoesUpInPartsBeforeItsCommit() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> seen.path().endsWith("/uploads")
-                ? Reply.status(201, Map.of("part", "p" + seen.body().length, "size", seen.body().length))
-                : Reply.json(Map.of("commit", "c1", "changed", true)))) {
-            api.sky().disk("app").write("big.bin", new byte[20 * 1024 * 1024]);
-            List<Integer> parts = api.seen.stream()
-                    .filter(seen -> seen.path().endsWith("/uploads"))
-                    .map(seen -> seen.body().length)
-                    .toList();
-            assertEquals(List.of(16 * 1024 * 1024, 4 * 1024 * 1024), parts);
-            JsonNode commit = api.at(api.seen.size() - 1).json();
-            same(List.of(Map.of("path", "big.bin", "parts", List.of("p" + 16 * 1024 * 1024, "p" + 4 * 1024 * 1024))),
-                    commit.path("changes"));
-        }
-    }
-
-    @Test
     void aForkIsAHandleOnTheNewBranchAndDestroyRemovesJustTheBranch() throws Exception {
         try (FakeApi api = new FakeApi((seen, count) -> seen.method().equals("DELETE")
                 ? Reply.status(204, null)
                 : Reply.status(201, Map.of("name", "agent-1")))) {
-            Disk work = api.sky().disk("app").fork("agent-1", "c3");
+            Index work = api.sky().index("products").fork("agent-1", "v3");
             assertEquals("agent-1", work.branch());
             work.destroy();
-            same(Map.of("name", "agent-1", "from", "main", "at", "c3"), api.at(0).json());
+            same(Map.of("name", "agent-1", "from", "main", "at", "v3"), api.at(0).json());
             assertEquals("DELETE", api.at(1).method());
-            assertEquals("/v2/disks/app/branches/agent-1", api.at(1).path());
-        }
-    }
-
-    @Test
-    void restoreToATimePicksTheNewestCommitAtOrBeforeIt() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> seen.method().equals("GET")
-                ? Reply.json(page(List.of(
-                        commit("c3", "2026-01-03T00:00:00Z"), commit("c2", "2026-01-02T00:00:00Z")), null))
-                : Reply.json(Map.of("commit", "c4", "changed", true)))) {
-            api.sky().disk("app").restore(Instant.parse("2026-01-02T12:00:00Z"));
-            same(Map.of("to", "c2", "branch", "main"), api.at(1).json());
+            assertEquals("/v2/indexes/products/branches/agent-1", api.at(1).path());
         }
     }
 
@@ -238,14 +184,5 @@ class ClientTest {
         page.put("data", data);
         page.put("next", next);
         return page;
-    }
-
-    private static Map<String, Object> commit(String id, String created) {
-        Map<String, Object> commit = new LinkedHashMap<>();
-        commit.put("id", id);
-        commit.put("message", "");
-        commit.put("created", created);
-        commit.put("merged", null);
-        return commit;
     }
 }

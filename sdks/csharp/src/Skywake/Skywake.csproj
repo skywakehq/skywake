@@ -8,8 +8,8 @@
     <PackageId>Skywake</PackageId>
     <Version>0.2.0</Version>
     <Authors>Skywake</Authors>
-    <Description>Skywake for .NET: disks (files with branches) and search indexes, for AI agents.</Description>
-    <PackageTags>skywake;vector-search;full-text-search;branches;files;rag;ai-agents</PackageTags>
+    <Description>Skywake for .NET: an open-source vector and full-text search index on your own bucket.</Description>
+    <PackageTags>skywake;vector-search;full-text-search;search-index;rag</PackageTags>
     <PackageProjectUrl>https://skywake.dev</PackageProjectUrl>
     <RepositoryUrl>https://github.com/skywakehq/skywake</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

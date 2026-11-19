@@ -51,8 +51,8 @@ function wrap(engine) {
   });
 }
 
-export const Engine = {
-  open: (location, options) => wrap(guard(() => native.Engine.open(location, options))),
+export const Store = {
+  open: (location, options) => wrap(guard(() => native.Store.open(location, options))),
 };
 
 export const Index = {

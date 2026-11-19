@@ -2,15 +2,11 @@ import type { MetadataRoute } from "next";
 
 import { pagePaths, pages } from "@/content/pages";
 import { site } from "@/content/site";
-import { useCases } from "@/content/use-cases";
 import { locales, localizePath } from "@/lib/i18n";
 import { languages } from "@/lib/metadata";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const all = [
-    ...pagePaths.map((path) => ({ path, priority: pages[path].priority })),
-    ...useCases.map((item) => ({ path: `/use-cases/${item.id}`, priority: 0.6 })),
-  ];
+  const all = pagePaths.map((path) => ({ path, priority: pages[path].priority }));
   const url = (path: string) => new URL(path, site.url).toString();
   // Every page in every language, each listing its translations.
   return locales.flatMap((locale) =>

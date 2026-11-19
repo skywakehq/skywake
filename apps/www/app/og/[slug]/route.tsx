@@ -14,7 +14,7 @@ export async function GET(_request: Request, { params }: RouteContext<"/og/[slug
   const path = pagePaths.find((candidate) => imageSlug(candidate) === slug);
   if (!path) notFound();
   const { title, description } = pages[path];
-  const headline = path === "/" ? "Fast files and search for your agents and apps." : title;
+  const headline = path === "/" ? "The open-source search index on object storage." : title;
 
   const image = (
     <div

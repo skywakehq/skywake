@@ -37,9 +37,8 @@ All paths are under the base path.
 | ---------------------------- | ----------------------------------------------------- |
 | `/`                          | `content/docs/index.mdx`                              |
 | `/getting-started/*`         | `content/docs/getting-started/`                       |
-| `/filesystem/*`              | `content/docs/filesystem/`                            |
 | `/indexes/*`                 | `content/docs/indexes/`                               |
-| `/agents/*`                  | `content/docs/agents/`                                |
+| `/mcp`                       | `content/docs/mcp.mdx`                                |
 | `/self-hosting/*`            | `content/docs/self-hosting/`                          |
 | `/security/*`                | `content/docs/security/`                              |
 | `/benchmarks`                | `content/docs/benchmarks.mdx`                         |
@@ -91,7 +90,7 @@ its frontmatter or `meta.json` (`icon: GitFork`); the sidebar, page headers
 and cards draw it. Guides end with `## Next` and a few `<Card href="..." />`.
 
 Guides link to each other by file (`../indexes/filters.mdx`) and to the
-references by route (`/reference/cli/mount`), never with `/docs`.
+references by route (`/reference/cli/query`), never with `/docs`.
 
 ## Reference
 

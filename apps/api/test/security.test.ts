@@ -14,7 +14,7 @@ import { ADMIN, database, server, skip, unique } from "./helpers.ts";
 test("every response carries safe headers, and errors say little", { skip }, async () => {
   const s = await server();
   const { key } = await s.org();
-  const listed = await s.call("GET", "/namespaces", key);
+  const listed = await s.call("GET", "/indexes", key);
   assert.equal(listed.headers.get("x-content-type-options"), "nosniff");
   assert.equal(listed.headers.get("x-frame-options"), "SAMEORIGIN");
   assert.ok(listed.headers.get("x-request-id"));
@@ -25,16 +25,13 @@ test("every response carries safe headers, and errors say little", { skip }, asy
     code: "not_found",
     request_id: missing.headers.get("x-request-id"),
   });
-  const bad = await s.call("POST", "/namespaces", key, { name: "../etc" });
+  const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [] };
+  const bad = await s.call("POST", "/indexes", key, { name: "../etc", schema });
   assert.equal(bad.status, 400);
   assert.equal(bad.body.code, "invalid");
   assert.match(bad.body.error, /^name: use parts of letters/);
-  assert.equal(
-    (await s.call("POST", "/namespaces", key, { name: "a", visibility: "secret" })).status,
-    400,
-  );
-  assert.equal((await s.call("GET", "/namespaces", "sw_nope_nope")).status, 401);
-  assert.equal((await s.call("GET", "/namespaces", "not.a.jwt")).status, 401);
+  assert.equal((await s.call("GET", "/indexes", "sw_nope_nope")).status, 401);
+  assert.equal((await s.call("GET", "/indexes", "not.a.jwt")).status, 401);
 });
 
 test("only the admin token creates organizations", { skip }, async () => {
@@ -112,7 +109,7 @@ test("each key has its own limit, wherever it calls from", { skip }, async () =>
   });
   const statuses = [];
   for (let i = 0; i < 5; i++) {
-    statuses.push((await s.call("GET", "/namespaces", key, undefined, from())).status);
+    statuses.push((await s.call("GET", "/indexes", key, undefined, from())).status);
   }
   assert.deepEqual(statuses, [200, 200, 200, 200, 429]);
 });
@@ -139,9 +136,9 @@ test("health checks are never rate limited", { skip }, async () => {
 test("large bodies are turned away", { skip }, async () => {
   const s = await server({ bodyLimit: 1024 });
   const { key } = await s.org();
-  const big = { message: "big", changes: [{ path: "a", text: "x".repeat(4096) }] };
+  const big = { documents: [{ id: "x".repeat(4096) }] };
   assert.equal(
-    (await s.call("POST", "/namespaces/prod%2Fapp/branches/main/commits", key, big)).status,
+    (await s.call("POST", "/indexes/prod%2Fapp/branches/main/documents", key, big)).status,
     413,
   );
 });
@@ -160,7 +157,7 @@ test("settings are checked at start", () => {
   assert.equal(loadConfig({ ...base, SKYWAKE_API_TRUST_PROXY: "true" }).trustProxy, 1);
   assert.equal(loadConfig({ ...base, SKYWAKE_API_TRUST_PROXY: "2" }).trustProxy, 2);
   assert.throws(() => loadConfig({ ...base, SKYWAKE_API_TRUST_PROXY: "yes" }));
-  const empty = loadConfig({ ...base, SKYWAKE_API_STS_ROLE_ARN: "", AWS_ENDPOINT: "" });
+  const empty = loadConfig({ ...base, SKYWAKE_API_STS_ENDPOINT: "", AWS_ENDPOINT: "" });
   assert.equal(empty.sts, undefined);
   assert.equal(empty.s3.endpoint, null);
 });

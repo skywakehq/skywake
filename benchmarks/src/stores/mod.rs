@@ -58,7 +58,6 @@ pub(crate) struct Store {
     pub store: Arc<dyn ObjectStore>,
     pub log: Arc<Log>,
     pub name: String,
-    pub location: String,
     pub settings: Value,
     place: Place,
 }
@@ -70,16 +69,15 @@ enum Place {
 
 impl Store {
     pub(crate) fn open(options: &Options) -> Result<Self> {
-        let (raw, place, name, location) = match options.kind.as_str() {
+        let (raw, place, name) = match options.kind.as_str() {
             "local" | "slow" => {
                 let dir = tempfile::Builder::new().prefix("bench-").tempdir()?;
-                let location = dir.path().to_string_lossy().into_owned();
-                let raw = skywake_core::open_store(&location)?;
+                let raw = skywake_core::open_store(&dir.path().to_string_lossy())?;
                 let name = match options.kind.as_str() {
                     "local" => "local".to_string(),
                     _ => slow_name(options),
                 };
-                (raw, Place::Folder(dir), name, location)
+                (raw, Place::Folder(dir), name)
             }
             location if location.starts_with("s3://") => {
                 if !options.allow_remote && !local_endpoint() {
@@ -90,7 +88,7 @@ impl Store {
                 let at = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
                 let location = format!("{}/bench-{at}", location.trim_end_matches('/'));
                 let raw = skywake_core::open_store(&location)?;
-                (raw.clone(), Place::Bucket(raw), location.clone(), location)
+                (raw.clone(), Place::Bucket(raw), location)
             }
             other => bail!("unknown store `{other}`: use local, slow or s3://bucket/folder"),
         };
@@ -119,7 +117,6 @@ impl Store {
             store,
             log,
             name,
-            location,
             settings,
             place,
         })

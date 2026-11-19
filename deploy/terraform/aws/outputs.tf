@@ -1,5 +1,5 @@
 output "region" {
-  description = "Where everything was made. Run agents here too."
+  description = "Where everything was made. Run your clients here too."
   value       = local.region
 }
 

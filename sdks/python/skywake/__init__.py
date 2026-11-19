@@ -1,5 +1,4 @@
 from .client import AsyncSkywake, Skywake
-from .disk import Disk
 from .errors import (
     AuthError,
     Conflict,
@@ -17,7 +16,6 @@ __all__ = [
     "AsyncSkywake",
     "AuthError",
     "Conflict",
-    "Disk",
     "Index",
     "InvalidRequest",
     "MergeConflict",

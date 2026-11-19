@@ -6,34 +6,24 @@ every change has to pass, and how to send it.
 ## The layout
 
 ```
-crates/      the Rust workspace: storage engine, mount, daemon, CLI
+crates/      the Rust workspace: storage, the search index, the cache tier, the CLI
 apps/        the API, the web console and the website
 packages/    code the apps share: the API contract, the design system, TypeScript and ESLint settings
-sdks/        the TypeScript and Python SDKs
+sdks/        the SDKs: TypeScript, Python, Go, Rust, Ruby, Java and C#
 e2e/         tests of the whole system
-docker/      self-hosting with Docker Compose; dev/ has local S3 and Postgres, and a Linux container with FUSE
-scripts/     the console stack, the formatter, the Linux shell
+docker/      self-hosting with Docker Compose; dev/ has local S3 and Postgres
+scripts/     the console stack, the formatter, the benchmarks
 benchmarks/  system benchmarks (microbenchmarks live in each crate's benches/)
 ```
 
 ## Rust
 
-The storage engine and the CLI build anywhere with a recent stable Rust:
+The index, the storage engine and the CLI build anywhere with a recent stable Rust:
 
 ```bash
 cargo build
 cargo test
 cargo clippy --all-targets -- -D warnings
-```
-
-The mount and `skywaked` need FUSE, which means Linux. On macOS or Windows,
-`scripts/shell.sh` builds a Linux container with FUSE, mounts the repository at
-`/skywake` and runs whatever you pass it:
-
-```bash
-docker compose -f docker/dev/compose.yaml up -d   # the local S3 the container talks to
-scripts/shell.sh cargo test                       # every test, including the mount's
-scripts/shell.sh                                  # or an interactive shell
 ```
 
 The benchmarks run through `scripts/bench.sh`; see [benchmarks/README.md](../benchmarks/README.md).
@@ -82,10 +72,10 @@ When a new run is published in `docs/benchmarks.md`, update that file, not the p
 2. Keep each pull request to one change. Add tests for behaviour you change,
    and a benchmark when the change is about speed.
 3. Write commit messages in plain language: what changed and why, in the
-   imperative ("Save small files inside their folder's tree").
+   imperative ("Fold built writes into parts").
 4. Make sure `cargo test`, `cargo clippy` and `scripts/format.sh --check` pass.
 
-Changes that touch durability (saves, crash recovery, branch takeover) need
+Changes that touch durability (writes, builds, merges, garbage collection) need
 a test that shows the guarantee still holds.
 
 ## Conduct and license

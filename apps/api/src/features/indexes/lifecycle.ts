@@ -88,7 +88,7 @@ export async function makeIndex(
  */
 export async function deleteIndex(c: Ctx, index: { org: string; name: string; folder: string }) {
   const { db, stores, deleter } = c.var.services;
-  if (!(await removeAndDelete(db, "index", index.org, index.name))) return;
+  if (!(await removeAndDelete(db, index.org, index.name))) return;
   stores.close(index.folder);
   void deleter.drain().catch(() => {});
 }

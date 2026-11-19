@@ -74,7 +74,7 @@ export const createEnvironment = createRoute({
   path: "/environments",
   operationId: "createEnvironment",
   tags: ["environments"],
-  summary: "Makes an environment. It has no region; each namespace and index picks its own.",
+  summary: "Makes an environment. It has no region; each index picks its own.",
   security: signedIn,
   request: { body: body(NewEnvironment) },
   responses: { 201: json(Environment, "The environment."), ...errors(400, 401, 403, 409) },
@@ -145,7 +145,7 @@ export const setEnvironmentStore = createRoute({
   tags: ["environments"],
   summary:
     "Keeps the environment's data in your own bucket. The API checks it can write, list and " +
-    "delete there first. Only while the environment holds no namespaces or indexes.",
+    "delete there first. Only while the environment holds no indexes.",
   security: signedIn,
   request: { params: EnvironmentParams, body: body(NewEnvironmentStore) },
   responses: {

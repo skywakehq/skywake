@@ -3,7 +3,7 @@
 import { cn } from "@skywake/ui/lib/utils";
 import { city, type Region } from "@/features/environments/regions";
 
-/** The region a new disk or index starts with: the server's default, else the first. */
+/** The region a new index starts with: the server's default, else the first. */
 export function defaultRegion(regions: Region[]) {
   return (regions.find((r) => r.default) ?? regions[0])?.name;
 }

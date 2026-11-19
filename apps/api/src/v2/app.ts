@@ -6,7 +6,6 @@ import type { Api, AppEnv, Services } from "../http/context.ts";
 import { jsonPath } from "../http/errors.ts";
 import { identify } from "../http/identify.ts";
 import { registerAccount } from "./account.ts";
-import { registerDisks } from "./disks.ts";
 import { errorBody, errorHandler, Failure } from "./errors.ts";
 import { innerApp } from "./forward.ts";
 import { registerIndexes } from "./indexes.ts";
@@ -15,8 +14,6 @@ import { type Scope, scopeOf } from "./scope.ts";
 export type V2Env = { Variables: AppEnv["Variables"] & { scope: () => Promise<Scope> } };
 export type V2 = OpenAPIHono<V2Env>;
 export type V2Ctx = Context<V2Env>;
-
-const UNROUTED = [v2.disks.readFile, v2.disks.writeFile, v2.disks.deleteFile, v2.disks.upload];
 
 export function v2App(services: Services, v1: Api) {
   const inner = innerApp(services, v1);
@@ -38,10 +35,8 @@ export function v2App(services: Services, v1: Api) {
     await next();
   });
   registerAccount(api);
-  registerDisks(api);
   registerIndexes(api);
   v2.describe(api);
-  for (const route of UNROUTED) api.openAPIRegistry.registerPath(route);
   api.doc31("/openapi.json", v2.info);
   api.onError(errorHandler(services.log));
   return api;

@@ -42,10 +42,10 @@ Both settings are fixed when the image is built: `docker build -f apps/docs/Dock
 
 ## Topology
 
-Skywake is fast when everything sits close together. A commit makes several bucket requests one after another, and every API write waits on Postgres. Inside one region each trip takes a few milliseconds; across regions it takes 50 to 150.
+Skywake is fast when everything sits close together. A write makes several bucket requests one after another, and every API write waits on Postgres. Inside one region each trip takes a few milliseconds; across regions it takes 50 to 150.
 
-- Put the agents, the API, the chunk cache, Postgres and the bucket in **one region**.
-- For data in more than one region, such as the EU and the US, run **one install per region**, each with its own bucket and Postgres. An agent talks to the install in its own region.
+- Put your clients, the API, the cache nodes, Postgres and the bucket in **one region**.
+- For data in more than one region, such as the EU and the US, run **one install per region**, each with its own bucket and Postgres. A client talks to the install in its own region.
 - The console can live anywhere. People don't notice a few extra milliseconds.
 
 The API checks this when it starts. If the bucket or Postgres is in another region than `AWS_REGION`, or a round trip takes more than 5 ms, it logs a warning that says what will be slower. Set `SKYWAKE_API_PLACEMENT_CHECK=false` to turn the check off.

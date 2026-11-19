@@ -30,7 +30,7 @@ You only need to create an index when you want to choose its fields, types or re
 }
 ```
 
-The new index starts with an empty `main` branch. If the name is already taken by a disk or an index in the environment, you get a `Conflict` error.
+The new index starts with an empty `main` branch. If the name is already taken by an index in the environment, you get a `Conflict` error.
 
 When the environment has an embedding model and the schema has no vectors, the index gets a hidden vector, `_meaning`, made from its first `text` or `string` field. That is what lets `query("words")` search by meaning.
 
@@ -66,7 +66,6 @@ You can also skip this step. Upserting to an index that doesn't exist creates it
 | `dropAttributes` | list of names              | Fields to remove, with their values. Refused while the index has more than one branch.                               |
 | `readOnly`       | bool                       | While this is true, writes are refused.                                                                              |
 | `retentionDays`  | int, 0 to 36500, or `null` | How long replaced versions are kept. `null` keeps all of them. See [time travel](./time-travel.mdx).                 |
-| `pinned`         | `{ replicas }` or `null`   | Pin, repin or unpin. See [pinning and replicas](./pinning-and-replicas.mdx).                                         |
 
 Python takes the same settings as `read_only`, `retention_days`, `drop_attributes` and so on. Over HTTP it is `PATCH /v2/indexes/{index}`.
 

@@ -16,23 +16,14 @@ def segment(name):
     return quote(str(name), safe="")
 
 
-def file_path(path):
-    return "/".join(quote(part, safe="") for part in path.lstrip("/").split("/"))
-
-
 def compact(fields):
     return {name: value for name, value in fields.items() if value is not None}
 
 
-def raw(method, path, query=None, json=None, content=None):
-    response = yield Request(method, path, compact(query or {}), json, content)
+def call(method, path, query=None, body=None):
+    response = yield Request(method, path, compact(query or {}), body)
     if response.status >= 400:
         raise error_of(response.status, response.headers, response.content)
-    return response
-
-
-def call(method, path, query=None, body=None, content=None):
-    response = yield from raw(method, path, query, body, content)
     return json.loads(response.content) if response.content else None
 
 

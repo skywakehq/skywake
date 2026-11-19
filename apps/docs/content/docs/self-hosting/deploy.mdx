@@ -1,0 +1,61 @@
+---
+title: skywake deploy
+icon: Rocket
+description: Plan, price and run Skywake on your own machine or cloud from the CLI.
+---
+
+[`skywake deploy`](/reference/cli/deploy) runs Skywake on your own machine or in your own cloud. With no flags it is guided: it finds where it can run, shows what it will make and what that costs each month, and asks before it changes anything.
+
+```bash norun
+skywake deploy
+```
+
+## Look before you deploy
+
+```bash norun
+skywake deploy plan --target aws    # what it would make on AWS, and the monthly cost
+skywake deploy cost --data 500      # every cloud and size side by side, for 500 GB
+```
+
+`plan` and `cost` change nothing.
+
+## Settings
+
+| Flag         | Meaning                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `--target`   | Where it runs: `local`, `docker`, `kubernetes`, `aws`, `gcp` or `azure`.                    |
+| `--size`     | `tiny`, `small`, `medium` or `large`.                                                       |
+| `--region`   | The cloud region, such as `us-east-1`.                                                      |
+| `--domain`   | A domain for HTTPS, such as `search.example.com`.                                           |
+| `--bucket`   | Use a bucket you already have instead of making one.                                        |
+| `--database` | `bundled` (the default), `managed` by the cloud, or `external` from `SKYWAKE_DATABASE_URL`. |
+| `--host`     | For the `docker` target: the server, as `user@host`.                                        |
+| `--version`  | The release to run. By default, the CLI's own version.                                      |
+
+The settings are saved in `./skywake.deploy.toml`, or the file you pass with `--config`. For scripts, add `--yes --json`:
+
+```bash norun
+skywake deploy --target local --yes --json
+```
+
+## Look after it
+
+| Command                  | What it does                                                          |
+| ------------------------ | --------------------------------------------------------------------- |
+| `skywake deploy list`    | The deployments set up from this machine.                             |
+| `skywake deploy status`  | Whether it's running, and where.                                      |
+| `skywake deploy logs`    | The services' logs.                                                   |
+| `skywake deploy doctor`  | Checks the deployment and what it needs, with a fix for each problem. |
+| `skywake deploy upgrade` | Fetches a new release, then restarts service by service.              |
+| `skywake deploy stop`    | Stops the services and keeps the data.                                |
+| `skywake deploy destroy` | Deletes the deployment and all its data. It names everything first.   |
+
+To run the pieces yourself instead, see [Docker Compose](./docker-compose.mdx) for one machine or the [Helm chart](./kubernetes.mdx) for Kubernetes.
+
+## Next
+
+<Cards>
+  <Card href="./what-to-run.mdx" />
+  <Card href="./your-bucket.mdx" />
+  <Card href="/reference/cli/deploy" />
+</Cards>

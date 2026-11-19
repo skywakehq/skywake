@@ -15,18 +15,11 @@ class Request:
     path: str
     query: dict = field(default_factory=dict)
     json: object = None
-    content: bytes | None = None
     headers: dict = field(default_factory=dict)
 
     def build(self, http):
         query = {name: _plain(value) for name, value in self.query.items() if value is not None}
-        headers = dict(self.headers)
-        if self.content is not None:
-            headers["content-type"] = "application/octet-stream"
-        json = self.json if self.content is None else None
-        return http.build_request(
-            self.method, self.path, params=query, json=json, content=self.content, headers=headers
-        )
+        return http.build_request(self.method, self.path, params=query, json=self.json, headers=dict(self.headers))
 
 
 @dataclass

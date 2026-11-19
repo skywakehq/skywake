@@ -7,7 +7,7 @@ import { navigate } from "@/components/shell/router";
 import { useEnvironments } from "@/features/environments/use-environments";
 import { Select } from "@/features/indexes/fields";
 import { act } from "@/features/settings/settings";
-import { useEnvironment } from "@/hooks/use-ns";
+import { useEnvironment } from "@/hooks/use-environment";
 import { withBase } from "@/lib/zone";
 
 type Access = "read" | "write" | "admin";

@@ -23,17 +23,13 @@ final class FakeApi implements AutoCloseable {
         }
     }
 
-    record Reply(int status, Object body, Map<String, String> headers, byte[] raw) {
+    record Reply(int status, Object body, Map<String, String> headers) {
         static Reply json(Object body) {
-            return new Reply(200, body, Map.of(), null);
+            return new Reply(200, body, Map.of());
         }
 
         static Reply status(int status, Object body) {
-            return new Reply(status, body, Map.of(), null);
-        }
-
-        static Reply raw(byte[] raw) {
-            return new Reply(200, null, Map.of(), raw);
+            return new Reply(status, body, Map.of());
         }
 
         static Reply failure(int status, String code, Map<String, Object> extra) {
@@ -51,7 +47,7 @@ final class FakeApi implements AutoCloseable {
         }
 
         Reply withHeader(String name, String value) {
-            return new Reply(status, body, Map.of(name, value), raw);
+            return new Reply(status, body, Map.of(name, value));
         }
     }
 
@@ -97,11 +93,8 @@ final class FakeApi implements AutoCloseable {
     }
 
     private static void send(HttpExchange exchange, Reply reply) throws IOException {
-        byte[] bytes = reply.raw() != null
-                ? reply.raw()
-                : reply.body() == null ? new byte[0] : Json.bytes(reply.body());
-        String type = reply.raw() != null ? "application/octet-stream" : "application/json";
-        exchange.getResponseHeaders().set("content-type", type);
+        byte[] bytes = reply.body() == null ? new byte[0] : Json.bytes(reply.body());
+        exchange.getResponseHeaders().set("content-type", "application/json");
         reply.headers().forEach(exchange.getResponseHeaders()::set);
         boolean empty = bytes.length == 0;
         exchange.sendResponseHeaders(reply.status(), empty ? -1 : bytes.length);

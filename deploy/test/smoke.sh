@@ -48,20 +48,6 @@ out=$(call POST /orgs "{\"name\":\"smoke-$run\"}" "$SKYWAKE_API_ADMIN_TOKEN")
 expect 201 "make an organization" "$out"
 key=$(jq -r .key <<< "${out#* }")
 
-# ── Files: commit, fork, change, merge, read back ───────────────────────
-ns=/namespaces/prod%2Fapp
-expect 201 "make a filesystem" "$(call POST /namespaces '{"name":"prod/app"}')"
-expect 201 "make its main branch" "$(call POST "$ns/branches" '{"name":"main"}')"
-expect 201 "commit to main" "$(call POST "$ns/branches/main/commits" \
-  '{"message":"first","changes":[{"path":"README.md","text":"hello\n"}]}')"
-expect 201 "fork a branch" "$(call POST "$ns/branches" '{"name":"agent","from":"main"}')"
-expect 201 "commit on the fork" "$(call POST "$ns/branches/agent/commits" \
-  '{"message":"agent","changes":[{"path":"notes/plan.md","text":"from the agent\n"}]}')"
-expect "200|201" "merge the fork into main" "$(call POST "$ns/merges" '{"from":"agent","into":"main"}')"
-out=$(call GET "$ns/branches/main/files/content?path=notes%2Fplan.md")
-[[ $out == 200* && $out == *"from the agent"* ]] || fail "main has the merged file" "$out"
-pass "main has the merged file"
-
 # ── A search index: write, then find it ─────────────────────────────────
 expect 201 "make an index" "$(call POST /indexes '{"name":"prod/docs","schema":{"vectors":[{"name":"embedding","dims":2}],"attributes":[{"name":"title","type":"string"}]}}')"
 expect "200|201|202" "write to the index" "$(call POST /indexes/prod%2Fdocs/branches/main/write \

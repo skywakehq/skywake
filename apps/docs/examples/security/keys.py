@@ -1,21 +1,21 @@
 from skywake import PermissionError, Skywake
 
 sky = Skywake()
-sky.create_disk("app")
+sky.index("products").upsert({"id": 1, "text": "red running shoes"})
 
 made = sky.create_key(
     "agent-1",
     "write",
     environment="default",
-    only=["app"],
+    only=["products"],
     expires_in_days=30,
 )
 
 agent = Skywake(key=made["key"])
-agent.disk("app").write("notes.md", "hello")
+agent.index("products").upsert({"id": 2, "text": "waterproof hiking boots"})
 
 try:
-    agent.disk("billing").write("notes.md", "hello")
+    agent.index("billing").upsert({"id": 1, "text": "hello"})
 except PermissionError as error:
     print("billing:", error.message)
 

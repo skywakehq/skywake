@@ -42,17 +42,10 @@ export const ErrorBody = z
 
 export const Role = z.enum(["read", "write", "admin"]).openapi("Role", {
   description:
-    "What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge " +
-    "and start sessions. `admin`: also keys, namespaces, protected branches and the audit log.",
+    "What a caller may do. `read`: query and read rows. `write`: also write rows, fork and merge " +
+    "branches. `admin`: also keys, indexes and the audit log.",
 });
 export type Role = z.infer<typeof Role>;
-
-export const Visibility = z.enum(["private", "public"]).openapi("Visibility", {
-  description:
-    "`private`: only the organization's keys and members. `public`: anyone may also read it, " +
-    "without a key, by naming it `<org>:<namespace>`.",
-});
-export type Visibility = z.infer<typeof Visibility>;
 
 const NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]*(\/[A-Za-z0-9_-][A-Za-z0-9._-]*)*$/;
 
@@ -65,7 +58,7 @@ export const NamespacePattern = z
   .string()
   .max(200)
   .refine((text) => text === "*" || NAME.test(text.replace(/\/\*$/, "")), {
-    message: "use a namespace name, `<folder>/*` or `*`",
+    message: "use an index name, `<folder>/*` or `*`",
   });
 
 export const EnvironmentName = z
@@ -81,23 +74,4 @@ export const NamePattern = z
   })
   .openapi({ example: "docs-*" });
 
-export const Hash = z.string().regex(/^[0-9a-f]{64}$/, "not a commit hash");
-
 export const Time = z.string().openapi({ format: "date-time" });
-
-const namespaceParam = z.string().openapi({
-  param: { name: "namespace", in: "path" },
-  description:
-    "A namespace of your organization, such as `prod/app`, or `<org>:<namespace>` for a public " +
-    "namespace of another one. Encode `/` as `%2F`.",
-  example: "prod%2Fapp",
-});
-
-const branchParam = z.string().openapi({
-  param: { name: "branch", in: "path" },
-  description: "A branch, such as `main` or `agents/fix-1`. Encode `/` as `%2F`.",
-  example: "main",
-});
-
-export const NamespaceParams = z.object({ namespace: namespaceParam });
-export const BranchParams = z.object({ namespace: namespaceParam, branch: branchParam });

@@ -1,4 +1,4 @@
-//! Skywake: a filesystem for agents, stored in an object store.
+//! Skywake storage: content-addressed objects, refs and caches on an object store.
 
 pub mod cache;
 mod clock;

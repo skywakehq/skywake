@@ -1,7 +1,7 @@
 [package]
 name = "skywake-client"
-description = "Skywake for Rust: disks of files and search indexes, with branches, for AI agents."
-keywords = ["vector-search", "full-text-search", "filesystem", "rag", "ai-agents"]
+description = "Skywake for Rust: an open-source search index with vector and full-text search, on your own bucket."
+keywords = ["vector-search", "full-text-search", "rag", "ai-agents"]
 categories = ["database", "api-bindings", "web-programming::http-client"]
 homepage = "https://skywake.dev"
 documentation = "https://skywake.dev/docs"

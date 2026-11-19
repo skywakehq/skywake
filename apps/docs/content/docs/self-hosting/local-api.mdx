@@ -38,7 +38,7 @@ Creating organizations has no v2 route; it stays on `/v1` for now. Organization 
 
 ## Point the tools at it
 
-The SDKs, the CLI and the [MCP server](../agents/mcp.mdx) read `SKYWAKE_URL` and `SKYWAKE_API_KEY`:
+The SDKs, the CLI and the [MCP server](../mcp.mdx) read `SKYWAKE_URL` and `SKYWAKE_API_KEY`:
 
 ```bash norun
 export SKYWAKE_URL=http://localhost:8080 SKYWAKE_API_KEY=sw_...
@@ -74,7 +74,7 @@ For every setting, see the API's README.
 
 ## A second API
 
-Postgres records which disks and indexes exist and where their data is. So if you run a second, separate API on the same Postgres, such as a test run next to your dev server, give it its own database:
+Postgres records which indexes exist and where their data is. So if you run a second, separate API on the same Postgres, such as a test run next to your dev server, give it its own database:
 
 ```bash norun
 docker compose -f docker/dev/compose.yaml exec postgres createdb -U skywake skywake2

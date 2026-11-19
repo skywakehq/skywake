@@ -6,40 +6,6 @@ description: The published numbers, where each one came from, and how to run it 
 
 Every number on this page comes from `docs/benchmarks.md` in the repository. That file names each run, the machine it ran on, its full report and the command that repeats it, so you can check any result yourself.
 
-## Disks on AWS
-
-These runs used an m7i-flex.large (2 vCPUs, 8 GB) against object storage in the same region. The data was random, so nothing could be deduplicated.
-
-| Operation                                                                  |                            Result |
-| -------------------------------------------------------------------------- | --------------------------------: |
-| upload as one commit, 1,074 MB in 10,139 files                             |                   6.4 s, 168 MB/s |
-| the same with `aws s3 cp --recursive`                                      |                   28.7 s, 37 MB/s |
-| upload, nothing changed                                                    |                            172 ms |
-| download, the same 1,074 MB                                                |                   3.5 s, 311 MB/s |
-| [fork](./filesystem/branches.mdx#forks) (`skywake fork`), median of 100    |     95 ms (mixed), 91 ms (source) |
-| [save](./filesystem/autosave.mdx) after rewriting one small file, mounted  |                             93 ms |
-| `kill -9` while writing every 20 ms: oldest lost write                     | 2,032 ms (the save window is 2 s) |
-| [move a branch](./filesystem/mount.mdx#moving-a-branch) to another machine |                            166 ms |
-| mount 20 forks at once                                                     |                            311 ms |
-| `git status` in a mounted fork, warm / local disk                          |                   9.1 ms / 2.9 ms |
-| `cargo build` and tests in a mounted fork, warm / local disk               |                   85.0 s / 84.5 s |
-
-## Shared reads
-
-Twenty agents read every file of one 278 MB tree at the same time, through one daemon's chunk cache. Together they made 1,009 GETs for 999 chunks, so each chunk was fetched from the bucket about once.
-
-## Disks on a laptop
-
-These runs used a 10-core laptop against local object storage, with 1,074 MB in 10,018 files.
-
-| Operation                                     |   Time | Throughput |
-| --------------------------------------------- | -----: | ---------: |
-| `aws s3 cp --recursive`                       | 23.8 s |    45 MB/s |
-| [`skywake upload`](/reference/cli/upload)     | 13.9 s |    77 MB/s |
-| `skywake upload`, nothing changed             | 119 ms |            |
-| [`skywake download`](/reference/cli/download) |  4.4 s |   243 MB/s |
-| `skywake fork`                                |  15 ms |            |
-
 ## Vector index
 
 The first set ran on S3: an i4i.4xlarge in ap-southeast-2 against a bucket in the same region, on 2026-11-10. For warm queries, the index head stays on the machine.
@@ -70,20 +36,10 @@ These runs used MS MARCO passages. Cold queries ran on the slow store, and warm 
 | 8.8M passages, 100 queries cold   | p50 315 / p90 353 / p99 400 ms                |
 | 8.8M passages, 1,000 queries warm | p50 5.5 / p90 23.5 / p99 56.5 ms              |
 
-## Pinned indexes
-
-These runs used a MacBook Pro running three API servers, with 100,000 rows × 64 dimensions and 48 clients.
-
-| Phase                                                   |   QPS | p50 ms | p99 ms |
-| ------------------------------------------------------- | ----: | -----: | -----: |
-| unpinned                                                | 2,209 |   18.9 |   61.4 |
-| [pinned](./indexes/pinning-and-replicas.mdx), 1 replica | 1,841 |   24.5 |   52.1 |
-| pinned, 3 replicas                                      | 2,294 |   18.6 |   56.4 |
-
 ## Run them yourself
 
 ```bash norun
-scripts/bench.sh micro --quick    # also: index, filesystem, pinning, cloud
+scripts/bench.sh index --quick    # a 5,000-row set on the local store
 ```
 
 `docs/benchmarks.md` lists the exact command for each section on this page.

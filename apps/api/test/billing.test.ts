@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
 import { test } from "node:test";
-
-import { eq } from "drizzle-orm";
 
 import Stripe from "stripe";
 
 import { loadConfig } from "../src/config.ts";
-import { billingUsage, filesystemSizes, namespaces } from "../src/db/schema.ts";
+import { billingUsage } from "../src/db/schema.ts";
 import { METERS, rawCents, unitCents } from "../src/features/billing/catalog.ts";
 import type { Notice } from "../src/features/billing/payments.ts";
 import * as billing from "../src/features/billing/queries.ts";
@@ -91,8 +88,6 @@ test("prices in the catalog become exact Stripe unit prices", () => {
     embeddings: "0.001",
     reranks: "0.002",
     pinned: "0.00009765625",
-    files_storage: "0.000013377568",
-    files_egress: "0.01171875",
   });
   assert.equal(rawCents("writes", BigInt(GiB)), 150);
   assert.equal(rawCents("queries", 1n << 50n), 75);
@@ -101,8 +96,6 @@ test("prices in the catalog become exact Stripe unit prices", () => {
   assert.equal(rawCents("reranks", 1000n), 2);
   assert.equal(rawCents("pinned", BigInt(GiB) * 3600n * 1000n), 100);
   assert.equal(rawCents("writes", 2_000_000_000n, "2.00"), 373);
-  assert.equal(rawCents("files_storage", BigInt(GiB) * 730n), 10);
-  assert.equal(rawCents("files_egress", BigInt(GiB) * 10n), 120);
 });
 
 const account = (values: Partial<Account> = {}): Account => ({
@@ -150,8 +143,6 @@ test("the estimate is the usage or the minimum, whichever is more", () => {
       totals: new Map([["writes", BigInt(writes)]]),
       storedBytes: 0n,
       indexes: 0n,
-      filesBytes: 0n,
-      filesystems: 0n,
     });
   const small = measured(GiB);
   assert.equal(small.usage_cents, 150);
@@ -166,14 +157,7 @@ test("the estimate is the usage or the minimum, whichever is more", () => {
     totals: new Map(),
     storedBytes: 0n,
     indexes: 2n,
-    filesBytes: BigInt(GiB),
-    filesystems: 1n,
   });
-  assert.equal(free.files.gb, 1);
-  assert.equal(free.files.limit_gb, 5);
-  assert.equal(free.filesystems.count, 1);
-  assert.equal(free.filesystems.limit, 3);
-  assert.equal(free.meters.find((line) => line.meter === "files_egress")!.limit, 10);
   assert.equal(free.plan, "free");
   assert.equal(free.estimate_cents, 0);
   assert.equal(free.indexes.limit, 3);
@@ -778,173 +762,13 @@ test("the operator puts an organization on Enterprise", { skip }, async () => {
   );
 });
 
-const filesystem = async (b: Awaited<ReturnType<typeof billed>>, name: string) => {
-  const { s, key } = b;
-  const made = await s.call("POST", "/namespaces", b.key, { name });
-  if (made.status !== 201) return made;
-  const ref = `/namespaces/${encodeURIComponent(name)}`;
-  assert.equal((await s.call("POST", `${ref}/branches`, key, { name: "main" })).status, 201);
-  return made;
-};
-const commitTo = (b: Awaited<ReturnType<typeof billed>>, name: string, ...changes: unknown[]) =>
-  b.s.call("POST", `/namespaces/${encodeURIComponent(name)}/branches/main/commits`, b.key, {
-    message: "change",
-    changes,
-  });
-const download = async (b: Awaited<ReturnType<typeof billed>>, name: string, path: string) => {
-  const response = await b.s.app.request(
-    `/v1/namespaces/${encodeURIComponent(name)}/branches/main/files/content?path=${path}`,
-    { headers: { authorization: `Bearer ${b.key}` } },
-  );
-  return { status: response.status, bytes: Buffer.from(await response.arrayBuffer()) };
-};
-const randomText = (bytes: number) => randomBytes(bytes / 2).toString("hex");
-
-test(
-  "filesystems are sized, re-sized after a change, and billed as files storage",
-  { skip },
-  async () => {
-    const b = await billed();
-    const { s, id, service } = b;
-    assert.equal((await filesystem(b, "docs")).status, 201);
-    assert.equal(
-      (await commitTo(b, "docs", { path: "a.txt", text: randomText(64 * KiB) })).status,
-      201,
-    );
-    const from = at("2026-11-01T00:00:00Z");
-
-    await service.sampler.run();
-    const [first] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.ok(first && first.bytes > 0n && first.objects > 0);
-    assert.equal(first.stale, false);
-    assert.equal((await billing.usageSince(s.db, id, from)).get("files_storage"), first.bytes);
-
-    b.clock.now = later(b.clock.now, HOUR);
-    await service.sampler.run();
-    const [kept] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.equal(kept!.measured.getTime(), first.measured.getTime());
-    assert.equal((await billing.usageSince(s.db, id, from)).get("files_storage"), 2n * first.bytes);
-
-    assert.equal(
-      (await commitTo(b, "docs", { path: "b.txt", text: randomText(64 * KiB) })).status,
-      201,
-    );
-    const [stale] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.equal(stale!.stale, true);
-    b.clock.now = later(b.clock.now, HOUR);
-    await service.sampler.run();
-    const [grown] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.ok(grown!.bytes > first.bytes);
-    assert.equal(grown!.stale, false);
-
-    b.clock.now = later(b.clock.now, DAY);
-    await service.sampler.run();
-    const [daily] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.ok(daily!.measured.getTime() > grown!.measured.getTime());
-    assert.equal(daily!.bytes, grown!.bytes);
-
-    service.gate.forget(id);
-    const summary = await b.summary();
-    assert.equal(summary.filesystems.count, 1);
-    assert.equal(summary.filesystems.limit, 3);
-    assert.ok(summary.files.gb > 0);
-    assert.equal(summary.files.limit_gb, 5);
-  },
-);
-
-test("downloads are metered by the bytes sent", { skip }, async () => {
-  const b = await billed();
-  const { s, id, service } = b;
-  await filesystem(b, "docs");
-  const text = randomText(10 * KiB);
-  await commitTo(b, "docs", { path: "a.txt", text });
-  const read = await download(b, "docs", "a.txt");
-  assert.equal(read.status, 200);
-  assert.equal(read.bytes.toString(), text);
-  await download(b, "docs", "a.txt");
-  await service.ledger.flush();
-  const totals = await billing.usageSince(s.db, id, at("2026-11-01T00:00:00Z"));
-  assert.equal(totals.get("files_egress"), 2n * BigInt(text.length));
-});
-
-test("the Free plan stops at its files limits, and a paid plan lifts them", { skip }, async () => {
-  const b = await billed();
-  const { s, id, service } = b;
-  for (const name of ["a", "b", "c"]) assert.equal((await filesystem(b, name)).status, 201);
-  const fourth = await filesystem(b, "d");
-  assert.equal(fourth.status, 402);
-  assert.equal(fourth.body.code, "payment_required");
-  assert.match(fourth.body.error, /Free plan includes 3 filesystems/);
-
-  assert.equal((await commitTo(b, "a", { path: "a.txt", text: "hello" })).status, 201);
-  assert.equal((await commitTo(b, "b", { path: "a.txt", text: "hello" })).status, 201);
-  const [row] = await s.db.select().from(namespaces).where(eq(namespaces.org, id)).limit(1);
-  await billing.saveSize(s.db, {
-    folder: row!.folder,
-    org: id,
-    bytes: 5n * BigInt(GiB),
-    objects: 1,
-    measured: b.clock.now,
-  });
-  service.gate.forget(id);
-  const full = await commitTo(b, "a", { path: "b.txt", text: "more" });
-  assert.equal(full.status, 402);
-  assert.match(full.body.error, /5 GB of files/);
-  const upload = await s.app.request("/v1/namespaces/a/uploads", {
-    method: "POST",
-    headers: { authorization: `Bearer ${b.key}`, "content-type": "application/octet-stream" },
-    body: new Uint8Array(Buffer.from("part")),
-  });
-  assert.equal(upload.status, 402);
-  const removed = await commitTo(b, "a", { path: "a.txt", delete: true });
-  assert.equal(removed.status, 201, JSON.stringify(removed.body));
-  assert.equal((await commitTo(b, "a", { path: "c.txt", text: "x" })).status, 402);
-
-  assert.equal((await download(b, "b", "a.txt")).status, 200);
-  await b.use("files_egress", at("2026-11-02T00:00:00Z"), 10n * BigInt(GiB));
-  service.gate.forget(id);
-  const blocked = await download(b, "b", "a.txt");
-  assert.equal(blocked.status, 402);
-  assert.match(blocked.bytes.toString(), /10 GB of file downloads a month/);
-
-  await b.subscribe("launch");
-  service.gate.forget(id);
-  assert.equal((await filesystem(b, "d")).status, 201);
-  assert.equal((await commitTo(b, "a", { path: "c.txt", text: "x" })).status, 201);
-  assert.equal((await download(b, "b", "a.txt")).status, 200);
-});
-
 test("a subscription made before a meter existed gets the new meter", { skip }, async () => {
   const b = await billed();
   const { sub } = await b.subscribe("launch");
   assert.deepEqual(b.payments.metersAdded, []);
-  b.payments.update(sub, { missingMeters: ["files_storage", "files_egress"] });
+  b.payments.update(sub, { missingMeters: ["pinned"] });
   assert.equal((await b.hook({ kind: "subscription", id: sub })).status, 200);
-  assert.deepEqual(b.payments.metersAdded, [
-    { subscription: sub, meters: ["files_storage", "files_egress"] },
-  ]);
+  assert.deepEqual(b.payments.metersAdded, [{ subscription: sub, meters: ["pinned"] }]);
   assert.equal((await b.hook({ kind: "subscription", id: sub })).status, 200);
   assert.equal(b.payments.metersAdded.length, 1);
 });
-
-test(
-  "a filesystem in another region keeps its last size and is not measured here",
-  { skip },
-  async () => {
-    const b = await billed();
-    const { s, id, service } = b;
-    await filesystem(b, "docs");
-    await commitTo(b, "docs", { path: "a.txt", text: randomText(16 * KiB) });
-    await service.sampler.run();
-    const [first] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    await s.db.update(namespaces).set({ region: "elsewhere" }).where(eq(namespaces.org, id));
-
-    b.clock.now = later(b.clock.now, 2 * DAY);
-    await service.sampler.run();
-    const [kept] = await s.db.select().from(filesystemSizes).where(eq(filesystemSizes.org, id));
-    assert.equal(kept!.measured.getTime(), first!.measured.getTime());
-    const usage = await billing.usageSince(s.db, id, at("2026-11-01T00:00:00Z"));
-    assert.equal(usage.get("files_storage"), 2n * first!.bytes);
-    assert.ok(!s.logs.some((line) => line.msg === "filesystem not sized for billing"));
-  },
-);

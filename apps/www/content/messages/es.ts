@@ -3,24 +3,9 @@ import type { HomeMessages } from "./types";
 export const es: HomeMessages = {
   pages: {
     "/": {
-      title: "Skywake: sistema de archivos y búsqueda rápidos en S3 para agentes de IA",
+      title: "Skywake: búsqueda open source sobre almacenamiento de objetos",
       description:
-        "Sistema de archivos y búsqueda open source en tu propio bucket S3. Monta como un disco local, da a cada agente de IA su copia en 10 ms y busca.",
-    },
-    "/filesystem": {
-      title: "Sistema de archivos sobre S3 para agentes de IA: monta, copia y fusiona",
-      description:
-        "Monta S3 o cualquier almacenamiento de objetos como un disco local rápido. Copia 20,000 archivos para cada agente en 10 ms y fusiona los cambios como en Git.",
-    },
-    "/search": {
-      title: "Búsqueda vectorial y de texto completo sobre S3",
-      description:
-        "Búsqueda vectorial, de texto completo e híbrida directo desde tu almacenamiento de objetos. 10 ms en caliente sobre 10M de vectores, sin otra base de datos.",
-    },
-    "/use-cases": {
-      title: "Casos de uso: bases de conocimiento, memoria de agentes, agentes de código y más",
-      description:
-        "Cómo usar Skywake paso a paso para bases de conocimiento, memoria de agentes, sandboxes, agentes de código y documentos, evals, CI y datasets.",
+        "Búsqueda vectorial, de texto completo e híbrida que guarda sus datos en tu propio bucket de S3, R2, GCS o Azure. Una alternativa open source a turbopuffer, bajo Apache-2.0.",
     },
     "/pricing": {
       title: "Precios",
@@ -38,12 +23,11 @@ export const es: HomeMessages = {
     "/benchmarks": {
       title: "Benchmarks",
       description:
-        "Medido en AWS con el bucket en la misma región: copias para agentes, subidas, builds y búsqueda sobre 10M de vectores.",
+        "Búsqueda en 10M de vectores sobre S3, medida en AWS con el bucket en la misma región: consultas en frío y en caliente, filtros, recall y frescura.",
     },
   },
   nav: {
-    filesystem: "Filesystem",
-    search: "Búsqueda",
+    features: "Funciones",
     benchmarks: "Benchmarks",
     pricing: "Precios",
     docs: "Docs",
@@ -57,11 +41,11 @@ export const es: HomeMessages = {
   },
   footer: {
     blurb:
-      "Tu bucket como disco rápido y motor de búsqueda. Open source, en tu propio almacenamiento de objetos.",
+      "Búsqueda open source sobre tu propio almacenamiento de objetos. Vectorial, de texto completo e híbrida, con ramas.",
     product: "Producto",
     project: "Proyecto",
     legal: "Legal",
-    useCases: "Casos de uso",
+    compare: "vs turbopuffer",
     openSource: "Open source",
     privacy: "Privacidad",
     terms: "Términos",
@@ -69,116 +53,83 @@ export const es: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud está en camino. Únete a la lista de espera",
-    titleBefore: "El sistema de archivos y motor de búsqueda escalable",
-    titleAccent: "para agentes de IA.",
-    screenshotAlt:
-      "La consola de Skywake, con los discos de un equipo y los agentes que trabajan en ellos",
+    titleBefore: "El índice de búsqueda open source",
+    titleAccent: "sobre almacenamiento de objetos.",
+    line: "Búsqueda vectorial, de texto completo e híbrida, con tus datos en S3, R2, GCS o Azure. Una alternativa open source a turbopuffer que puedes ejecutar tú mismo desde hoy.",
+    docsCta: "Leer la documentación",
+    screenshotAlt: "La consola de Skywake haciendo una búsqueda en el índice de un centro de ayuda",
     getStartedCta: "Empezar",
   },
-  useCases: {
-    label: "Casos de uso",
-    heading: ["Tú construyes los agentes.", "Skywake se encarga de archivos y búsqueda."],
-    more: "Ver todos los casos de uso",
-    cta: "Saber más",
+  features: {
+    label: "Funciones",
+    title: "Busca por significado, por palabras exactas o por ambos.",
+    line: "Una sola consulta combina vectores, BM25 y filtros. El texto se convierte en embeddings por ti, así que no necesitas traer vectores.",
     items: [
       {
-        name: "Base de conocimiento",
-        title: "Una base de conocimiento para tus agentes.",
-        line: "Tus documentos y archivos en un solo lugar, con búsqueda integrada. Los agentes siempre encuentran la última versión, nunca una copia vieja.",
+        name: "Encuentra por significado",
+        line: "Busca “restablecer una contraseña perdida” y encuentra la página “Recuperar la cuenta”.",
+        art: "vector",
       },
       {
-        name: "Capa de contexto",
-        title: "Una memoria y capa de contexto central para tus agentes.",
-        line: "Los agentes guardan lo que aprenden como archivos simples. La próxima vez siguen donde lo dejaron, y otros agentes también pueden leerlo.",
+        name: "Encuentra palabras exactas",
+        line: "Nombres, códigos de error y frases, incluso con una errata.",
+        art: "fullText",
       },
       {
-        name: "Almacenamiento para agentes",
-        title: "Un sistema de archivos compartido para agentes.",
-        line: "Los agentes leen y escriben los mismos archivos, como en una unidad compartida. El trabajo guardado sobrevive aunque se caiga una máquina.",
+        name: "Ambas en una búsqueda",
+        line: "Significado y palabras exactas se ordenan juntos, así el mejor resultado sale primero.",
+        art: "hybrid",
       },
       {
-        name: "Agentes de código en la nube",
-        title: "Una copia de tu repo para cada agente.",
-        line: "Cada agente tiene su propia copia de tu proyecto en 10 ms. Ejecuta muchos a la vez, quédate con el mejor resultado y descarta el resto.",
+        name: "Cuenta y agrupa resultados",
+        line: "Totales, sumas y grupos sobre tus datos, en la misma consulta.",
+        art: "analytics",
       },
       {
-        name: "Evals y RL",
-        title: "Un entorno limpio para cada ejecución.",
-        line: "Cada ejecución parte del mismo entorno, en su propia copia. Ejecuta miles en paralelo sin que una afecte a otra.",
-      },
-    ],
-  },
-  git: {
-    label: "Git",
-    titleBefore: "Funciona con",
-    titleAccent: "Git.",
-    line: "Git guarda tu código. Skywake guarda toda la carpeta: paquetes, datos y cachés.",
-    works: "Git funciona como siempre en cada copia.",
-    note: "Sigue subiendo tu código a Git. Skywake guarda todo lo demás.",
-  },
-  products: {
-    items: [
-      {
-        name: "Filesystem",
-        href: "/filesystem",
-        icon: "files",
-        before: "Dale a cada agente ",
-        highlight: "su propia copia de tus archivos",
-        after:
-          ". Lista en 10 ms, se abre como una carpeta normal y se fusiona cuando termina el trabajo.",
-        points: [
-          "Copia 20,000 archivos en 10 ms",
-          "Ábrela sin descargarlo todo",
-          "Revisa y fusiona cambios como en Git",
-        ],
+        name: "Crea una rama de un índice",
+        line: "Haz fork de un índice al instante, prueba datos nuevos en la copia y fusiónalo de vuelta cuando esté bien.",
+        art: "branches",
       },
       {
-        name: "Búsqueda",
-        href: "/search",
-        icon: "search",
-        before: "Busca ",
-        highlight: "por significado, por palabras exactas o ambas",
-        after: ". Un solo índice, copiado para cada agente como tus archivos.",
-        points: [
-          "10 ms en caliente sobre 10M de vectores",
-          "Compatible con cualquier modelo de embeddings",
-          "Copia un índice sin tocar main",
-        ],
+        name: "Deshaz cualquier cambio",
+        line: "Vuelve a cualquier versión anterior del índice.",
+        art: "timeTravel",
       },
     ],
   },
   architecture: {
     label: "Cómo funciona",
-    titleBefore: "Tan rápido como",
-    titleAccent: "tu propio disco.",
-    line: "Los archivos se sirven desde una caché NVMe compartida, justo al lado de tus agentes.",
+    titleBefore: "Los datos, en tu bucket.",
+    titleAccent: "La velocidad, en la caché.",
+    line: "Cada fila vive en el almacenamiento de objetos, a precio de almacenamiento de objetos. Lo que consultas se queda en NVMe junto a los servidores, así que una búsqueda en caliente nunca toca el bucket.",
     stats: [
-      "para escribir un archivo pequeño",
-      "para leer un archivo pequeño",
-      "más lento que un disco local en una build completa",
+      "consulta en caliente sobre 10M de vectores",
+      "consulta en frío, directa desde el bucket",
+      "desde la escritura hasta que se puede buscar",
     ],
   },
   benchmarks: {
     label: "Benchmarks",
-    title: "Velocidad de disco local, medida desde tu bucket.",
+    title: "10M de vectores, buscados en 10 ms.",
   },
-  cost: {
-    label: "Costo",
-    chartTitle: "Almacenamiento para {agents} agentes",
-    chart: {
-      without: "Sin Skywake",
-      with: "Con Skywake",
-      withoutDetail: "{agents} copias completas de {workspaceGb} GB",
-      withDetail: "{workspaceGb} GB compartidos + {agents} × {addedMb} MB de cambios",
-      perMonth: "{value} al mes",
-      gap: "{x}× menos",
-    },
-    headline: {
-      storage: "menos almacenamiento",
-      cost: "menor costo",
-      starts: "agentes que arrancan más rápido",
-      and: "y",
-    },
+  compare: {
+    label: "Alternativa a turbopuffer",
+    title: "Construido como turbopuffer. Open source.",
+    line: "Como turbopuffer, Skywake guarda el índice en el almacenamiento de objetos y pone una caché delante. Eso es lo que hace baratos los índices grandes. La diferencia es que puedes leer el código y ejecutarlo tú mismo.",
+    points: [
+      {
+        name: "Apache-2.0",
+        line: "Todo el motor es open source. Léelo, cámbialo, publícalo.",
+      },
+      {
+        name: "Tu bucket",
+        line: "Funciona sobre S3, R2, GCS o Azure Blob, en tu propia cuenta.",
+      },
+      {
+        name: "Ramas",
+        line: "Crea una rama de un índice sin copiarlo y luego fusiona los cambios.",
+      },
+    ],
   },
   openSource: {
     label: "Open source",
@@ -189,12 +140,11 @@ export const es: HomeMessages = {
   waitlist: {
     eyebrow: "Skywake Cloud",
     title: "Skywake gestionado está en camino. Entérate primero.",
-    line: "Únete a la lista de espera para archivos y búsqueda alojados.",
+    line: "Únete a la lista de espera para búsqueda alojada sobre tu propio bucket.",
     selfHost: "Instálalo tú mismo con la documentación",
     star: "Dar estrella en GitHub",
     openTitle: "Empieza a construir con Skywake.",
-    openLine:
-      "Dale a cada agente un workspace con ramas y un índice de búsqueda en tu propio almacenamiento de objetos.",
+    openLine: "Crea un índice en tu propio almacenamiento de objetos y haz tu primera búsqueda.",
     openCta: "Empezar",
     form: {
       email: "Correo electrónico",
@@ -207,123 +157,17 @@ export const es: HomeMessages = {
     },
   },
   layers: {
-    alt: "Los agentes y las apps usan un sistema de archivos y un índice de búsqueda. Ambos leen tu almacenamiento de objetos a través de una caché compartida. Solo los cambios se escriben de vuelta, cada 2 segundos.",
-    agents: ["Agentes", "y tus apps"],
-    filesystem: ["Sistema de archivos", "montar · fork · merge"],
+    alt: "Tus apps y agentes consultan un índice. El índice lee tu almacenamiento de objetos a través de una caché NVMe, y cada escritura es duradera cuando la llamada termina.",
+    agents: ["Apps", "y agentes"],
     index: ["Índice", "vectorial · texto completo"],
-    cache: ["Caché", "NVMe + compartida"],
+    cache: ["Caché", "NVMe"],
     storage: ["Almacenamiento de objetos", "tu bucket"],
-  },
-  productPages: {
-    getStarted: "Empezar",
-    star: "Dar estrella en GitHub",
-    filesystem: {
-      label: "Filesystem",
-      title: "Tu bucket, como un",
-      accent: "disco local rápido.",
-      line: "Monta tu almacenamiento de objetos como una carpeta normal. Dale a cada agente su propia copia en 10 ms y luego fusiona los cambios.",
-      features: [
-        {
-          name: "Cada agente tiene su propia copia",
-          line: "Una copia completa de tus archivos en 10 ms, sin importar su tamaño. No se duplica nada.",
-          art: "fork",
-        },
-        {
-          name: "Funciona como una carpeta normal",
-          line: "Móntalo en cualquier máquina. Tus herramientas, scripts y Git funcionan sin cambios.",
-          art: "mount",
-        },
-        {
-          name: "Se guarda solo",
-          line: "Los cambios llegan a tu bucket cada 2 segundos, sin hacer commit.",
-          art: "autosave",
-        },
-        {
-          name: "Resiste caídas",
-          line: "Apaga la máquina a mitad de una escritura. Cada cambio guardado sigue ahí.",
-          art: "recover",
-        },
-        {
-          name: "Mira qué cambió cada agente",
-          line: "Cada archivo que creó, editó o borró, comparado con main.",
-          art: "diff",
-        },
-        {
-          name: "Quédate solo con lo bueno",
-          line: "Fusiona los cambios de un agente en main, archivo por archivo.",
-          art: "merge",
-        },
-        {
-          name: "Main siempre a salvo",
-          line: "Los agentes no pueden escribir en main. Solo cambia cuando tú fusionas.",
-          art: "protect",
-        },
-      ],
-    },
-    search: {
-      label: "Búsqueda",
-      title: "Busca en todo",
-      accent: "tu bucket.",
-      line: "Búsqueda vectorial, de texto completo e híbrida sobre tu almacenamiento de objetos, servida desde una caché NVMe rápida.",
-      features: [
-        {
-          name: "Encuentra por significado",
-          line: "Busca “restablecer una contraseña perdida” y encuentra la página “Recuperar la cuenta”.",
-          art: "vector",
-        },
-        {
-          name: "Encuentra palabras exactas",
-          line: "Nombres, códigos de error y frases, incluso con una errata.",
-          art: "fullText",
-        },
-        {
-          name: "Ambas en una búsqueda",
-          line: "Significado y palabras exactas se ordenan juntos, así el mejor resultado sale primero.",
-          art: "hybrid",
-        },
-        {
-          name: "Cuenta y agrupa resultados",
-          line: "Totales, sumas y grupos sobre tus datos, en la misma consulta.",
-          art: "analytics",
-        },
-        {
-          name: "Prueba sobre una copia",
-          line: "Haz fork de un índice, prueba datos nuevos y deja producción intacta.",
-          art: "branches",
-        },
-        {
-          name: "Deshaz cualquier cambio",
-          line: "Vuelve a cualquier versión anterior del índice.",
-          art: "timeTravel",
-        },
-      ],
-    },
+    note: "las escrituras son duraderas cuando la llamada termina",
   },
   benchmarkPage: {
     line: "Medido en AWS, con el bucket en la misma región.",
-    filesTitle: "Tan rápido como un disco local.",
-    searchTitle: "10M de vectores, buscados en 10 ms.",
-    filesNote: "AWS m7i-flex.large, almacenamiento de objetos en la misma región",
-    searchNote:
-      "10M de vectores × 768 en almacenamiento de objetos, AWS i4i.4xlarge en la misma región",
-    files: [
-      {
-        title: "Dar a un agente su propia copia de 1 GB",
-        verdict: "300× más rápido",
-        labels: ["Skywake", "Copiar los archivos"],
-      },
-      {
-        title: "Guardar 1 GB en tu bucket",
-        verdict: "4.5× más rápido",
-        labels: ["Skywake", "Una subida normal"],
-      },
-      {
-        title: "Compilar y probar un proyecto en Rust",
-        verdict: "Igual que un disco local",
-        labels: ["Skywake", "Disco local"],
-      },
-    ],
-    search: [
+    note: "10M de vectores × 768 en almacenamiento de objetos, AWS i4i.4xlarge en la misma región",
+    charts: [
       {
         title: "Buscar en 10M de vectores",
         verdict: "10 ms ya en caché",
@@ -366,7 +210,7 @@ export const es: HomeMessages = {
         line: "Nosotros lo operamos por ti. Los precios llegan con el lanzamiento.",
         includes: [
           "Nada que instalar ni operar",
-          "Una caché compartida junto a tus agentes",
+          "Una caché rápida delante de tu bucket",
           "Paga solo por lo que usas",
           "Funciona sobre tu propio bucket",
         ],
@@ -375,7 +219,7 @@ export const es: HomeMessages = {
     ],
   },
   legal: {
-    updated: "Última actualización: 15 de noviembre de 2026",
+    updated: "Última actualización: 19 de noviembre de 2026",
     privacy: {
       title: "Privacidad",
       intro:
@@ -390,7 +234,7 @@ export const es: HomeMessages = {
         {
           title: "Qué cubre esta política",
           body: [
-            "Esta política cubre el sitio web, incluidas sus páginas, sus guías y la lista de espera de Cloud. No cubre el software de Skywake que ejecutas tú mismo, que se explica más abajo, ni Skywake Cloud, que tendrá sus propias condiciones de privacidad cuando abra.",
+            "Esta política cubre el sitio web, incluidas sus páginas y la lista de espera de Cloud. No cubre el software de Skywake que ejecutas tú mismo, que se explica más abajo, ni Skywake Cloud, que tendrá sus propias condiciones de privacidad cuando abra.",
           ],
         },
         {
@@ -488,7 +332,7 @@ export const es: HomeMessages = {
         {
           title: "El Skywake que ejecutas tú mismo",
           body: [
-            "El software open source de Skywake que instalas en tus propias máquinas no nos envía nada. Tus archivos, índices, claves y uso se quedan en tu propio bucket y tu propia base de datos, bajo tu control.",
+            "El software open source de Skywake que instalas en tus propias máquinas no nos envía nada. Tus índices, claves y uso se quedan en tu propio bucket y tu propia base de datos, bajo tu control.",
           ],
         },
         {
@@ -556,7 +400,7 @@ export const es: HomeMessages = {
         {
           title: "Información de este sitio",
           body: [
-            "Redactamos el sitio, las guías y la documentación para que sean precisos y útiles, pero son información general, no asesoramiento profesional. Los benchmarks se midieron con el hardware y la configuración que describimos junto a ellos, y tus resultados dependerán de los tuyos. Los planes, las funciones y los precios de Skywake Cloud pueden cambiar antes del lanzamiento.",
+            "Redactamos el sitio y la documentación para que sean precisos y útiles, pero son información general, no asesoramiento profesional. Los benchmarks se midieron con el hardware y la configuración que describimos junto a ellos, y tus resultados dependerán de los tuyos. Los planes, las funciones y los precios de Skywake Cloud pueden cambiar antes del lanzamiento.",
           ],
         },
         {
@@ -595,69 +439,5 @@ export const es: HomeMessages = {
     title: "Aquí no hay nada.",
     line: "Esta página no existe.",
     back: "Volver a la página de inicio",
-  },
-  guides: {
-    eyebrow: "Casos de uso",
-    title: "Empieza por el problema que tienes.",
-    accent: "Así encaja Skywake.",
-    onThisPage: "En esta página",
-    read: "Leer la guía",
-    related: {
-      eyebrow: "Relacionado",
-      title: "Explora más casos de uso.",
-      all: "Todos los casos de uso",
-    },
-    items: {
-      "knowledge-base": {
-        name: "Bases de conocimiento",
-        title: "Cómo crear una gran base de conocimiento para tus agentes",
-        lead: "Guarda tus documentos y su índice de búsqueda en el mismo bucket. Cuando un documento cambia, la búsqueda lo ve en menos de un segundo, sin procesos de sincronización que vigilar.",
-      },
-      "context-layer": {
-        name: "Capas de contexto",
-        title: "Cómo darles a tus agentes una buena capa de memoria",
-        lead: "Dale a cada agente su propia carpeta en tu bucket. Escribe notas como archivos simples, y la siguiente ejecución sigue donde terminó la anterior.",
-      },
-      sandboxes: {
-        name: "Almacenamiento y sandboxes para agentes",
-        title: "Cómo no perder el trabajo de un agente cuando falla su sandbox",
-        lead: "Guarda el trabajo del agente después de cada paso, en tu propio bucket. Si la máquina se cae, otra retoma la tarea donde se quedó.",
-      },
-      "coding-agents": {
-        name: "Agentes de código en la nube",
-        title: "Cómo darle a cada agente de código su propia copia de tu repo",
-        lead: "Guarda tu repo una vez, con sus paquetes y su caché de build. Cada agente tiene su propia copia en 10 ms, y tú fusionas la solución que prefieras.",
-      },
-      "document-agents": {
-        name: "Agentes de documentos",
-        title: "Cómo revisar cada cambio que un agente hace en tus archivos",
-        lead: "Los agentes trabajan sobre una copia de la carpeta. Ves cada cambio que hicieron, te quedas con los buenos y descartas el resto.",
-      },
-      rl: {
-        name: "Entornos de RL y evals",
-        title: "Cómo darle a cada ejecución de RL una copia limpia de su entorno",
-        lead: "Guarda el entorno una vez. Cada ejecución tiene su propia copia limpia en 10 ms, así los resultados son justos y puedes abrir cualquier ejecución rara después.",
-      },
-      ci: {
-        name: "CI y builds",
-        title: "Cómo hacer que los jobs de CI arranquen con la build en caliente",
-        lead: "Guarda tu código y su caché de build juntos una vez por noche. Cada job compila sobre su propia copia, así solo compila lo que cambió.",
-      },
-      previews: {
-        name: "Entornos de preview",
-        title: "Cómo probar cada pull request con datos reales",
-        lead: "Dale a cada pull request su propio workspace, con datos reales y sus dependencias. Desaparece cuando haces merge.",
-      },
-      datasets: {
-        name: "Versiones de datasets",
-        title: "Cómo saber con qué datos se entrenó cada modelo",
-        lead: "Crea ramas de tus datos como del código. Prueba un dataset más limpio en su propia copia, compara los modelos y apunta siempre a los datos exactos de cada uno.",
-      },
-      "reference-data": {
-        name: "Datos de referencia compartidos",
-        title: "Cómo compartir archivos grandes con muchos agentes",
-        lead: "Guarda una vez los archivos grandes compartidos en tu bucket. Cada máquina los descarga una sola vez, y todos sus agentes leen la copia local.",
-      },
-    },
   },
 };

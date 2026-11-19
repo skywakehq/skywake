@@ -13,9 +13,7 @@
 # Uses your AWS CLI login. INSTANCE (i4i.4xlarge) and HOURS (8, the most the
 # machine runs before it turns itself off) change the defaults. MINI=1 runs
 # only the keys check and the index, on SETS (sift-1m cohere-1m), with
-# INDEX_ARGS added to each index run (such as --filters none,1).
-# FILESYSTEM=1 runs only the filesystem suites, latency included, with
-# FS_ARGS added (such as --repeat 3 or --quick). TPUF=1 runs only turbopuffer's
+# INDEX_ARGS added to each index run (such as --filters none,1). TPUF=1 runs only turbopuffer's
 # vector-10m benchmark through one API server on the bucket: Cohere 10M x 1024
 # loaded over HTTP, top 10 at 8 QPS timed at the client, then recall on real
 # held-out queries. The dataset, the exact answers and the loaded index stay
@@ -36,9 +34,7 @@ if [ "${1:-}" = dev ]; then
   TPUF=1 DEV=1 HOURS=${HOURS:-8}
 fi
 MINI=${MINI:-0}
-FILESYSTEM=${FILESYSTEM:-0}
 TPUF=${TPUF:-0}
-FS_ARGS=${FS_ARGS:-}
 if [ "$TPUF" = 1 ]; then
   SETS=${SETS:-cohere-wiki-10m msmarco}
 elif [ "$MINI" = 1 ]; then
@@ -47,7 +43,7 @@ else
   SETS=${SETS:-sift-1m cohere-10m}
 fi
 INDEX_ARGS=${INDEX_ARGS:-}
-if [ "$MINI" = 1 ] || [ "$FILESYSTEM" = 1 ]; then
+if [ "$MINI" = 1 ]; then
   HOURS=${HOURS:-2}
 elif [ "$TPUF" = 1 ]; then
   HOURS=${HOURS:-4}
@@ -110,25 +106,6 @@ i4i.4xlarge, for at most $HOURS hours. Storage and requests are a few cents.
 EOF
     return
   fi
-  if [ "$FILESYSTEM" = 1 ]; then
-    cat <<EOF
-Account $ACCOUNT, region $REGION. A filesystem run.
-
-Creates:
-  bucket        s3://$BUCKET
-  KMS key       $ALIAS (this run doesn't use it)
-  IAM role      $NAME, with an instance profile: this bucket and this key only
-  machine       $INSTANCE (Amazon Linux 2023), turns itself off and is
-                deleted when the run ends, or after $HOURS hours at most
-
-Runs benchmarks/filesystem/run.py on the bucket: store, mount, save, daemon,
-fleet and latency${FS_ARGS:+, with $FS_ARGS}.
-
-Cost: the machine bills by the second, about \$1.90/hour for an i4i.4xlarge
-here, for at most $HOURS hours. Storage and requests are a few cents.
-EOF
-    return
-  fi
   if [ "$MINI" = 1 ]; then
     cat <<EOF
 Account $ACCOUNT, region $REGION. A mini run.
@@ -167,12 +144,10 @@ Runs, in order, saving results to the bucket after each:
   1. customer-managed keys (SSE-KMS and SSE-C) on the real bucket
   2. index: SIFT-1M on S3, cold, warm and warm from the NVMe cache
   3. index: Cohere 10M x 768, the same
-  4. filesystem: benchmarks/filesystem/run.py, every suite, 5 runs each
-  5. pinned indexes: 1M rows through three API servers, unpinned, 1 and 3 replicas
 
 Cost: the machine bills by the second. An i4i.4xlarge is about \$1.40/hour in
-us-east-1 and up to about \$1.90 in other regions; the run takes 4-5 hours
-(\$6-10), and \$15 at most. The KMS key is about \$0.25 (\$1/month, deleted
+us-east-1 and up to about \$1.90 in other regions; the run takes 2-3 hours
+(\$3-6), and \$15 at most. The KMS key is about \$0.25 (\$1/month, deleted
 7 days after \`down\`). Storage and requests are a few cents. Traffic
 between the machine and the bucket is free.
 EOF
@@ -249,7 +224,7 @@ up() {
   userdata=$(mktemp)
   cat >"$userdata" <<EOF
 #!/bin/bash
-export HOME=/root BUCKET=$BUCKET DATA=$DATA DEV=$DEV IDLE=$IDLE FRESH=$FRESH KMS_KEY=$key INSTANCE=$INSTANCE HOURS=$HOURS MINI=$MINI FILESYSTEM=$FILESYSTEM TPUF=$TPUF FS_ARGS="$FS_ARGS" SETS="$SETS" SUITES="${SUITES:-}" INDEX_ARGS="$INDEX_ARGS" NOTE="$note"
+export HOME=/root BUCKET=$BUCKET DATA=$DATA DEV=$DEV IDLE=$IDLE FRESH=$FRESH KMS_KEY=$key INSTANCE=$INSTANCE HOURS=$HOURS MINI=$MINI TPUF=$TPUF SETS="$SETS" SUITES="${SUITES:-}" INDEX_ARGS="$INDEX_ARGS" NOTE="$note"
 export AWS_REGION=$REGION AWS_DEFAULT_REGION=$REGION
 for _ in \$(seq 60); do aws sts get-caller-identity >/dev/null 2>&1 && break; sleep 3; done
 aws s3 cp s3://$BUCKET/instance.sh /root/instance.sh && bash /root/instance.sh || shutdown -h now
@@ -334,5 +309,5 @@ forget() {
 
 case "${1:-}" in
   plan | up | status | fetch | down | dev | push | forget) "$1" ;;
-  *) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
+  *) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 1 ;;
 esac

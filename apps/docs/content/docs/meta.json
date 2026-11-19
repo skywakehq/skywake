@@ -2,9 +2,8 @@
   "pages": [
     "index",
     "getting-started",
-    "filesystem",
     "indexes",
-    "agents",
+    "mcp",
     "self-hosting",
     "security",
     "pricing",

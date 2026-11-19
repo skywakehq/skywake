@@ -1,44 +1,39 @@
 # Skywake for TypeScript
 
-A client for Skywake: branches of a filesystem, and search indexes.
+A client for Skywake, the open-source search index: vector and full-text
+search over rows kept in your own bucket, with branches you can fork and merge.
 
 ```bash
-npm install skywake
+npm install @skywake/sdk
 ```
-
-The `skywake` package holds this SDK, `skywake/bash` and the `skywake` command.
-`@skywake/sdk` is the SDK alone, for when you want nothing else.
 
 ```ts
-import { Skywake } from "skywake";
+import { Skywake } from "@skywake/sdk";
 
-const sky = new Skywake({ url: "https://api.skywake.dev", key: process.env.SKYWAKE_KEY! });
+const sky = new Skywake();
 
-// Filesystems
-const main = sky.namespace("prod/app").branch("main");
-const fork = await main.fork("agents/42");
-await fork.write({ "notes.md": "# Plan" }, "Add the plan");
-await sky.namespace("prod/app").merge("agents/42", "main");
-
-// Search indexes
-const products = await sky.indexes.create("prod/products", {
-  vectors: [{ name: "embedding", dims: 3 }],
-  attributes: [{ name: "tag", type: "string" }],
-});
+const products = await sky.createIndex("products");
 await products.upsert([
-  { id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { tag: "billing" } },
+  { id: "mug", text: "a blue coffee mug", price: 12, tags: ["kitchen"] },
+  { id: "cup", text: "a white coffee cup", price: 5, tags: ["kitchen"] },
 ]);
-const hits = await products.query({
-  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
-  topK: 5,
-});
+const hits = await products.query("coffee", { filter: { price: { lt: 10 } }, limit: 5 });
+
+const draft = await products.fork("draft");
+await draft.update("cup", { price: 7 });
+await draft.mergeInto("main");
 ```
 
-- **Branches.** `fork` copies nothing; `fork(name, at)` starts at an older
-  commit. `protect()` makes a branch change only by merge.
-- **Files.** `list`, `read`, `readText`, `write`, `commit`, `checkout` and
-  `commitFolder` for a whole folder; `log`, `history`, `diff`, `revert`, `reset`.
-- **Indexes.** `query`, `search` (BM25), `hybrid`, `order`, `rank`,
-  `aggregate` and `multi`; `upsert`, `patch`, `delete` and `write`.
+- **Settings.** `new Skywake()` reads the key from `SKYWAKE_API_KEY`, or the
+  profile `skywake login` saved. Options set `key`, `url`, `environment`,
+  `profile`, `retries` and `fetch`.
+- **Rows.** `upsert` takes any number of rows and sends them in batches;
+  `update` and `delete` take an id, ids or a filter; `get` and `rows`.
+- **Search.** `query` takes text, a `vector`, a `filter`, `sort`, `fields`,
+  `limit` and a `mode`; `count` and `aggregate` with `groupBy`, `sum`, `avg`,
+  `min` and `max`.
+- **Branches.** `fork` copies nothing; `on(branch)` is a handle on another
+  branch, `mergeInto` brings its changes back, and `destroy` removes it.
+  `versions` and `restore` go back in time.
 - **Errors** are `SkywakeError` with `status`, `code`, `requestId` and, for a
   bad field, its `path`. Safe requests are retried.

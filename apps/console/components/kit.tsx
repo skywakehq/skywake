@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, ScanSearch } from "lucide-react";
+import { ScanSearch } from "lucide-react";
 import {
   animate,
   AnimatePresence,
@@ -79,19 +79,6 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
-  return (
-    <kbd
-      className={cn(
-        "inline-flex h-[18px] min-w-[18px] items-center justify-center border border-line-strong bg-background px-1 font-sans text-[10.5px] text-muted-foreground",
-        className,
-      )}
-    >
-      {children}
-    </kbd>
-  );
-}
-
 /** A small square checkbox. `partly` draws a dash: some, not all. */
 export function Checkbox({
   on,
@@ -135,16 +122,6 @@ export function Checkbox({
       )}
       {partly && !on && <span className="h-0.5 w-2 bg-current" />}
     </button>
-  );
-}
-
-/** A short commit hash, in the mono face. */
-export function Hash({ value, className }: { value?: string | null; className?: string }) {
-  if (!value) return null;
-  return (
-    <span className={cn("font-mono text-xs text-muted-foreground", className)}>
-      {value.slice(0, 8)}
-    </span>
   );
 }
 
@@ -195,10 +172,7 @@ export function Page({
   );
 }
 
-/**
- * A disk's or an index's page: its mark and name, a line of facts, tabs,
- * then the open tab. Disks and indexes share it, so both read the same.
- */
+/** An index's page: its mark and name, a line of facts, tabs, then the open tab. */
 export function ResourcePage({
   name,
   mark,
@@ -209,7 +183,6 @@ export function ResourcePage({
   children,
 }: {
   name: string;
-  /** The orb for a disk, the square mark for an index. */
   mark: ReactNode;
   /** Short facts, shown in a row with dots between them. */
   facts: ReactNode[];
@@ -270,93 +243,6 @@ export function ResourcePage({
   );
 }
 
-/** A row of headline numbers, open on the page with a hairline under them. */
-export function Stats({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-x-10 gap-y-6 border-b pb-8 md:auto-cols-fr md:grid-flow-col">
-      {children}
-    </div>
-  );
-}
-
-export function Stat({
-  label,
-  value,
-  note,
-  trend,
-  alert,
-  href,
-}: {
-  href?: string;
-  label: string;
-  value: number;
-  note?: ReactNode;
-  /** Counts per day, oldest first, drawn under the number. */
-  trend?: number[];
-  /** Draw a non-zero value in the signal colour: it needs someone. */
-  alert?: boolean;
-}) {
-  const Box = href ? Link : "div";
-  return (
-    <Box href={href!} className={cn("group relative flex flex-col gap-1")}>
-      <span
-        className={cn(
-          "flex items-center gap-1 text-xs text-muted-foreground",
-          href && "transition-colors group-hover:text-foreground",
-        )}
-      >
-        {label}
-        {href && (
-          <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
-        )}
-      </span>
-      <Count
-        value={value}
-        className={cn(
-          "text-[22px] leading-8 font-medium tracking-[-0.02em]",
-          alert && value > 0 && "text-signal",
-        )}
-      />
-      {note && <span className="text-xs text-faint">{note}</span>}
-      {trend && (
-        <Spark values={trend} className="absolute right-0 bottom-0 h-6 w-20 max-sm:hidden" />
-      )}
-    </Box>
-  );
-}
-
-/** Small bars, one per day, the last one darker: how busy something has been. */
-export function Spark({ values, className }: { values: number[]; className?: string }) {
-  const most = Math.max(1, ...values);
-  return (
-    <div className={cn("flex items-end gap-[3px]", className)} aria-hidden>
-      {values.map((value, i) => (
-        <span
-          key={i}
-          className={cn(
-            "flex-1 bg-foreground",
-            i === values.length - 1 ? "opacity-85" : value ? "opacity-25" : "opacity-10",
-          )}
-          style={{ height: value ? `${Math.max(8, (value / most) * 100)}%` : "2px" }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** How many of `times` fell on each of the last `days` days, oldest first. */
-export function perDay(times: number[], days: number, current = Date.now()) {
-  const today = new Date(current);
-  today.setHours(0, 0, 0, 0);
-  const start = today.getTime() - (days - 1) * 86_400_000;
-  const counts = Array<number>(days).fill(0);
-  for (const time of times) {
-    const day = Math.floor((time - start) / 86_400_000);
-    if (day >= 0 && day < days) counts[day]++;
-  }
-  return counts;
-}
-
 /** A round mark for an agent or a person: their initial on a colour of their own. */
 export function Avatar({ name, className }: { name: string; className?: string }) {
   let hue = 0;
@@ -377,21 +263,7 @@ export function Avatar({ name, className }: { name: string; className?: string }
   );
 }
 
-/** A disk's mark: a round gradient mesh made from its name. */
-export function Orb({ name, className }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn("inline-block size-5 shrink-0 rounded-full", className)}
-      style={{ background: meshOf(name) }}
-    />
-  );
-}
-
-/**
- * An index's mark: its own mesh, but square, with the search glyph on it,
- * so an index never reads as a disk.
- */
+/** An index's mark: a square gradient mesh made from its name, with the search glyph on it. */
 export function IndexMark({ name, className }: { name: string; className?: string }) {
   return (
     <span
@@ -484,23 +356,6 @@ export function Glide({
   );
 }
 
-/** A few avatars, overlapping, then "+n". */
-export function Avatars({ names, max = 3 }: { names: string[]; max?: number }) {
-  if (!names.length) return null;
-  return (
-    <span className="flex items-center -space-x-1.5">
-      {names.slice(0, max).map((name) => (
-        <Avatar key={name} name={name} className="size-5" />
-      ))}
-      {names.length > max && (
-        <span className="grid size-5 place-items-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground ring-2 ring-background">
-          +{names.length - max}
-        </span>
-      )}
-    </span>
-  );
-}
-
 /**
  * A titled section with no box: a header line, then its rows. Rows keep their
  * own padding, so the section bleeds out by that much and the text lines up
@@ -528,15 +383,6 @@ export function Panel({
       </header>
       {children}
     </section>
-  );
-}
-
-export function Header({ title, children }: { title: ReactNode; children?: ReactNode }) {
-  return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b px-5">
-      <h1 className="min-w-0 truncate text-base font-medium">{title}</h1>
-      <div className="ml-auto flex items-center gap-2">{children}</div>
-    </header>
   );
 }
 

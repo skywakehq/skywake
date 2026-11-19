@@ -18,10 +18,7 @@ test("an org admin limits where the organization is called from", { skip }, asyn
 
   assert.deepEqual((await call("GET", list, key)).body, { cidrs: [] });
   // Anywhere is fine while the list is empty.
-  assert.equal(
-    (await call("GET", "/namespaces", key, undefined, from("198.51.100.1"))).status,
-    200,
-  );
+  assert.equal((await call("GET", "/indexes", key, undefined, from("198.51.100.1"))).status, 200);
 
   const bad = await call("PUT", list, key, { cidrs: ["203.0.113.0/24", "10.0.0.0/33"] });
   assert.equal(bad.status, 400);
@@ -37,11 +34,11 @@ test("an org admin limits where the organization is called from", { skip }, asyn
   assert.deepEqual(set.body.cidrs, ["203.0.113.0/24", "2001:db8::/32"]);
 
   const status = async (ip: string, who = key) =>
-    (await call("GET", "/namespaces", who, undefined, from(ip))).status;
+    (await call("GET", "/indexes", who, undefined, from(ip))).status;
   assert.equal(await status("203.0.113.200"), 200);
   assert.equal(await status("::ffff:203.0.113.5"), 200);
   assert.equal(await status("2001:db8:1::5"), 200);
-  const refused = await call("GET", "/namespaces", key, undefined, from("198.51.100.1"));
+  const refused = await call("GET", "/indexes", key, undefined, from("198.51.100.1"));
   assert.equal(refused.status, 403);
   assert.equal(refused.body.code, "ip_not_allowed");
   assert.match(refused.body.error, /198\.51\.100\.1/);

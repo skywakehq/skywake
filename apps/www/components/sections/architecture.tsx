@@ -1,12 +1,16 @@
 import { Layers } from "@/components/art/layers";
 import type { HomeMessages } from "@/content/messages";
-import { files } from "@/content/numbers";
+import { search } from "@/content/numbers";
 import { cn } from "@/lib/utils";
 import { Band, Title } from "@/components/ui/frame";
 import { Statement } from "@/components/ui/statement";
 
-// Measured disk speed: a small write, a small read, and a full build.
-const FIGURES = [0, 1, 3].map((i) => files.groups[1]!.stats[i]!.figure);
+// Measured on 10M vectors: a warm query, a cold one, and how soon a write is searchable.
+const FIGURES = [
+  [0, 1],
+  [0, 0],
+  [3, 0],
+].map(([group, stat]) => search.groups[group!]!.stats[stat!]!.figure);
 
 export function Architecture({ t }: { t: HomeMessages }) {
   const a = t.architecture;

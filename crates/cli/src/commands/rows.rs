@@ -6,11 +6,10 @@ use serde_json::{Value, json};
 use skywake::{ErrorKind, Index, Mode, Order};
 
 use crate::cli::{Format, QueryMode};
-use crate::commands::files;
 use crate::input::filter;
 use crate::input::rows::{self, Fields, Row};
 use crate::output::{self, cell, table};
-use crate::session::{Place, Session};
+use crate::session::Session;
 use crate::target::Target;
 
 const BATCH: usize = 10_000;
@@ -98,21 +97,7 @@ pub(crate) struct Search {
 }
 
 pub(crate) async fn query(session: &Session, target: &Target, search: Search) -> Result<()> {
-    match session.place(target).await? {
-        Place::Disk(disk) => {
-            let Some(text) = &search.text else {
-                bail!(
-                    "a disk query needs words, such as `skywake query {} \"where is auth\"`",
-                    target.name
-                );
-            };
-            files::query(session, disk, text, None, search.limit).await
-        }
-        Place::Index(index) => query_index(session, &index, search).await,
-    }
-}
-
-async fn query_index(session: &Session, index: &Index, search: Search) -> Result<()> {
+    let index = session.index(target);
     let mut query = index.query(search.text.as_deref());
     if let Some(text) = &search.filter {
         query = query.filter(filter::parse(text)?);

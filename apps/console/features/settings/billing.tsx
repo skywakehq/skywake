@@ -40,8 +40,6 @@ type Billing = {
   meters: Meter[];
   stored: { gb: number; limit_gb: number | null };
   indexes: { count: number; limit: number | null };
-  files: { gb: number; limit_gb: number | null };
-  filesystems: { count: number; limit: number | null };
   plans: Offer[];
   customer: boolean;
 };
@@ -207,22 +205,6 @@ export function Billing() {
             name="Indexes"
             used={billing.indexes.count}
             limit={billing.indexes.limit}
-            unit=""
-          />
-        )}
-        {!paying && (
-          <Limit
-            name="Files stored"
-            used={billing.files.gb}
-            limit={billing.files.limit_gb}
-            unit="GB"
-          />
-        )}
-        {!paying && (
-          <Limit
-            name="Disks"
-            used={billing.filesystems.count}
-            limit={billing.filesystems.limit}
             unit=""
           />
         )}

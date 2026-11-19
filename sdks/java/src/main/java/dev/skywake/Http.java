@@ -18,7 +18,6 @@ import java.util.Map;
 
 final class Http {
     private static final String JSON = "application/json";
-    private static final String BYTES = "application/octet-stream";
 
     private final HttpClient client;
     private final String base;
@@ -67,14 +66,6 @@ final class Http {
     JsonNode call(String method, String path, Map<String, ?> query, Object json) {
         byte[] payload = json == null ? null : Json.bytes(json);
         return Json.tree(drain(send(method, path, query, payload, JSON)));
-    }
-
-    JsonNode upload(String path, byte[] bytes) {
-        return Json.tree(drain(send("POST", path, null, bytes, BYTES)));
-    }
-
-    InputStream open(String path, Map<String, ?> query) {
-        return send("GET", path, query, null, null).body();
     }
 
     private HttpResponse<InputStream> send(

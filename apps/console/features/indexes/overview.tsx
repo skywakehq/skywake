@@ -2,19 +2,9 @@
 
 import { useState } from "react";
 import { Choice, Panel, cx } from "@/components/kit";
-import { Link } from "@/components/shell/router";
-import { nameInEnv } from "@/lib/names";
-import { indexApi, nsPath } from "@/lib/paths";
 import { city } from "@/features/environments/regions";
-import {
-  INTERNAL,
-  type IndexInfo,
-  type Stats,
-  type UsageDay,
-  branchUrl,
-  bytes,
-  useApi,
-} from "./api";
+import { indexApi } from "@/lib/paths";
+import { type IndexInfo, type Stats, type UsageDay, branchUrl, bytes, useApi } from "./api";
 import { Label } from "./fields";
 
 const DETAILS: { key: keyof Stats; label: string }[] = [
@@ -29,19 +19,14 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
   const { loaded } = useApi<{ stats: Stats | null }>(branchUrl(index.name, branch));
   const stats = loaded.state === "done" ? loaded.value.stats : undefined;
   const { vectors, attributes } = index.schema;
-  const linked = attributes.some((column) => column.name === "chunk");
-  const shown = attributes.filter((column) => !(linked && INTERNAL.has(column.name)));
   const model = vectors.find((column) => column.embed)?.embed?.model;
 
   return (
     <div className="grid gap-10">
       <div className="grid gap-6">
-        <Status stats={stats} index={index.name} linked={linked} />
+        <Status stats={stats} />
         <div className="grid grid-cols-2 gap-x-10 gap-y-6 sm:grid-cols-3">
-          <Figure
-            label={linked ? "Passages" : "Rows"}
-            value={stats ? stats.rows.toLocaleString() : undefined}
-          />
+          <Figure label="Rows" value={stats ? stats.rows.toLocaleString() : undefined} />
           <Figure label="Size" value={stats ? bytes(stats.bytes) : undefined} />
           <Figure
             label="Search by"
@@ -84,7 +69,7 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
 
       <Usage index={index.name} />
 
-      <Panel title="Schema" count={vectors.length + shown.length}>
+      <Panel title="Schema" count={vectors.length + attributes.length}>
         {vectors.map((column) => (
           <Row
             key={column.name}
@@ -96,10 +81,10 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
             ].join(" · ")}
           />
         ))}
-        {shown.map((column) => (
+        {attributes.map((column) => (
           <Row key={column.name} name={column.name} detail={column.type} />
         ))}
-        {vectors.length + shown.length === 0 && (
+        {vectors.length + attributes.length === 0 && (
           <p className="px-4 py-3 text-sm text-muted-foreground">No fields yet.</p>
         )}
       </Panel>
@@ -111,32 +96,14 @@ export function Overview({ index, branch }: { index: IndexInfo; branch: string }
   );
 }
 
-function Status({
-  stats,
-  index,
-  linked,
-}: {
-  stats: Stats | null | undefined;
-  index: string;
-  linked: boolean;
-}) {
-  const { loaded } = useApi<{ namespace: string }>(linked ? indexApi(index, "link") : null);
-  const disk = loaded.state === "done" ? loaded.value.namespace : null;
+function Status({ stats }: { stats: Stats | null | undefined }) {
   if (!stats) return null;
   const empty = stats.rows === 0;
   return (
     <p className="flex items-center gap-2 text-sm">
       <span className={cx("size-1.5 rounded-full", empty ? "bg-faint" : "bg-green")} />
       {empty ? "Empty" : "Searchable"}
-      {disk && (
-        <span className="text-muted-foreground">
-          · search for disk{" "}
-          <Link href={nsPath(disk, "search")} className="text-foreground hover:underline">
-            {nameInEnv(disk)}
-          </Link>
-        </span>
-      )}
-      {!disk && empty && <span className="text-muted-foreground">· write rows to fill it</span>}
+      {empty && <span className="text-muted-foreground">· write rows to fill it</span>}
     </p>
   );
 }

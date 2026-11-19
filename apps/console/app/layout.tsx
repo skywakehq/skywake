@@ -25,7 +25,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           <TooltipProvider delayDuration={300}>{children}</TooltipProvider>
-          {/* Bottom right holds the upload tray. */}
           <Toaster position="bottom-center" />
         </ThemeProvider>
       </body>

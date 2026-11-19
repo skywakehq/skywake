@@ -3,8 +3,7 @@ import httpx
 from ._drive import AsyncDriver, SyncDriver, call, compact, listing, op, pages, segment
 from ._settings import resolve_settings
 from ._transport import AsyncTransport, SyncTransport
-from .disk import MAIN, Disk
-from .index import Index
+from .index import MAIN, Index
 
 
 def _headers(key, environment):
@@ -28,17 +27,8 @@ class _Client:
         self.url = url
         self.environment = environment
 
-    def disk(self, name, branch=None):
-        return Disk(self._driver, name, branch or MAIN)
-
     def index(self, name, branch=None):
         return Index(self._driver, name, branch or MAIN)
-
-    @op
-    def create_disk(self, name, *, region=None, search=None, visibility=None):
-        body = compact({"name": name, "region": region, "search": search, "visibility": visibility})
-        yield from call("POST", "/disks", body=body)
-        return self.disk(name)
 
     @op
     def create_index(self, name, *, schema=None, region=None, embed=None):
@@ -46,10 +36,6 @@ class _Client:
             "POST", "/indexes", body=compact({"name": name, "schema": schema, "region": region, "embed": embed})
         )
         return self.index(name)
-
-    @listing
-    def list_disks(self):
-        return (yield from pages("/disks"))
 
     @listing
     def list_indexes(self):

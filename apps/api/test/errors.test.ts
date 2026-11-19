@@ -32,54 +32,45 @@ test("every kind of error answer is structured", { skip }, async () => {
   const s = await server({ bodyLimit: 1024 });
   const { key } = await s.ready();
   const auth = { authorization: `Bearer ${key}` };
+  const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [] };
 
   structured(await s.call("GET", "/nothing-here", key), 404, "not_found");
   structured(await raw(s, "/x", {}), 404, "not_found");
-  structured(await s.call("GET", "/namespaces/nope", key), 404, "not_found");
-  structured(await s.call("GET", "/namespaces", "sw_bad"), 401, "unauthorized");
+  structured(await s.call("GET", "/indexes/nope", key), 404, "not_found");
+  structured(await s.call("GET", "/indexes", "sw_bad"), 401, "unauthorized");
 
-  const wrongMethod = await s.call("PATCH", "/namespaces", key);
+  const wrongMethod = await s.call("PATCH", "/indexes", key);
   structured(wrongMethod, 405, "method_not_allowed");
   assert.equal(wrongMethod.headers.get("allow"), "GET, POST");
   assert.match(wrongMethod.body.error, /takes GET or POST, not PATCH/);
   // A path with parameters is matched too.
   structured(await s.call("PUT", "/keys/some-id", key), 405, "method_not_allowed");
 
-  const badJson = await raw(s, "/namespaces", {
+  const badJson = await raw(s, "/indexes", {
     method: "POST",
     headers: { ...auth, "content-type": "application/json" },
     body: "{nope",
   });
   structured(badJson, 400, "invalid");
-  const notJson = await raw(s, "/namespaces", {
+  const notJson = await raw(s, "/indexes", {
     method: "POST",
     headers: { ...auth, "content-type": "text/plain" },
     body: "x",
   });
   structured(notJson, 415, "unsupported_media_type");
 
-  const invalid = await s.call("POST", "/namespaces", key, { name: "../etc" });
+  const invalid = await s.call("POST", "/indexes", key, { name: "../etc", schema });
   structured(invalid, 400, "invalid");
   assert.equal(invalid.body.path, "name");
 
   structured(
-    await s.call("POST", "/namespaces", key, { name: "x".repeat(4000) }),
+    await s.call("POST", "/indexes", key, { name: "x".repeat(4000), schema }),
     413,
     "too_large",
   );
 
-  const branch = "/namespaces/prod%2Fapp/branches";
-  assert.equal((await s.call("POST", branch, key, { name: "b", from: "main" })).status, 201);
-  const edit = (text: string) => ({ message: "edit", changes: [{ path: "a.txt", text }] });
-  await s.call("POST", `${branch}/main/commits`, key, edit("main"));
-  await s.call("POST", `${branch}/b/commits`, key, edit("b"));
-  const merged = await s.call("POST", "/namespaces/prod%2Fapp/merges", key, {
-    from: "b",
-    into: "main",
-  });
-  structured(merged, 409, "conflict");
-  assert.equal(merged.body.head, null);
-  assert.ok(merged.body.conflicts.length > 0);
+  const taken = await s.call("POST", "/indexes", key, { name: "prod/app", schema });
+  structured(taken, 409, "conflict");
 
   const limiting = await server({ rateLimit: 1, trustProxy: 1 });
   const from = { "x-forwarded-for": `10.9.${Math.floor(Math.random() * 250)}.7` };

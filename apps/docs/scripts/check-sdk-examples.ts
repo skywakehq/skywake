@@ -120,7 +120,7 @@ const rules: Record<Language, Rules> = {
     ext: ".java",
     defines: [declared, /\b(?:class|record|interface|enum)\s+(\w+)/g, enumMember],
     uses: [/\.([a-z]\w*)\(/g, capitalized],
-    allow: ["System.getenv", "System.out.println", "List", "Map", "Object"],
+    allow: ["System.getenv", "System.out.println", "List", "Map", "Object", "String"],
     comment: "//",
   },
   csharp: {

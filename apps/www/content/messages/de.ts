@@ -3,24 +3,9 @@ import type { HomeMessages } from "./types";
 export const de: HomeMessages = {
   pages: {
     "/": {
-      title: "Skywake: Schnelles Dateisystem und Suche auf S3 für KI-Agenten",
+      title: "Skywake: Open-Source-Suche auf Object Storage",
       description:
-        "Open-Source-Dateisystem und Suche auf Ihrem eigenen S3-Bucket. Wie eine lokale Festplatte mounten, jedem KI-Agenten seine eigene Kopie in 10 ms geben und suchen.",
-    },
-    "/filesystem": {
-      title: "S3-Dateisystem für KI-Agenten: mounten, kopieren, mergen",
-      description:
-        "S3 oder jeden Object Storage als schnelle lokale Festplatte mounten. 20.000 Dateien in 10 ms pro Agent kopieren, dann Änderungen wie mit Git mergen.",
-    },
-    "/search": {
-      title: "Vektor- und Volltextsuche auf S3",
-      description:
-        "Vektor-, Volltext- und hybride Suche direkt aus Ihrem Object Storage. 10 ms warme Abfragen über 10M Vektoren, ohne separate Datenbank.",
-    },
-    "/use-cases": {
-      title: "Anwendungsfälle: Wissensdatenbanken, Agenten-Gedächtnis, Coding-Agenten",
-      description:
-        "Wie Teams Skywake nutzen: Wissensdatenbanken, Agenten-Gedächtnis, Sandboxes, Coding- und Dokumenten-Agenten, Evals, CI und Datasets. Schritt für Schritt.",
+        "Vektor-, Volltext- und hybride Suche, deren Daten in Ihrem eigenen S3-, R2-, GCS- oder Azure-Bucket liegen. Eine Open-Source-Alternative zu turbopuffer, unter Apache-2.0.",
     },
     "/pricing": {
       title: "Preise",
@@ -38,12 +23,11 @@ export const de: HomeMessages = {
     "/benchmarks": {
       title: "Benchmarks",
       description:
-        "Gemessen auf AWS, Bucket in derselben Region: Agenten-Kopien, Uploads, Builds und Suche über 10M Vektoren.",
+        "Suche über 10M Vektoren auf S3, gemessen auf AWS mit dem Bucket in derselben Region: kalte und warme Abfragen, Filter, Recall und Aktualität.",
     },
   },
   nav: {
-    filesystem: "Filesystem",
-    search: "Suche",
+    features: "Funktionen",
     benchmarks: "Benchmarks",
     pricing: "Preise",
     docs: "Docs",
@@ -57,11 +41,11 @@ export const de: HomeMessages = {
   },
   footer: {
     blurb:
-      "Ihr Bucket als schnelle Festplatte und Suchmaschine. Open Source, auf Ihrem eigenen Object Storage.",
+      "Open-Source-Suche auf Ihrem eigenen Object Storage. Vektor, Volltext und hybrid, mit Branches.",
     product: "Produkt",
     project: "Projekt",
     legal: "Rechtliches",
-    useCases: "Anwendungsfälle",
+    compare: "vs. turbopuffer",
     openSource: "Open Source",
     privacy: "Datenschutz",
     terms: "Nutzungsbedingungen",
@@ -69,116 +53,83 @@ export const de: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud kommt. Zur Warteliste",
-    titleBefore: "Das skalierbare Dateisystem und die Suchmaschine",
-    titleAccent: "für KI-Agenten.",
-    screenshotAlt:
-      "Die Skywake-Konsole mit den Disks eines Teams und den Agenten, die daran arbeiten",
+    titleBefore: "Der Open-Source-Suchindex",
+    titleAccent: "auf Object Storage.",
+    line: "Vektor-, Volltext- und hybride Suche, mit Ihren Daten in S3, R2, GCS oder Azure. Eine Open-Source-Alternative zu turbopuffer, die Sie schon heute selbst betreiben können.",
+    docsCta: "Zur Dokumentation",
+    screenshotAlt: "Die Skywake-Konsole bei einer Suche in einem Help-Center-Index",
     getStartedCta: "Loslegen",
   },
-  useCases: {
-    label: "Anwendungsfälle",
-    heading: ["Sie bauen die Agenten.", "Skywake kümmert sich um Dateien und Suche."],
-    more: "Alle Anwendungsfälle ansehen",
-    cta: "Mehr erfahren",
+  features: {
+    label: "Funktionen",
+    title: "Suchen nach Bedeutung, nach genauen Wörtern oder beidem.",
+    line: "Eine Abfrage verbindet Vektoren, BM25 und Filter. Texte werden für Sie eingebettet, Sie müssen also keine Vektoren mitbringen.",
     items: [
       {
-        name: "Wissensdatenbank",
-        title: "Eine Wissensdatenbank für Ihre Agenten.",
-        line: "Dokumente und Dateien an einem Ort, mit eingebauter Suche. Agenten finden immer die neueste Version, nie eine alte Kopie.",
+        name: "Nach Bedeutung finden",
+        line: "Suchen Sie „Passwort vergessen“ und finden Sie die Seite „Konto wiederherstellen“.",
+        art: "vector",
       },
       {
-        name: "Kontext-Ebene",
-        title: "Ein zentrales Gedächtnis und eine Kontext-Ebene für Agenten.",
-        line: "Agenten speichern, was sie lernen, als einfache Dateien. Beim nächsten Mal machen sie dort weiter, und andere Agenten können es auch lesen.",
+        name: "Exakte Wörter finden",
+        line: "Namen, Fehlercodes und Phrasen, auch mit Tippfehler.",
+        art: "fullText",
       },
       {
-        name: "Agenten-Speicher",
-        title: "Ein gemeinsames Dateisystem für Agenten.",
-        line: "Agenten lesen und schreiben dieselben Dateien, wie auf einem geteilten Laufwerk. Gespeicherte Arbeit bleibt erhalten, auch wenn eine Maschine ausfällt.",
+        name: "Beides in einer Suche",
+        line: "Bedeutung und exakte Wörter gemeinsam gerankt, damit der beste Treffer oben steht.",
+        art: "hybrid",
       },
       {
-        name: "Cloud-Coding-Agenten",
-        title: "Eine Kopie Ihres Repos für jeden Agenten.",
-        line: "Jeder Agent bekommt in 10 ms seine eigene Kopie Ihres Projekts. Lassen Sie viele gleichzeitig laufen, behalten Sie das beste Ergebnis und verwerfen Sie den Rest.",
+        name: "Ergebnisse zählen und gruppieren",
+        line: "Anzahl, Summen und Gruppen über Ihre Daten, in derselben Abfrage.",
+        art: "analytics",
       },
       {
-        name: "Evals und RL",
-        title: "Eine frische Umgebung für jeden Lauf.",
-        line: "Jeder Lauf startet vom selben Setup, auf seiner eigenen Kopie. Tausende Läufe nebeneinander, ohne dass einer den anderen verändert.",
-      },
-    ],
-  },
-  git: {
-    label: "Git",
-    titleBefore: "Funktioniert mit",
-    titleAccent: "Git.",
-    line: "Git speichert Ihren Code. Skywake speichert den ganzen Ordner: Pakete, Daten und Caches.",
-    works: "Git läuft wie gewohnt in jeder Kopie.",
-    note: "Pushen Sie Ihren Code weiter zu Git. Skywake speichert alles andere.",
-  },
-  products: {
-    items: [
-      {
-        name: "Filesystem",
-        href: "/filesystem",
-        icon: "files",
-        before: "Geben Sie jedem Agenten ",
-        highlight: "eine eigene Kopie Ihrer Dateien",
-        after:
-          ". In Millisekunden bereit, geöffnet wie ein normaler Ordner, zurückgeführt, wenn die Arbeit erledigt ist.",
-        points: [
-          "20.000 Dateien in 10 ms kopieren",
-          "Öffnen, ohne alles herunterzuladen",
-          "Änderungen prüfen und mergen wie mit Git",
-        ],
+        name: "Einen Index branchen",
+        line: "Forken Sie einen Index im Nu, testen Sie neue Daten auf der Kopie und mergen Sie sie zurück, wenn alles passt.",
+        art: "branches",
       },
       {
-        name: "Suche",
-        href: "/search",
-        icon: "search",
-        before: "Suchen Sie ",
-        highlight: "nach Bedeutung, nach exakten Wörtern oder beidem",
-        after: ". Ein Index, für jeden Agenten kopiert wie Ihre Dateien.",
-        points: [
-          "10 ms warme Suche über 10M Vektoren",
-          "Funktioniert mit jedem Embedding-Modell",
-          "Einen Index kopieren, ohne main zu berühren",
-        ],
+        name: "Jede Änderung rückgängig machen",
+        line: "Zurück zu jeder früheren Version des Index.",
+        art: "timeTravel",
       },
     ],
   },
   architecture: {
     label: "So funktioniert es",
-    titleBefore: "So schnell wie",
-    titleAccent: "Ihre eigene Festplatte.",
-    line: "Dateien kommen aus einem gemeinsamen NVMe-Cache, direkt neben Ihren Agenten.",
+    titleBefore: "Daten in Ihrem Bucket.",
+    titleAccent: "Tempo aus dem Cache.",
+    line: "Jede Zeile liegt im Object Storage, zu Object-Storage-Preisen. Was Sie abfragen, bleibt auf NVMe neben den Servern, deshalb berührt eine warme Suche den Bucket nie.",
     stats: [
-      "um eine kleine Datei zu schreiben",
-      "um eine kleine Datei zu lesen",
-      "langsamer als eine lokale Festplatte bei einem vollständigen Build",
+      "warme Abfrage über 10M Vektoren",
+      "kalte Abfrage, direkt aus dem Bucket",
+      "vom Schreiben bis durchsuchbar",
     ],
   },
   benchmarks: {
     label: "Benchmarks",
-    title: "Tempo einer lokalen Festplatte, gemessen aus Ihrem Bucket.",
+    title: "10M Vektoren, durchsucht in 10 ms.",
   },
-  cost: {
-    label: "Kosten",
-    chartTitle: "Speicher für {agents} Agenten",
-    chart: {
-      without: "Ohne Skywake",
-      with: "Mit Skywake",
-      withoutDetail: "{agents} volle Kopien à {workspaceGb} GB",
-      withDetail: "{workspaceGb} GB geteilt + {agents} × {addedMb} MB Änderungen",
-      perMonth: "{value} pro Monat",
-      gap: "{x}× weniger",
-    },
-    headline: {
-      storage: "weniger Speicher",
-      cost: "geringere Kosten",
-      starts: "schnellere Agenten-Starts",
-      and: "und",
-    },
+  compare: {
+    label: "turbopuffer-Alternative",
+    title: "Gebaut wie turbopuffer. Open Source.",
+    line: "Wie turbopuffer hält Skywake den Index im Object Storage und setzt einen Cache davor. Genau das hält große Indizes günstig. Der Unterschied: Sie können den Code lesen und ihn selbst betreiben.",
+    points: [
+      {
+        name: "Apache-2.0",
+        line: "Die ganze Engine ist Open Source. Lesen, ändern, ausliefern.",
+      },
+      {
+        name: "Ihr Bucket",
+        line: "Läuft auf S3, R2, GCS oder Azure Blob, in Ihrem eigenen Konto.",
+      },
+      {
+        name: "Branches",
+        line: "Einen Index branchen, ohne ihn zu kopieren, und die Änderungen dann zurückmergen.",
+      },
+    ],
   },
   openSource: {
     label: "Open Source",
@@ -189,12 +140,12 @@ export const de: HomeMessages = {
   waitlist: {
     eyebrow: "Skywake Cloud",
     title: "Managed Skywake kommt. Lassen Sie sich benachrichtigen.",
-    line: "Auf die Warteliste für gehostete Dateien und Suche.",
+    line: "Auf die Warteliste für gehostete Suche auf Ihrem eigenen Bucket.",
     selfHost: "Selbst hosten mit der Dokumentation",
     star: "Auf GitHub mit Stern markieren",
     openTitle: "Jetzt mit Skywake bauen.",
     openLine:
-      "Geben Sie jedem Agenten einen eigenen Branch-Workspace und einen durchsuchbaren Index auf Ihrem eigenen Object Storage.",
+      "Legen Sie einen Index auf Ihrem eigenen Object Storage an und starten Sie Ihre erste Suche.",
     openCta: "Loslegen",
     form: {
       email: "E-Mail",
@@ -207,122 +158,17 @@ export const de: HomeMessages = {
     },
   },
   layers: {
-    alt: "Agenten und Apps nutzen ein Dateisystem und einen Suchindex. Beide lesen über einen gemeinsamen Cache aus Ihrem Object Storage. Nur Änderungen werden zurückgeschrieben, alle 2 Sekunden.",
-    agents: ["Agenten", "und Ihre Apps"],
-    filesystem: ["Filesystem", "mounten · forken · mergen"],
+    alt: "Ihre Apps und Agenten fragen einen Index ab. Der Index liest über einen NVMe-Cache aus Ihrem Object Storage, und jeder Schreibvorgang ist dauerhaft gespeichert, sobald der Aufruf zurückkehrt.",
+    agents: ["Apps", "und Agenten"],
     index: ["Index", "Vektor · Volltext"],
-    cache: ["Cache", "NVMe + geteilt"],
+    cache: ["Cache", "NVMe"],
     storage: ["Object Storage", "Ihr Bucket"],
-  },
-  productPages: {
-    getStarted: "Loslegen",
-    star: "Auf GitHub mit Stern markieren",
-    filesystem: {
-      label: "Filesystem",
-      title: "Ihr Bucket als",
-      accent: "schnelle lokale Festplatte.",
-      line: "Mounten Sie Ihren Object Storage als normalen Ordner. Jeder Agent bekommt in 10 ms seine eigene Kopie, die Änderungen mergen Sie zurück.",
-      features: [
-        {
-          name: "Jeder Agent bekommt seine eigene Kopie",
-          line: "Eine vollständige Kopie Ihrer Dateien in 10 ms, egal wie groß. Nichts wird dupliziert.",
-          art: "fork",
-        },
-        {
-          name: "Funktioniert wie ein normaler Ordner",
-          line: "Auf jeder Maschine mounten. Ihre Tools, Skripte und Git funktionieren einfach.",
-          art: "mount",
-        },
-        {
-          name: "Speichert von selbst",
-          line: "Änderungen landen alle 2 Sekunden in Ihrem Bucket, ganz ohne Commit.",
-          art: "autosave",
-        },
-        {
-          name: "Übersteht Abstürze",
-          line: "Die Maschine stirbt mitten im Schreiben? Jede gespeicherte Änderung ist noch da.",
-          art: "recover",
-        },
-        {
-          name: "Sehen, was jeder Agent geändert hat",
-          line: "Jede Datei, die er erstellt, bearbeitet oder gelöscht hat, im Vergleich zu main.",
-          art: "diff",
-        },
-        {
-          name: "Nur gute Arbeit behalten",
-          line: "Die Änderungen eines Agenten Datei für Datei zurück in main mergen.",
-          art: "merge",
-        },
-        {
-          name: "Main bleibt sicher",
-          line: "Agenten können nicht auf main schreiben. Main ändert sich nur, wenn Sie mergen.",
-          art: "protect",
-        },
-      ],
-    },
-    search: {
-      label: "Suche",
-      title: "Durchsuchen Sie alles in",
-      accent: "Ihrem Bucket.",
-      line: "Vektor-, Volltext- und hybride Suche über Ihren Object Storage, ausgeliefert aus einem schnellen NVMe-Cache.",
-      features: [
-        {
-          name: "Nach Bedeutung finden",
-          line: "Suchen Sie „Passwort vergessen“ und finden Sie die Seite „Konto wiederherstellen“.",
-          art: "vector",
-        },
-        {
-          name: "Exakte Wörter finden",
-          line: "Namen, Fehlercodes und Phrasen, auch mit Tippfehler.",
-          art: "fullText",
-        },
-        {
-          name: "Beides in einer Suche",
-          line: "Bedeutung und exakte Wörter gemeinsam gerankt, damit der beste Treffer oben steht.",
-          art: "hybrid",
-        },
-        {
-          name: "Ergebnisse zählen und gruppieren",
-          line: "Anzahl, Summen und Gruppen über Ihre Daten, in derselben Abfrage.",
-          art: "analytics",
-        },
-        {
-          name: "Auf einer Kopie testen",
-          line: "Einen Index forken, neue Daten ausprobieren, Production bleibt unberührt.",
-          art: "branches",
-        },
-        {
-          name: "Jede Änderung rückgängig machen",
-          line: "Zurück zu jeder früheren Version des Index.",
-          art: "timeTravel",
-        },
-      ],
-    },
+    note: "Schreibvorgänge sind dauerhaft, sobald der Aufruf zurückkehrt",
   },
   benchmarkPage: {
     line: "Gemessen auf AWS, mit dem Bucket in derselben Region.",
-    filesTitle: "So schnell wie eine lokale Festplatte.",
-    searchTitle: "10M Vektoren, durchsucht in 10 ms.",
-    filesNote: "AWS m7i-flex.large, Object Storage in derselben Region",
-    searchNote: "10M Vektoren × 768 auf Object Storage, AWS i4i.4xlarge in derselben Region",
-    files: [
-      {
-        title: "Einem Agenten eine eigene Kopie von 1 GB geben",
-        verdict: "300× schneller",
-        labels: ["Skywake", "Dateien kopieren"],
-      },
-      {
-        title: "1 GB in Ihren Bucket speichern",
-        verdict: "4,5× schneller",
-        labels: ["Skywake", "Normaler Upload"],
-      },
-      {
-        title: "Ein Rust-Projekt bauen und testen",
-        verdict: "Wie eine lokale Festplatte",
-        labels: ["Skywake", "Lokale Festplatte"],
-      },
-    ],
-    search: [
+    note: "10M Vektoren × 768 auf Object Storage, AWS i4i.4xlarge in derselben Region",
+    charts: [
       {
         title: "10M Vektoren durchsuchen",
         verdict: "10 ms im Cache",
@@ -365,7 +211,7 @@ export const de: HomeMessages = {
         line: "Wir betreiben es für Sie. Preise gibt es zum Start.",
         includes: [
           "Nichts einzurichten oder zu betreiben",
-          "Ein gemeinsamer Cache neben Ihren Agenten",
+          "Ein schneller Cache vor Ihrem Bucket",
           "Zahlen Sie nur, was Sie nutzen",
           "Läuft auf Ihrem eigenen Bucket",
         ],
@@ -374,7 +220,7 @@ export const de: HomeMessages = {
     ],
   },
   legal: {
-    updated: "Zuletzt aktualisiert am 15. November 2026",
+    updated: "Zuletzt aktualisiert am 19. November 2026",
     privacy: {
       title: "Datenschutz",
       intro:
@@ -389,7 +235,7 @@ export const de: HomeMessages = {
         {
           title: "Geltungsbereich dieser Datenschutzerklärung",
           body: [
-            "Diese Datenschutzerklärung gilt für die Website einschließlich ihrer Seiten, Leitfäden und der Cloud-Warteliste. Sie gilt nicht für die Skywake-Software, die Sie selbst betreiben (dazu weiter unten), und nicht für Skywake Cloud, für das bei der Eröffnung eigene Datenschutzbestimmungen gelten werden.",
+            "Diese Datenschutzerklärung gilt für die Website einschließlich ihrer Seiten und der Cloud-Warteliste. Sie gilt nicht für die Skywake-Software, die Sie selbst betreiben (dazu weiter unten), und nicht für Skywake Cloud, für das bei der Eröffnung eigene Datenschutzbestimmungen gelten werden.",
           ],
         },
         {
@@ -487,7 +333,7 @@ export const de: HomeMessages = {
         {
           title: "Selbst betriebenes Skywake",
           body: [
-            "Die Open-Source-Software Skywake, die Sie auf Ihren eigenen Rechnern installieren, sendet uns nichts. Ihre Dateien, Indizes, Schlüssel und Nutzungsdaten bleiben in Ihrem eigenen Bucket und Ihrer eigenen Datenbank, unter Ihrer Kontrolle.",
+            "Die Open-Source-Software Skywake, die Sie auf Ihren eigenen Rechnern installieren, sendet uns nichts. Ihre Indizes, Schlüssel und Nutzungsdaten bleiben in Ihrem eigenen Bucket und Ihrer eigenen Datenbank, unter Ihrer Kontrolle.",
           ],
         },
         {
@@ -555,7 +401,7 @@ export const de: HomeMessages = {
         {
           title: "Informationen auf dieser Website",
           body: [
-            "Wir erstellen die Website, die Leitfäden und die Dokumentation mit dem Ziel, dass sie korrekt und nützlich sind; sie stellen jedoch allgemeine Informationen und keine fachliche Beratung dar. Die Benchmarks wurden auf der Hardware und mit dem Setup gemessen, die wir jeweils dazu beschreiben, und Ihre Ergebnisse hängen von Ihrer eigenen Umgebung ab. Pläne, Funktionen und Preise von Skywake Cloud können sich vor dem Start ändern.",
+            "Wir erstellen die Website und die Dokumentation mit dem Ziel, dass sie korrekt und nützlich sind; sie stellen jedoch allgemeine Informationen und keine fachliche Beratung dar. Die Benchmarks wurden auf der Hardware und mit dem Setup gemessen, die wir jeweils dazu beschreiben, und Ihre Ergebnisse hängen von Ihrer eigenen Umgebung ab. Pläne, Funktionen und Preise von Skywake Cloud können sich vor dem Start ändern.",
           ],
         },
         {
@@ -594,69 +440,5 @@ export const de: HomeMessages = {
     title: "Hier ist nichts.",
     line: "Diese Seite gibt es nicht.",
     back: "Zurück zur Startseite",
-  },
-  guides: {
-    eyebrow: "Anwendungsfälle",
-    title: "Beginnen Sie mit Ihrem Problem.",
-    accent: "So passt Skywake dazu.",
-    onThisPage: "Auf dieser Seite",
-    read: "Zur Anleitung",
-    related: {
-      eyebrow: "Verwandt",
-      title: "Weitere Anwendungsfälle entdecken.",
-      all: "Alle Anwendungsfälle",
-    },
-    items: {
-      "knowledge-base": {
-        name: "Wissensdatenbanken",
-        title: "So bauen Sie eine große Wissensdatenbank für Ihre Agenten",
-        lead: "Halten Sie Ihre Dokumente und ihren Suchindex im selben Bucket. Ändert sich ein Dokument, sieht die Suche es in unter einer Sekunde, ganz ohne Sync-Job.",
-      },
-      "context-layer": {
-        name: "Kontext-Ebenen",
-        title: "So geben Sie Ihren Agenten ein echtes Gedächtnis",
-        lead: "Jeder Agent bekommt einen eigenen Ordner in Ihrem Bucket. Er schreibt Notizen als einfache Dateien, und der nächste Lauf macht dort weiter, wo der letzte aufgehört hat.",
-      },
-      sandboxes: {
-        name: "Agenten-Speicher und Sandboxes",
-        title: "So bleibt die Arbeit eines Agenten erhalten, wenn seine Sandbox abstürzt",
-        lead: "Speichern Sie die Arbeit des Agenten nach jedem Schritt in Ihrem eigenen Bucket. Fällt die Maschine aus, übernimmt eine neue genau dort, wo es aufgehört hat.",
-      },
-      "coding-agents": {
-        name: "Cloud-Coding-Agenten",
-        title: "So bekommt jeder Coding-Agent seine eigene Kopie Ihres Repos",
-        lead: "Speichern Sie Ihr Repo einmal, mit Paketen und Build-Cache. Jeder Agent bekommt in 10 ms seine eigene Kopie, und Sie mergen den Fix, der Ihnen gefällt.",
-      },
-      "document-agents": {
-        name: "Dokumenten-Agenten",
-        title: "So prüfen Sie jede Änderung, die ein Agent an Ihren Dateien macht",
-        lead: "Agenten arbeiten auf einer Kopie des Ordners. Sie sehen jede Änderung, behalten die guten und verwerfen den Rest.",
-      },
-      rl: {
-        name: "RL-Umgebungen und Evals",
-        title: "So bekommt jeder RL-Lauf eine frische Kopie seiner Umgebung",
-        lead: "Speichern Sie die Umgebung einmal. Jeder Lauf bekommt in 10 ms seine eigene saubere Kopie, so bleiben Ergebnisse fair und auffällige Läufe lassen sich später öffnen.",
-      },
-      ci: {
-        name: "CI und Builds",
-        title: "So starten CI-Jobs mit einem warmen Build",
-        lead: "Speichern Sie Quellcode und Build-Cache einmal pro Nacht zusammen. Jeder Job baut auf seiner eigenen Kopie und kompiliert nur, was sich geändert hat.",
-      },
-      previews: {
-        name: "Preview-Umgebungen",
-        title: "So testen Sie jeden Pull Request mit echten Daten",
-        lead: "Jeder Pull Request bekommt seinen eigenen Workspace, mit echten Daten und allen Abhängigkeiten. Nach dem Merge verschwindet er.",
-      },
-      datasets: {
-        name: "Dataset-Versionierung",
-        title: "So wissen Sie, mit welchen Daten jedes Modell trainiert wurde",
-        lead: "Verzweigen Sie Daten wie Code. Testen Sie ein bereinigtes Dataset auf einer eigenen Kopie, vergleichen Sie die Modelle und verweisen Sie immer auf die exakten Daten dahinter.",
-      },
-      "reference-data": {
-        name: "Gemeinsame Referenzdaten",
-        title: "So teilen Sie große Dateien mit vielen Agenten",
-        lead: "Speichern Sie große gemeinsame Dateien einmal in Ihrem Bucket. Jede Maschine lädt sie nur einmal herunter, und jeder Agent darauf liest die lokale Kopie.",
-      },
-    },
   },
 };

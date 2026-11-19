@@ -9,7 +9,6 @@ import {
   type FusedHit,
   type Highlight,
   type Hit,
-  INTERNAL,
   type IndexInfo,
   type QueryBody,
   type Request,
@@ -17,9 +16,7 @@ import {
   type SearchHit,
   branchUrl,
   call,
-  useApi,
 } from "./api";
-import { apiPath, indexApi } from "@/lib/paths";
 import { CodeBlock, LangChoice } from "./code";
 import { Label, Select, TextArea, TextField } from "./fields";
 import { ImagePick, type Picked } from "./image-pick";
@@ -63,19 +60,15 @@ const optional = (text: string) => (text.trim() ? Number(text) : undefined);
 export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: string }) {
   const { schema } = index;
   const api = useUrls().api;
-  const shown = schema.attributes.filter((a) => !INTERNAL.has(a.name));
-  const texts = shown.filter((a) => a.type === "text");
-  const others = shown.filter((a) => a.type !== "text");
+  const texts = schema.attributes.filter((a) => a.type === "text");
+  const others = schema.attributes.filter((a) => a.type !== "text");
   const kinds = KINDS.filter(
     (k) =>
       (k !== "vector" || schema.vectors.length) &&
       (k !== "text" || texts.length) &&
       (k !== "hybrid" || (schema.vectors.length && texts.length)),
   );
-  const linked = schema.attributes.some((a) => a.name === "chunk");
-  const preferred = linked && kinds.includes("hybrid") ? "hybrid" : kinds[0]!;
-  const [kind, setKind] = useState<Kind>(preferred);
-  const thumb = useThumbnails(index.name, branch, linked);
+  const [kind, setKind] = useState<Kind>(kinds[0]!);
   const [column, setColumn] = useState(schema.vectors[0]?.name ?? "");
   const [vector, setVector] = useState("");
   const [image, setImage] = useState<Picked | null>(null);
@@ -392,15 +385,7 @@ export function QueryPlayground({ index, branch }: { index: IndexInfo; branch: s
       </form>
 
       {hits && (
-        <Results
-          hits={hits.hits}
-          ms={hits.ms}
-          kind={kind}
-          attributes={include}
-          thumb={thumb}
-          linked={linked}
-          embeds={!!embed}
-        />
+        <Results hits={hits.hits} ms={hits.ms} kind={kind} attributes={include} embeds={!!embed} />
       )}
 
       <Panel title="As code" action={<LangChoice value={lang} onChange={setLang} />}>
@@ -474,61 +459,20 @@ function Recall({
 }
 
 type AnyHit = Hit | SearchHit | FusedHit;
-type Thumb = ((path: string) => string) | null;
-
-function useThumbnails(index: string, branch: string, linked: boolean): Thumb {
-  const { loaded } = useApi<{ namespace: string }>(linked ? indexApi(index, "link") : null);
-  if (loaded.state !== "done") return null;
-  const disk = loaded.value.namespace;
-  return (path) =>
-    apiPath(
-      disk,
-      `branches/${encodeURIComponent(branch)}/files/content?path=${encodeURIComponent(path)}`,
-    );
-}
-
-const FOLDED = new Set(["path", "chunk", "summary", "kind"]);
-
-function FileCell({ hit, thumb }: { hit: AnyHit; thumb: Thumb }) {
-  const path = String(hit.attributes.path ?? hit.id);
-  const chunk = Number(hit.attributes.chunk ?? 0);
-  return (
-    <span className="flex items-center gap-3 py-1.5">
-      {thumb && hit.attributes.kind === "image" && (
-        <span
-          role="img"
-          aria-label={path}
-          style={{ backgroundImage: `url("${thumb(path)}")` }}
-          className="size-12 shrink-0 rounded-md bg-muted bg-cover bg-center"
-        />
-      )}
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{path}</span>
-        {chunk > 0 && <span className="text-xs text-faint tabular-nums">passage {chunk + 1}</span>}
-      </span>
-    </span>
-  );
-}
-
 function Results({
   hits,
   ms,
   kind,
   attributes,
-  thumb,
-  linked,
   embeds,
 }: {
   hits: AnyHit[];
   ms: number;
   kind: Kind;
   attributes: string[];
-  thumb: Thumb;
-  linked: boolean;
   embeds: boolean;
 }) {
-  const columns = linked ? attributes.filter((name) => !FOLDED.has(name)) : attributes;
-  const span = 2 + (kind === "hybrid" ? 2 : 0) + columns.length;
+  const span = 2 + (kind === "hybrid" ? 2 : 0) + attributes.length;
   return (
     <Panel
       title="Results"
@@ -547,7 +491,7 @@ function Results({
           <table className="w-full text-sm">
             <thead>
               <tr className="h-10 border-b text-left text-xs text-muted-foreground">
-                <th className="px-4 font-normal">{linked ? "File" : "Id"}</th>
+                <th className="px-4 font-normal">Id</th>
                 <th className="px-4 text-right font-normal">
                   {kind === "vector" ? "Distance" : "Score"}
                 </th>
@@ -559,7 +503,7 @@ function Results({
                     <th className="px-4 text-right font-normal">Keywords rank</th>
                   </>
                 )}
-                {columns.map((name) => (
+                {attributes.map((name) => (
                   <th key={name} className="px-4 font-normal">
                     {name}
                   </th>
@@ -577,9 +521,7 @@ function Results({
                         !highlights.length && "border-b border-border/60 last:border-0",
                       )}
                     >
-                      <td className="px-4">
-                        {linked ? <FileCell hit={hit} thumb={thumb} /> : String(hit.id)}
-                      </td>
+                      <td className="px-4">{String(hit.id)}</td>
                       <td className="px-4 text-right tabular-nums">
                         {"distance" in hit ? hit.distance.toFixed(4) : hit.score.toFixed(4)}
                       </td>
@@ -593,7 +535,7 @@ function Results({
                           </td>
                         </>
                       )}
-                      {columns.map((name) => (
+                      {attributes.map((name) => (
                         <td key={name} className="px-4 text-muted-foreground">
                           <span
                             title={format(hit.attributes[name])}
@@ -609,7 +551,7 @@ function Results({
                         <td colSpan={span} className="grid gap-1 px-4 pb-3">
                           {highlights.map(([name, h]) => (
                             <p key={name} className="text-muted-foreground">
-                              {!linked && <span className="mr-2 text-xs text-faint">{name}</span>}
+                              <span className="mr-2 text-xs text-faint">{name}</span>
                               <Marked highlight={h} />
                             </p>
                           ))}

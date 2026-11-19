@@ -31,7 +31,7 @@ npm install skywake
 pip install skywake
 ```
 
-The `skywake` npm package is the TypeScript SDK, plus `skywake/bash` and `skywake/ai` for [agents](../agents/bash.mdx), and the CLI. Go, Rust, Java, C# and Ruby SDKs have the same disks, indexes and verbs. See the [SDK reference](/reference/sdk).
+The `skywake` npm package is the TypeScript SDK and the CLI. Go, Rust, Java, C# and Ruby SDKs have the same indexes and verbs. See the [SDK reference](/reference/sdk).
 
 ## Sign in
 
@@ -78,7 +78,7 @@ A self-hosted server is a profile with its own `url`. Sign in to it with `skywak
 skywake mcp
 ```
 
-[`skywake mcp`](/reference/cli/mcp) runs the MCP server for agents. It runs on Node, so it works anywhere `npx skywake mcp` does, and `uvx skywake mcp` starts the same server from the Python package. It reads the settings above, plus `SKYWAKE_DISK` and `SKYWAKE_BRANCH` to fix where its file tools work. For example:
+[`skywake mcp`](/reference/cli/mcp) runs the MCP server, which gives an agent tools to search and write indexes. It runs on Node, so it works anywhere `npx skywake mcp` does, and `uvx skywake mcp` starts the same server from the Python package. It reads the settings above. For example:
 
 ```json
 {
@@ -86,55 +86,19 @@ skywake mcp
     "skywake": {
       "command": "npx",
       "args": ["-y", "skywake", "mcp"],
-      "env": { "SKYWAKE_API_KEY": "sw_...", "SKYWAKE_DISK": "app" }
+      "env": { "SKYWAKE_API_KEY": "sw_..." }
     }
   }
 }
 ```
 
-See [MCP](../agents/mcp.mdx) for its tools.
-
-## The daemon
-
-You need `skywaked` only to [mount](../filesystem/mount.mdx) a branch as a folder. It uses FUSE, so it runs on Linux only. Build it from source:
-
-```bash norun
-cargo build --release -p skywake-daemon    # target/release/skywaked
-```
-
-## Without a server
-
-Disk commands can also work straight on a bucket or a folder, with no API. Pass `--local`, or `--local=DIR`, or set `SKYWAKE_STORE`. The store is one disk, so only the branch in `NAME@BRANCH` is used. `fork`, `merge`, `branches`, `log`, `diff`, `destroy NAME@BRANCH`, `upload` and `download` work this way, plus `gc` and `recover`.
-
-| Store                                  | Example                                                     |
-| -------------------------------------- | ----------------------------------------------------------- |
-| A local folder                         | `.skywake` (the default)                                    |
-| An S3 bucket, or any S3 compatible one | `s3://bucket`, or `s3://bucket/folder` for one folder of it |
-| A Google Cloud Storage bucket          | `gs://bucket`, or `gs://bucket/folder`                      |
-| An Azure Blob Storage container        | `az://container`, or `az://container/folder`                |
-
-Each bucket reads the usual variables of its cloud:
-
-- **S3:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, and `AWS_ENDPOINT` if the bucket is not on AWS, such as Cloudflare R2.
-- **Google Cloud Storage:** `GOOGLE_SERVICE_ACCOUNT` (the path to a service account key file), or nothing on a Google Cloud machine with a service account.
-- **Azure:** `AZURE_STORAGE_ACCOUNT_NAME` and `AZURE_STORAGE_ACCOUNT_KEY`.
-
-To try a bucket locally, start the bundled object storage server:
-
-```bash norun
-docker compose -f docker/dev/compose.yaml up -d
-export SKYWAKE_STORE=s3://skywake AWS_ENDPOINT=http://localhost:9100 AWS_ALLOW_HTTP=true \
-       AWS_ACCESS_KEY_ID=skywake AWS_SECRET_ACCESS_KEY=skywake-dev AWS_REGION=us-east-1
-skywake upload ./project app
-```
-
-The bucket must support conditional writes (`If-None-Match` and `If-Match`, or generation checks on Google Cloud Storage), because that is how Skywake keeps two writers from overwriting each other. It checks once, before its first conditional write, and refuses a store that ignores them.
+See [MCP](../mcp.mdx) for its tools.
 
 ## Next
 
 <Cards>
-  <Card href="./first-branch.mdx" />
   <Card href="./first-index.mdx" />
+  <Card href="../self-hosting/deploy.mdx" />
   <Card href="/reference/cli" />
   <Card href="/reference/sdk" />
 </Cards>

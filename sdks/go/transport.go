@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 type params map[string]string
@@ -25,7 +24,6 @@ type call struct {
 	path   string
 	query  params
 	json   any
-	bytes  []byte
 }
 
 type transport struct {
@@ -61,14 +59,6 @@ func (t *transport) in(environment string) *transport {
 
 func segment(name string) string { return url.PathEscape(name) }
 
-func filePath(path string) string {
-	parts := strings.Split(strings.TrimLeft(path, "/"), "/")
-	for i, part := range parts {
-		parts[i] = url.PathEscape(part)
-	}
-	return strings.Join(parts, "/")
-}
-
 func (t *transport) address(c call) string {
 	query := url.Values{}
 	for name, value := range c.query {
@@ -84,13 +74,13 @@ func (t *transport) address(c call) string {
 }
 
 func (t *transport) open(ctx context.Context, c call) (*http.Response, error) {
-	body, kind := c.bytes, "application/octet-stream"
+	var body []byte
 	if c.json != nil {
 		encoded, err := json.Marshal(c.json)
 		if err != nil {
 			return nil, err
 		}
-		body, kind = encoded, "application/json"
+		body = encoded
 	}
 	address := t.address(c)
 	response, err := t.retrier.send(ctx, func() (*http.Request, error) {
@@ -104,7 +94,7 @@ func (t *transport) open(ctx context.Context, c call) (*http.Response, error) {
 		}
 		request.Header = t.headers.Clone()
 		if body != nil {
-			request.Header.Set("content-type", kind)
+			request.Header.Set("content-type", "application/json")
 		}
 		return request, nil
 	})

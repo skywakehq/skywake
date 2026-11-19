@@ -1,7 +1,6 @@
 import type { z } from "@hono/zod-openapi";
 import { indexes as v1, qualify, v2 } from "@skywake/contract";
 
-import { madeIndexes } from "../features/links/queries.ts";
 import type { V2 } from "./app.ts";
 import { Failure, invalid } from "./errors.ts";
 import { segment } from "./forward.ts";
@@ -199,12 +198,9 @@ export function registerIndexes(api: V2) {
 
   api.openapi(routes.listIndexes, async (c) => {
     const scope = await c.var.scope();
-    const [all, hidden] = await Promise.all([
-      scope.v1.get<Index[]>("/indexes"),
-      madeIndexes(scope.c.var.services.db, scope.org),
-    ]);
+    const all = await scope.v1.get<Index[]>("/indexes");
     const mine = all.flatMap((index) => {
-      const name = hidden.has(index.name) ? null : scope.mine(index.name);
+      const name = scope.mine(index.name);
       return name === null ? [] : [{ name, region: index.region, created: index.created }];
     });
     return c.json(

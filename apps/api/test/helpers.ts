@@ -124,16 +124,14 @@ export async function server(
 
   async function ready() {
     const { id, key } = await org();
-    assert.equal((await call("POST", "/namespaces", key, { name: "prod/app" })).status, 201);
-    assert.equal(
-      (await call("POST", "/namespaces/prod%2Fapp/branches", key, { name: "main" })).status,
-      201,
-    );
-    const commit = { message: "add", changes: [{ path: "a.txt", text: "hello" }] };
-    assert.equal(
-      (await call("POST", "/namespaces/prod%2Fapp/branches/main/commits", key, commit)).status,
-      201,
-    );
+    const schema = { vectors: [{ name: "v", dims: 2 }], attributes: [] };
+    const made = await call("POST", "/indexes", key, { name: "prod/app", schema });
+    assert.equal(made.status, 201, JSON.stringify(made.body));
+    const documents = [{ id: 1, vectors: { v: [1, 0] } }];
+    const wrote = await call("POST", "/indexes/prod%2Fapp/branches/main/documents", key, {
+      documents,
+    });
+    assert.equal(wrote.status, 200, JSON.stringify(wrote.body));
     return { id, key };
   }
 

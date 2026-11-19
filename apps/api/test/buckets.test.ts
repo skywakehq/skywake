@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "node:test";
 
-import { Engine, Index } from "@skywake/engine";
+import { Index, Store } from "@skywake/engine";
 
 import { seal, unseal } from "../src/security/sealed.ts";
 import { server, skip as noDatabase, unique } from "./helpers.ts";
@@ -32,7 +32,7 @@ test("a sealed value opens only with its key and its context", () => {
   assert.ok(!sealed.includes("secret"));
 });
 
-test("an environment keeps files and indexes in the bucket it brings", { skip }, async () => {
+test("an environment keeps indexes in the bucket it brings", { skip }, async () => {
   const s = await server({ secretKey });
   const { id, key } = await s.org();
   assert.equal((await s.call("POST", "/environments", key, { name: "prod" })).status, 201);
@@ -48,35 +48,16 @@ test("an environment keeps files and indexes in the bucket it brings", { skip },
   const listed = await s.call("GET", "/environments", key);
   assert.ok(!JSON.stringify(listed.body).includes(keys.secretAccessKey));
 
-  // A namespace and an index made in the environment land in the bucket.
-  assert.equal((await s.call("POST", "/namespaces", key, { name: "prod/app" })).status, 201);
-  assert.equal(
-    (await s.call("POST", "/namespaces/prod%2Fapp/branches", key, { name: "main" })).status,
-    201,
-  );
-  const commit = { message: "add", changes: [{ path: "a.txt", text: "hello" }] };
-  const committed = await s.call(
-    "POST",
-    "/namespaces/prod%2Fapp/branches/main/commits",
-    key,
-    commit,
-  );
-  assert.equal(committed.status, 201, JSON.stringify(committed.body));
+  // An index made in the environment lands in the bucket.
   const made = await s.call("POST", "/indexes", key, {
     name: "prod/docs",
     schema: { vectors: [{ name: "v", dims: 2 }], attributes: [] },
   });
   assert.equal(made.status, 201, JSON.stringify(made.body));
 
-  const ns = (await s.services.db.query.namespaces.findFirst({
-    where: (t, { and, eq }) => and(eq(t.org, id), eq(t.name, "prod/app")),
-  }))!;
-  assert.match(ns.folder, /^fs\/ns_/);
-  assert.match(ns.region, /^bucket:/);
-  const engine = Engine.open(`${store}/${ns.folder}`, {
+  await Store.open(store, {
     keys: { id: `t-${unique()}`, ...keys, endpoint: S3, region: "us-east-1" },
-  });
-  assert.deepEqual(await engine.branches(), ["main"]);
+  }).check();
 
   const ix = (await s.services.db.query.indexes.findFirst({
     where: (t, { and, eq }) => and(eq(t.org, id), eq(t.name, "prod/docs")),
@@ -96,11 +77,12 @@ test("an environment keeps files and indexes in the bucket it brings", { skip },
   assert.equal((await s.call("DELETE", "/environments/prod/store", key)).status, 409);
 
   // Another environment still uses the server's regions.
-  assert.equal((await s.call("POST", "/namespaces", key, { name: "dev/app" })).status, 201);
-  const dev = (await s.services.db.query.namespaces.findFirst({
-    where: (t, { and, eq }) => and(eq(t.org, id), eq(t.name, "dev/app")),
-  }))!;
-  assert.equal(dev.region, "local");
+  const dev = await s.call("POST", "/indexes", key, {
+    name: "dev/docs",
+    schema: { vectors: [{ name: "v", dims: 2 }], attributes: [] },
+  });
+  assert.equal(dev.status, 201);
+  assert.equal(dev.body.region, "local");
 });
 
 test("a bucket the API can't use is refused before anything is kept", { skip }, async () => {

@@ -6,8 +6,7 @@ export const INDEX_METERS = [
   "reranks",
   "pinned",
 ] as const;
-export const FILES_METERS = ["files_storage", "files_egress"] as const;
-export const METERS = [...INDEX_METERS, ...FILES_METERS] as const;
+export const METERS = INDEX_METERS;
 export type Meter = (typeof METERS)[number];
 export type IndexMeter = (typeof INDEX_METERS)[number];
 
@@ -18,7 +17,7 @@ export type PaidPlan = "launch" | "scale";
 export const FEATURES = ["pinning", "sso", "audit_log", "ip_allowlist", "customer_keys"] as const;
 export type Feature = (typeof FEATURES)[number];
 
-export type Limit = Meter | "stored" | "indexes" | "files_stored" | "filesystems";
+export type Limit = Meter | "stored" | "indexes";
 
 const KiB = 1024n;
 const MiB = KiB * KiB;
@@ -100,26 +99,6 @@ export const METER: Record<Meter, MeterSpec> = {
     shownAs: "GB-hours",
     shownRaw: GiB * SECONDS_PER_HOUR,
   },
-  files_storage: {
-    name: "Files storage",
-    dollars: "0.10",
-    per: "GB-month",
-    perRaw: GiB * HOURS_PER_MONTH,
-    unit: "MB-hour",
-    unitRaw: MiB,
-    shownAs: "GB-months",
-    shownRaw: GiB * HOURS_PER_MONTH,
-  },
-  files_egress: {
-    name: "File downloads",
-    dollars: "0.12",
-    per: "GB downloaded",
-    perRaw: GiB,
-    unit: "MB",
-    unitRaw: MiB,
-    shownAs: "GB downloaded",
-    shownRaw: GiB,
-  },
 };
 
 export interface PlanSpec {
@@ -143,9 +122,6 @@ export const PLAN: Record<Plan, PlanSpec> = {
       embeddings: 10_000n,
       reranks: 1_000n,
       indexes: 3n,
-      files_stored: 5n * GiB,
-      files_egress: 10n * GiB,
-      filesystems: 3n,
     },
   },
   launch: {

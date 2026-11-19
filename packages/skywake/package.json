@@ -1,23 +1,21 @@
 {
   "name": "skywake",
   "version": "0.2.0",
-  "description": "Skywake in one package: the TypeScript SDK, a bash shell for AI agents over a branch, and the skywake command.",
+  "description": "Skywake in one package: the open-source search index on object storage, with its TypeScript SDK, the skywake command and an MCP server.",
   "keywords": [
     "skywake",
-    "cli",
-    "sdk",
-    "ai-agents",
-    "filesystem",
-    "s3",
-    "copy-on-write",
-    "branching",
-    "bash",
-    "just-bash",
-    "ai-sdk",
-    "mcp",
+    "search",
+    "search-index",
     "vector-search",
     "full-text-search",
-    "hybrid-search"
+    "hybrid-search",
+    "bm25",
+    "embeddings",
+    "rag",
+    "object-storage",
+    "sdk",
+    "cli",
+    "mcp"
   ],
   "homepage": "https://skywake.dev",
   "repository": {
@@ -32,14 +30,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./bash": {
-      "types": "./dist/bash.d.ts",
-      "default": "./dist/bash.js"
-    },
-    "./ai": {
-      "types": "./dist/ai.d.ts",
-      "default": "./dist/ai.js"
     }
   },
   "bin": {
@@ -60,21 +50,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0",
     "@skywake/sdk": "workspace:*",
-    "just-bash": "^3.6.0",
     "zod": "^4.6.7"
-  },
-  "peerDependencies": {
-    "ai": ">=5"
-  },
-  "peerDependenciesMeta": {
-    "ai": {
-      "optional": true
-    }
   },
   "devDependencies": {
     "@skywake/config": "workspace:*",
     "@types/node": "^22",
-    "ai": "^6.0.0",
     "typescript": "^5.8.3"
   }
 }

@@ -9,24 +9,18 @@ export type DeletionRow = typeof deletions.$inferSelect;
 export const CLAIM_MS = 5 * 60_000;
 
 /**
- * Removes a namespace's or index's row and queues its folder for deletion, in
+ * Removes an index's row and queues its folder for deletion, in
  * one statement: a crash can't land between the two and leave the folder
  * behind. False when there was no such row.
  */
-export async function removeAndDelete(
-  db: Db,
-  kind: "namespace" | "index",
-  org: string,
-  name: string,
-) {
-  const table = kind === "namespace" ? sql`api.namespaces` : sql`api.indexes`;
+export async function removeAndDelete(db: Db, org: string, name: string) {
   const result = await db.execute(sql`
     WITH gone AS (
-      DELETE FROM ${table} WHERE org = ${org} AND name = ${name}
+      DELETE FROM api.indexes WHERE org = ${org} AND name = ${name}
       RETURNING org, name, region, folder
     )
     INSERT INTO api.deletions (org, kind, name, region, folder)
-    SELECT org, ${kind}, name, region, folder FROM gone
+    SELECT org, 'index', name, region, folder FROM gone
     RETURNING id`);
   return result.rows.length > 0;
 }

@@ -8,12 +8,12 @@
 # The bundled Postgres and S3 server are on by default (COMPOSE_PROFILES in
 # .env). For your own database or bucket, drop their profile and set the
 # settings .env lists for them. Put the machine, the database and the bucket
-# in one region: commits wait on several bucket requests one after another,
+# in one region: writes wait on several bucket requests one after another,
 # and every API write waits on Postgres.
 name: skywake
 
 services:
-  # The control plane's database. Branch data stays in the bucket.
+  # The control plane's database. Index data stays in the bucket.
   postgres:
     profiles: [postgres]
     image: postgres:17.6-alpine
@@ -92,8 +92,6 @@ services:
       - SKYWAKE_API_JWT_ISSUER=skywake-console
       - SKYWAKE_API_JWT_AUDIENCE=skywake-console
       - SKYWAKE_API_METRICS_LISTEN=0.0.0.0:9464
-      - SKYWAKE_API_STS_ROLE_ARN
-      - SKYWAKE_API_STS_ENDPOINT
       - SKYWAKE_API_EMBED_URL
       - SKYWAKE_API_EMBED_KEY
       - SKYWAKE_API_RERANK_URL

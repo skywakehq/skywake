@@ -6,12 +6,12 @@ import { server, skip } from "./helpers.ts";
 test("every request is logged as one structured line", { skip }, async () => {
   const s = await server();
   const { id, key } = await s.org();
-  const listed = await s.call("GET", "/namespaces", key);
+  const listed = await s.call("GET", "/indexes", key);
   const line = s.logs.find((entry) => entry.request_id === listed.headers.get("x-request-id"));
   assert.ok(line);
   assert.equal(line.msg, "request");
   assert.equal(line.method, "GET");
-  assert.equal(line.route, "/v1/namespaces");
+  assert.equal(line.route, "/v1/indexes");
   assert.equal(line.status, 200);
   assert.equal(line.org, id);
   assert.match(String(line.actor), /^key:/);
@@ -25,7 +25,7 @@ test(
   async () => {
     const s = await server();
     const { key } = await s.org();
-    const listed = await s.call("GET", "/namespaces", key, undefined, { "x-request-id": "forged" });
+    const listed = await s.call("GET", "/indexes", key, undefined, { "x-request-id": "forged" });
     const id = listed.headers.get("x-request-id");
     assert.ok(id && id !== "forged");
     const line = s.logs.find((entry) => entry.request_id === id);
@@ -40,10 +40,10 @@ test(
     const s = await server();
     const { key } = await s.ready();
     const stores = s.services.stores;
-    stores.engine = () => {
+    stores.index = () => {
       throw new Error("the disk caught fire");
     };
-    const failed = await s.call("GET", "/namespaces/prod%2Fapp/branches/main/files", key);
+    const failed = await s.call("GET", "/indexes/prod%2Fapp/branches/main/documents", key);
     const requestId = failed.headers.get("x-request-id");
     assert.deepEqual(failed.body, {
       error: "internal error",
@@ -84,14 +84,14 @@ test("the server says when it is alive and when it is ready", { skip }, async (t
 test("requests are counted for Prometheus, by route", { skip }, async () => {
   const s = await server();
   const { key } = await s.org();
-  await s.call("GET", "/namespaces", key);
+  await s.call("GET", "/indexes", key);
   const text = await s.services.metrics.registry.metrics();
   assert.match(
     text,
-    /skywake_api_requests_total\{method="GET",route="\/v1\/namespaces",status="200"\} 1/,
+    /skywake_api_requests_total\{method="GET",route="\/v1\/indexes",status="200"\} 1/,
   );
   assert.match(
     text,
-    /skywake_api_request_seconds_bucket\{le="0.005",method="GET",route="\/v1\/namespaces"\}/,
+    /skywake_api_request_seconds_bucket\{le="0.005",method="GET",route="\/v1\/indexes"\}/,
   );
 });

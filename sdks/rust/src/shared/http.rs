@@ -27,18 +27,9 @@ pub(crate) fn segment(name: &str) -> String {
     utf8_percent_encode(name, COMPONENT).to_string()
 }
 
-pub(crate) fn file_path(path: &str) -> String {
-    path.trim_start_matches('/')
-        .split('/')
-        .map(segment)
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
 pub(crate) enum Body {
     Empty,
     Json(Vec<u8>),
-    Bytes(Vec<u8>),
 }
 
 #[derive(Clone)]
@@ -154,9 +145,6 @@ impl Http {
             Body::Empty => request,
             Body::Json(bytes) => request
                 .header(CONTENT_TYPE, "application/json")
-                .body(bytes.clone()),
-            Body::Bytes(bytes) => request
-                .header(CONTENT_TYPE, "application/octet-stream")
                 .body(bytes.clone()),
         }
     }

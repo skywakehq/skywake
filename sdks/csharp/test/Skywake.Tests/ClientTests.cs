@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json.Nodes;
 using Xunit;
 using static Skywake.Tests.FakeApi;
@@ -73,10 +72,10 @@ public class ClientTests
     [Fact]
     public async Task AMergeThatCannotFinishIsAMergeConflictListingWhatConflicts()
     {
-        var api = new FakeApi((_, _) => Failure(409, "conflict", new { conflicts = new[] { "README.md" } }));
-        var work = api.Client().Disk("app", "agent-1");
+        var api = new FakeApi((_, _) => Failure(409, "conflict", new { conflicts = new[] { "mug" } }));
+        var work = api.Client().Index("products", "agent-1");
         var error = await Assert.ThrowsAsync<MergeConflictException>(() => work.MergeIntoAsync());
-        Assert.Equal(new[] { "README.md" }, error.Conflicts);
+        Assert.Equal(new[] { "mug" }, error.Conflicts);
         Assert.IsAssignableFrom<ConflictException>(error);
         Same(new { from = "agent-1", into = "main" }, api.Seen[0].Json);
     }
@@ -85,12 +84,12 @@ public class ClientTests
     public async Task ListsFollowNextUntilTheLastPage()
     {
         var api = new FakeApi((seen, _) => seen.Query["cursor"] == "b"
-            ? new Reply(Body: new { data = new[] { Disk("c") }, next = (string?)null })
-            : new Reply(Body: new { data = new[] { Disk("a"), Disk("b") }, next = "b" }));
+            ? new Reply(Body: new { data = new[] { Index("c") }, next = (string?)null })
+            : new Reply(Body: new { data = new[] { Index("a"), Index("b") }, next = "b" }));
         var names = new List<string>();
-        await foreach (var disk in api.Client().ListDisksAsync())
+        await foreach (var index in api.Client().ListIndexesAsync())
         {
-            names.Add(disk.Name);
+            names.Add(index.Name);
         }
         Assert.Equal(new[] { "a", "b", "c" }, names);
     }
@@ -159,69 +158,16 @@ public class ClientTests
     }
 
     [Fact]
-    public async Task FilesAreReadAndWrittenByPathEachPartOfItEncoded()
-    {
-        var api = new FakeApi((seen, _) => seen.Method == "GET"
-            ? new Reply(Raw: Encoding.UTF8.GetBytes("hello"))
-            : new Reply(Body: new { commit = "c1", changed = true }));
-        var app = api.Client().Disk("app");
-        Assert.Equal("hello", await app.ReadAsync("/docs/a b.md", new ReadOptions { At = "c0" }));
-        Assert.Equal(Encoding.UTF8.GetBytes("hello"), await app.ReadBytesAsync("x"));
-        var done = await app.WriteAsync(
-            new Dictionary<string, FileContent> { ["a.md"] = "one", ["b.bin"] = new byte[] { 0xff, 0x00 } },
-            new WriteOptions { Message = "two" });
-        Assert.Equal("c1", done.Commit);
-        Assert.Equal("/v2/disks/app/files/docs/a%20b.md", api.Seen[0].Path);
-        Assert.Equal("c0", api.Seen[0].Query["at"]);
-        Same(new
-        {
-            message = "two",
-            branch = "main",
-            changes = new object[] { new { path = "a.md", text = "one" }, new { path = "b.bin", base64 = "/wA=" } },
-        }, api.Seen[2].Json);
-    }
-
-    [Fact]
-    public async Task ALargeFileGoesUpInPartsBeforeItsCommit()
-    {
-        var api = new FakeApi((seen, _) => seen.Path.EndsWith("/uploads")
-            ? new Reply(201, new { part = $"p{seen.Body.Length}", size = seen.Body.Length })
-            : new Reply(Body: new { commit = "c1", changed = true }));
-        await api.Client().Disk("app").WriteAsync("big.bin", new byte[20 * 1024 * 1024]);
-        var parts = api.Seen.Where(seen => seen.Path.EndsWith("/uploads")).ToList();
-        Assert.Equal(new[] { 16 * 1024 * 1024, 4 * 1024 * 1024 }, parts.Select(seen => seen.Body.Length));
-        Same(new[] { new { path = "big.bin", parts = new[] { $"p{16 * 1024 * 1024}", $"p{4 * 1024 * 1024}" } } }, api.Seen[^1].Json!["changes"]);
-    }
-
-    [Fact]
     public async Task AForkIsAHandleOnTheNewBranchAndDestroyRemovesJustTheBranch()
     {
         var api = new FakeApi((seen, _) => seen.Method == "DELETE" ? new Reply(204) : new Reply(201, new { name = "agent-1" }));
-        var work = await api.Client().Disk("app").ForkAsync("agent-1", "c3");
+        var work = await api.Client().Index("products").ForkAsync("agent-1", "c3");
         Assert.Equal("agent-1", work.Branch);
         await work.DestroyAsync();
         Same(new { name = "agent-1", from = "main", at = "c3" }, api.Seen[0].Json);
-        Assert.Equal(("DELETE", "/v2/disks/app/branches/agent-1"), (api.Seen[1].Method, api.Seen[1].Path));
+        Assert.Equal(("DELETE", "/v2/indexes/products/branches/agent-1"), (api.Seen[1].Method, api.Seen[1].Path));
     }
 
-    [Fact]
-    public async Task RestoreToATimePicksTheNewestCommitAtOrBeforeIt()
-    {
-        var api = new FakeApi((seen, _) => seen.Method == "GET"
-            ? new Reply(Body: new
-            {
-                data = new[]
-                {
-                    new { id = "c3", message = "", created = "2026-01-03T00:00:00Z", merged = (string?)null },
-                    new { id = "c2", message = "", created = "2026-01-02T00:00:00Z", merged = (string?)null },
-                },
-                next = (string?)null,
-            })
-            : new Reply(Body: new { commit = "c4", changed = true }));
-        await api.Client().Disk("app").RestoreAsync(DateTimeOffset.Parse("2026-01-02T12:00:00Z"));
-        Same(new { to = "c2", branch = "main" }, api.Seen[1].Json);
-    }
-
-    private static JsonObject Disk(string name) =>
-        new() { ["name"] = name, ["region"] = "r", ["visibility"] = "private", ["created"] = "2026-01-01T00:00:00Z" };
+    private static JsonObject Index(string name) =>
+        new() { ["name"] = name, ["region"] = "r", ["created"] = "2026-01-01T00:00:00Z" };
 }

@@ -1,4 +1,4 @@
-// Deletes the folders of deleted namespaces and indexes. Every API server runs
+// Deletes the folders of deleted indexes. Every API server runs
 // one; a deletion is claimed by one server at a time and retried until it
 // succeeds, so a server that dies or a bucket that refuses for a while costs
 // only time. Each try lists what is left, so a retry carries on.

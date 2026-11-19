@@ -1,12 +1,11 @@
 import { SitePage } from "@/components/layout/site-page";
 import { Architecture } from "@/components/sections/architecture";
-import { Cost } from "@/components/sections/cost";
+import { Benchmarks } from "@/components/sections/benchmarks";
+import { Compare } from "@/components/sections/compare";
+import { Features } from "@/components/sections/features";
 import { GetStarted } from "@/components/sections/get-started";
-import { WorksWithGit } from "@/components/sections/git";
 import { Hero } from "@/components/sections/hero";
 import { OpenSource } from "@/components/sections/open-source";
-import { Products } from "@/components/sections/products";
-import { UseCases } from "@/components/sections/use-cases";
 import { Band } from "@/components/ui/frame";
 import { TextureBand } from "@/components/ui/texture";
 import { getMessages } from "@/content/messages";
@@ -31,13 +30,12 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
         }}
       />
       <Hero t={t} />
-      <Products t={t} locale={locale} />
-      <UseCases t={t} locale={locale} />
+      <Features t={t} />
       <TextureBand />
-      <Cost t={t} />
-      <TextureBand />
-      <WorksWithGit t={t} />
       <Architecture t={t} />
+      <Benchmarks t={t} />
+      <TextureBand />
+      <Compare t={t} />
       <OpenSource t={t} />
       {/* Blank space before the waitlist, which has its own pattern. */}
       <Band className="h-28 sm:h-36" />

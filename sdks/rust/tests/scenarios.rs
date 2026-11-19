@@ -1,10 +1,8 @@
-use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::TryStreamExt;
 use serde_json::{Value, json};
-use skywake::{Error, ErrorKind, Mode, Prefer, Role, Skywake};
+use skywake::{Error, ErrorKind, Mode, Role, Skywake};
 
 struct Keys {
     staging: String,
@@ -167,97 +165,7 @@ async fn scenario_06_a_fork_changes_apart_from_main_and_merging_brings_the_chang
 }
 
 #[tokio::test]
-async fn scenario_07_a_file_written_to_a_new_disk_reads_back_and_is_listed() {
-    let Some(sky) = setup().await else { return };
-    let app = sky.disk("app");
-    app.write("README.md", "# App\n").await.unwrap();
-    assert_eq!(app.read("README.md").await.unwrap(), "# App\n");
-    let listed = app.list("").await.unwrap();
-    let listed: Vec<_> = listed
-        .iter()
-        .map(|entry| (entry.path.as_str(), entry.kind))
-        .collect();
-    assert_eq!(listed, [("README.md", skywake::Kind::File)]);
-}
-
-#[tokio::test]
-async fn scenario_08_many_files_written_together_are_one_commit() {
-    let Some(sky) = setup().await else { return };
-    let app = sky.disk("app");
-    let before = app.log().await.unwrap().len();
-    app.write_files([
-        ("src/a.ts", "export const a = 1;\n"),
-        ("src/b.ts", "export const b = 2;\n"),
-        ("notes.txt", "hi"),
-    ])
-    .message("three files")
-    .await
-    .unwrap();
-    let log = app.log().await.unwrap();
-    assert_eq!(log.len(), before + 1);
-    assert_eq!(log[0].message, "three files");
-}
-
-#[tokio::test]
-async fn scenario_09_both_sides_changing_one_file_make_the_merge_a_merge_conflict() {
-    let Some(sky) = setup().await else { return };
-    let app = sky.disk("app");
-    let work = app.fork("agent-1").await.unwrap();
-    work.write("notes.txt", "from the agent").await.unwrap();
-    app.write("notes.txt", "from main").await.unwrap();
-    let conflicts = vec!["notes.txt".to_string()];
-    assert_eq!(
-        kind(work.merge_into("main").await),
-        ErrorKind::MergeConflict { conflicts }
-    );
-    let settled = work
-        .merge_into("main")
-        .prefer(Prefer::Theirs)
-        .await
-        .unwrap();
-    assert!(settled.commit.is_some());
-    assert_eq!(app.read("notes.txt").await.unwrap(), "from the agent");
-}
-
-#[tokio::test]
-async fn scenario_10_grep_find_and_query_on_a_disk_find_a_file() {
-    let Some(sky) = setup().await else { return };
-    let app = sky.disk("app");
-    app.write("docs/coffee.md", "How to brew coffee at home.\n")
-        .await
-        .unwrap();
-    let lines = app.grep("brew").await.unwrap();
-    let lines: Vec<_> = lines
-        .iter()
-        .map(|line| (line.path.as_str(), line.line))
-        .collect();
-    assert_eq!(lines, [("docs/coffee.md", 1)]);
-    let found = app.find("*.md").path("docs").await.unwrap();
-    let found: Vec<_> = found.iter().map(|entry| entry.path.as_str()).collect();
-    assert_eq!(found, ["docs/coffee.md"]);
-    let mut hits = Vec::new();
-    for _ in 0..100 {
-        hits = app.query("coffee").await.unwrap();
-        if hits.iter().any(|hit| hit.path == "docs/coffee.md") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(200)).await;
-    }
-    assert_eq!(hits[0].path, "docs/coffee.md");
-}
-
-#[tokio::test]
-async fn scenario_11_read_with_at_returns_the_old_content_after_a_change() {
-    let Some(sky) = setup().await else { return };
-    let app = sky.disk("app");
-    let old = app.head().await.unwrap().unwrap();
-    app.write("README.md", "# App, changed\n").await.unwrap();
-    assert_eq!(app.read("README.md").at(old).await.unwrap(), "# App\n");
-    assert_eq!(app.read("README.md").await.unwrap(), "# App, changed\n");
-}
-
-#[tokio::test]
-async fn scenario_12_keys_stay_in_their_environment_and_their_role() {
+async fn scenario_07_keys_stay_in_their_environment_and_their_role() {
     let Some(_) = setup().await else { return };
     let staging = Skywake::builder()
         .key(key(|keys| &keys.staging))
@@ -280,60 +188,24 @@ async fn scenario_12_keys_stay_in_their_environment_and_their_role() {
 }
 
 #[tokio::test]
-async fn scenario_13_a_wrong_name_is_not_found_with_a_suggestion() {
+async fn scenario_08_a_wrong_name_is_not_found_with_a_suggestion() {
     let Some(sky) = setup().await else { return };
     let (found, said) = hint(sky.index("prodcts").query("coffee").await);
     assert_eq!(found, ErrorKind::NotFound);
     assert!(said.contains("products"));
-    let (found, said) = hint(sky.disk("ap").read("README.md").await);
-    assert_eq!(found, ErrorKind::NotFound);
-    assert!(said.contains("`app`"));
 }
 
 #[tokio::test]
-async fn scenario_14_destroying_a_branch_then_the_index_and_the_disk_empties_the_lists() {
+async fn scenario_09_destroying_a_branch_then_the_indexes_empties_the_list() {
     let Some(sky) = setup().await else { return };
     let products = sky.index("products");
     products.on("draft").destroy().await.unwrap();
     let branches = products.branches().await.unwrap();
     let branches: Vec<_> = branches.iter().map(|branch| branch.name.as_str()).collect();
     assert_eq!(branches, ["main"]);
-    let app = sky.disk("app");
-    app.on("agent-1").destroy().await.unwrap();
     for name in ["products", "bulk"] {
         sky.index(name).destroy().await.unwrap();
     }
-    app.destroy().await.unwrap();
     let indexes: Vec<_> = sky.list_indexes().try_collect().await.unwrap();
     assert!(indexes.is_empty());
-    let disks: Vec<_> = sky.list_disks().try_collect().await.unwrap();
-    assert!(disks.is_empty());
-}
-
-fn scratch(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!("skywake-{name}-{}-{nanos}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
-
-#[tokio::test]
-async fn scenario_15_a_folder_goes_up_as_one_commit_and_comes_back_the_same() {
-    let Some(sky) = setup().await else { return };
-    let dir = scratch("up");
-    std::fs::write(dir.join("a.txt"), "alpha").unwrap();
-    std::fs::write(dir.join("b.bin"), [0, 1, 2, 255]).unwrap();
-    let site = sky.disk("site");
-    site.upload(&dir).message("site").await.unwrap();
-    let back = scratch("down");
-    site.download(&back).await.unwrap();
-    assert_eq!(
-        std::fs::read_to_string(back.join("a.txt")).unwrap(),
-        "alpha"
-    );
-    assert_eq!(std::fs::read(back.join("b.bin")).unwrap(), [0, 1, 2, 255]);
-    site.destroy().await.unwrap();
 }

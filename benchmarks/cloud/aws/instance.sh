@@ -81,12 +81,9 @@ trap finish EXIT
 # The log reaches the bucket every 20 s, so `status` can show it.
 (while sleep 20; do save >/dev/null 2>&1 || true; done) &
 
-FILESYSTEM=${FILESYSTEM:-0}
 TPUF=${TPUF:-0}
 if [ "$TPUF" = 1 ]; then
   say run start "$INSTANCE in $AWS_REGION · turbopuffer's vector-10m through the API"
-elif [ "$FILESYSTEM" = 1 ]; then
-  say run start "$INSTANCE in $AWS_REGION · filesystem only${FS_ARGS:+ · $FS_ARGS}"
 else
   say run start "$INSTANCE in $AWS_REGION · sets: $SETS${INDEX_ARGS:+ · $INDEX_ARGS}"
 fi
@@ -102,15 +99,14 @@ export TMPDIR=/data/tmp CARGO_TARGET_DIR=/data/target
 
 # Packages, Rust and the source come down at the same time.
 packages() {
-  dnf install -y -q gcc gcc-c++ make cmake clang git openssl-devel pkgconf fuse3 fuse3-devel \
+  dnf install -y -q gcc gcc-c++ make cmake clang git openssl-devel pkgconf \
     python3.11 python3.11-pip nodejs npm tar fio rsync &&
-    { [ "$FILESYSTEM" = 1 ] || python3.11 -m pip install -q h5py numpy pyarrow; }
+    python3.11 -m pip install -q h5py numpy pyarrow
 }
 rust() { curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain 1.99; }
 source_tree() {
   cd /data/skywake &&
     aws s3 cp --quiet "s3://$BUCKET/source.tar.gz" - | tar -xz &&
-    # The mount suite copies this tree and runs git in it.
     git init -q && git add -A && git -c user.name=bench -c user.email=bench@localhost commit -qm snapshot
 }
 step packages "compilers, python and its data libraries" packages &
@@ -144,33 +140,16 @@ fetch_sets() {
   done
 }
 mkdir -p /data/datasets
-[ "$FILESYSTEM" = 1 ] || (fetch_sets 2>&1 | grep --line-buffered -v '^/data/datasets/') &
+(fetch_sets 2>&1 | grep --line-buffered -v '^/data/datasets/') &
 
 build() {
-  if [ "$FILESYSTEM" = 1 ]; then
-    cargo build --release -p skywake-cli -p skywake-daemon -p skywake-cache &&
-      cargo build --release -p skywake-benchmarks --bin s3-proxy
-  else
-    cargo build --release -p skywake-cli -p skywake-daemon -p skywake-cache -p skywake-benchmarks &&
-      cargo test --release -p skywake-core --test encryption --no-run
-  fi
+  cargo build --release -p skywake-cli -p skywake-cache -p skywake-benchmarks &&
+    cargo test --release -p skywake-core --test encryption --no-run
 }
 step build "Skywake in release mode" build
 
 STORE=s3://$BUCKET
-CLIENT="aws $INSTANCE $AWS_REGION, same region as the bucket"
 export SKYWAKE_INDEX_CACHE_DIR=/data/cache SKYWAKE_INDEX_COLUMNS=on SKYWAKE_INDEX_POSTINGS=on
-
-# The filesystem: every suite, latency included.
-filesystem() {
-  # shellcheck disable=SC2086
-  SKYWAKE_STORE=$STORE/fs python3.11 benchmarks/filesystem/run.py store mount save daemon fleet latency \
-    --client "$CLIENT" --allow-dirty --note "$NOTE" --out "$RESULTS/filesystem" $FS_ARGS
-}
-if [ "$FILESYSTEM" = 1 ]; then
-  step filesystem "every filesystem suite, latency included" filesystem
-  exit
-fi
 
 postgres() {
   dnf install -y -q postgresql16-server &&
@@ -394,23 +373,3 @@ for set in $SETS; do
   rm -rf "/data/datasets/$set" "$SKYWAKE_INDEX_CACHE_DIR"
   save
 done
-
-[ "${MINI:-0}" = 1 ] && exit 0
-
-# 4. The filesystem.
-step filesystem "every filesystem suite, latency included" filesystem || true
-save
-
-# 5. Pinned indexes with read replicas: three API servers on this machine,
-# each with its own disk cache, over the bucket and a local Postgres.
-pinning() {
-  SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$STORE/pinning \
-    SKYWAKE_INDEX_CACHE_GB=20 ROWS=1000000 LOAD_SECONDS=60 RESULTS=$RESULTS/pinning \
-    benchmarks/pinning/run.sh
-}
-step postgres "a local Postgres for the API" postgres &
-setup=$!
-step api "the API and its engine binding" api
-wait "$setup"
-export PATH=/data/node-v22.20.0-linux-x64/bin:$PATH
-step pinning "1M rows through three API servers: unpinned, 1 and 3 replicas" pinning || true

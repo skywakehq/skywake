@@ -22,8 +22,6 @@ export interface Measured {
   totals: Map<Meter, bigint>;
   storedBytes: bigint;
   indexes: bigint;
-  filesBytes: bigint;
-  filesystems: bigint;
 }
 
 export function summarize({
@@ -32,8 +30,6 @@ export function summarize({
   totals,
   storedBytes,
   indexes,
-  filesBytes,
-  filesystems,
 }: Measured): contract.Billing {
   const plan = standing(account, now);
   const live = account !== null && isLive(account.status);
@@ -57,8 +53,6 @@ export function summarize({
   const minimum = PLAN[plan].minimumCents;
   const storedLimit = limitOf(plan, "stored");
   const indexLimit = limitOf(plan, "indexes");
-  const filesLimit = limitOf(plan, "files_stored");
-  const filesystemLimit = limitOf(plan, "filesystems");
   return {
     enabled: true,
     plan,
@@ -81,14 +75,6 @@ export function summarize({
       count: Number(indexes),
       limit: indexLimit === null ? null : Number(indexLimit),
     },
-    files: {
-      gb: Number(filesBytes) / GiB,
-      limit_gb: filesLimit === null ? null : Number(filesLimit) / GiB,
-    },
-    filesystems: {
-      count: Number(filesystems),
-      limit: filesystemLimit === null ? null : Number(filesystemLimit),
-    },
     features: [...PLAN[plan].features],
     plans: offers(),
     customer: account?.customer != null,
@@ -103,12 +89,7 @@ export const offers = () =>
     features: [...PLAN[name].features],
   }));
 
-export function unbilled(
-  storedBytes: bigint,
-  indexes: bigint,
-  filesBytes: bigint,
-  filesystems: bigint,
-): contract.Billing {
+export function unbilled(storedBytes: bigint, indexes: bigint): contract.Billing {
   return {
     enabled: false,
     plan: "unlimited",
@@ -125,8 +106,6 @@ export function unbilled(
     meters: [],
     stored: { gb: Number(storedBytes) / GiB, limit_gb: null },
     indexes: { count: Number(indexes), limit: null },
-    files: { gb: Number(filesBytes) / GiB, limit_gb: null },
-    filesystems: { count: Number(filesystems), limit: null },
     features: ["pinning", "sso", "audit_log", "ip_allowlist", "customer_keys"],
     plans: [],
     customer: false,

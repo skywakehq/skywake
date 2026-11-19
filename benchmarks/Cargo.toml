@@ -1,6 +1,6 @@
 [package]
 name = "skywake-benchmarks"
-description = "System benchmarks for Skywake: the search index, filesystem scale, the request-counting proxy and the pinned-index load test, on one support library."
+description = "System benchmarks for Skywake: the search index, the request-counting proxy and the pinned-index load test, on one support library."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,10 +13,6 @@ path = "src/bin/index-bench.rs"
 [[bin]]
 name = "s3-proxy"
 path = "src/bin/s3-proxy.rs"
-
-[[bin]]
-name = "scale-bench"
-path = "src/bin/scale-bench.rs"
 
 [[bin]]
 name = "pinning-load"

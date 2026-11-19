@@ -1,0 +1,54 @@
+---
+title: MCP server
+icon: Plug
+description: skywake mcp gives an MCP-capable agent tools to search and write indexes.
+---
+
+Use the MCP server when an agent speaks MCP and should search or write your indexes. Start it with `skywake mcp`, `npx skywake mcp` or `uvx skywake mcp`, and add it to the agent's MCP config:
+
+```json
+{
+  "mcpServers": {
+    "skywake": {
+      "command": "npx",
+      "args": ["-y", "skywake", "mcp"],
+      "env": { "SKYWAKE_API_KEY": "sw_..." }
+    }
+  }
+}
+```
+
+The server is written in TypeScript, so it needs Node.js in every case. `skywake mcp` and `uvx skywake mcp` start it through `npx`. With no `SKYWAKE_API_KEY`, it uses the key that `skywake login` saved.
+
+## Settings
+
+The server reads the same settings as the SDKs and the CLI.
+
+| Variable          | Meaning                                                                           |
+| ----------------- | --------------------------------------------------------------------------------- |
+| `SKYWAKE_API_KEY` | An [API key](./security/api-keys.mdx). Defaults to the one `skywake login` saved. |
+| `SKYWAKE_URL`     | The API, for a self-hosted server. `https://api.skywake.dev` by default.          |
+| `SKYWAKE_ENV`     | The environment, for a key that may use every one.                                |
+| `SKYWAKE_PROFILE` | Which saved profile to use.                                                       |
+
+## Tools
+
+Each tool takes the index's name.
+
+| Tool           | What it does                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| `index_query`  | Search an index by `text` or `vector`, with `filter`, `limit`, `mode` and `fields`. No text lists rows. |
+| `index_upsert` | Write rows; each replaces any row with its id. The first write makes the index.                         |
+| `index_delete` | Delete rows by `ids`, or every row a `filter` matches.                                                  |
+
+A `read` key hides `index_upsert` and `index_delete`. Give the agent a key narrowed to the indexes it needs, such as `skywake keys create --role read --only products`.
+
+When the API rejects a call, the agent gets the API's message and hint as the tool's error. That lets it fix the call and try again.
+
+## Next
+
+<Cards>
+  <Card href="./security/api-keys.mdx" />
+  <Card href="./indexes/index.mdx" />
+  <Card href="/reference/cli/mcp" />
+</Cards>

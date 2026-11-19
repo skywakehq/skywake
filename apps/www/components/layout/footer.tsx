@@ -4,7 +4,6 @@ import {
   ChartNoAxesColumn,
   CreditCard,
   FileText,
-  HardDrive,
   Heart,
   Layers,
   Search,
@@ -36,9 +35,8 @@ export function Footer({ locale, messages: t }: { locale: Locale; messages: Home
     {
       title: t.footer.product,
       links: [
-        { href: "/filesystem", label: t.nav.filesystem, icon: HardDrive },
-        { href: "/search", label: t.nav.search, icon: Search },
-        { href: "/use-cases", label: t.footer.useCases, icon: Layers },
+        { href: "/#features", label: t.nav.features, icon: Search },
+        { href: "/#turbopuffer", label: t.footer.compare, icon: Layers },
         { href: "/pricing", label: t.nav.pricing, icon: CreditCard },
       ],
     },

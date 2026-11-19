@@ -5,11 +5,9 @@ import {
   billingAccounts,
   billingReports,
   billingUsage,
-  filesystemSizes,
   indexes,
   indexUsage,
   leases,
-  namespaces,
   orgs,
 } from "../../db/schema.ts";
 import type { Meter } from "./catalog.ts";
@@ -187,53 +185,4 @@ export async function dropLease(db: Db, name: string, holder: string) {
 export async function orgName(db: Db, org: string) {
   const [row] = await db.select({ name: orgs.name }).from(orgs).where(eq(orgs.id, org));
   return row?.name ?? null;
-}
-
-export async function allFilesystems(db: Db) {
-  return db
-    .select({
-      org: namespaces.org,
-      folder: namespaces.folder,
-      region: namespaces.region,
-      bytes: filesystemSizes.bytes,
-      measured: filesystemSizes.measured,
-      stale: filesystemSizes.stale,
-    })
-    .from(namespaces)
-    .leftJoin(filesystemSizes, eq(filesystemSizes.folder, namespaces.folder))
-    .orderBy(asc(namespaces.org), asc(namespaces.folder));
-}
-
-export async function saveSize(
-  db: Db,
-  size: { folder: string; org: string; bytes: bigint; objects: number; measured: Date },
-) {
-  await db
-    .insert(filesystemSizes)
-    .values({ ...size, stale: false })
-    .onConflictDoUpdate({
-      target: filesystemSizes.folder,
-      set: { bytes: size.bytes, objects: size.objects, measured: size.measured, stale: false },
-    });
-}
-
-export async function markStale(db: Db, folder: string) {
-  await db
-    .update(filesystemSizes)
-    .set({ stale: true })
-    // A row already stale is left alone, so busy writers don't queue on its lock.
-    .where(and(eq(filesystemSizes.folder, folder), eq(filesystemSizes.stale, false)));
-}
-
-export async function filesStored(db: Db, org: string) {
-  const [row] = await db
-    .select({ bytes: sql<string | null>`sum(${filesystemSizes.bytes})` })
-    .from(filesystemSizes)
-    .where(eq(filesystemSizes.org, org));
-  return BigInt(row?.bytes ?? 0);
-}
-
-export async function filesystemCount(db: Db, org: string) {
-  const [row] = await db.select({ n: count() }).from(namespaces).where(eq(namespaces.org, org));
-  return BigInt(row?.n ?? 0);
 }

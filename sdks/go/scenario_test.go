@@ -3,12 +3,9 @@ package skywake_test
 import (
 	"errors"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	skywake "github.com/skywakehq/skywake/sdks/go"
 )
@@ -33,16 +30,6 @@ func scenarioSetup(t *testing.T, url, admin string) scenarioKeys {
 	t.Setenv("SKYWAKE_URL", url)
 	t.Setenv("SKYWAKE_API_KEY", keys.prod)
 	return keys
-}
-
-func eventually[T any](check func() (T, bool)) T {
-	for tries := 0; ; tries++ {
-		found, ok := check()
-		if ok || tries == 100 {
-			return found
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
 }
 
 func names[T any](items []T, name func(T) string) []string {
@@ -70,7 +57,6 @@ func TestScenarios(t *testing.T) {
 	keys := scenarioSetup(t, url, admin)
 	sky := must(skywake.New())
 	products := sky.Index("products")
-	app := sky.Disk("app")
 
 	t.Run("01 with only SKYWAKE_API_KEY set, whoami shows the environment", func(t *testing.T) {
 		me := must(sky.Whoami(ctx))
@@ -132,63 +118,7 @@ func TestScenarios(t *testing.T) {
 		same(t, must(products.Get(ctx, "cup"))["price"], 7)
 	})
 
-	t.Run("07 a file written to a new disk reads back and is listed", func(t *testing.T) {
-		must(app.Write(ctx, "README.md", []byte("# App\n")))
-		same(t, must(app.Read(ctx, "README.md")), "# App\n")
-		listed := must(app.List(ctx, ""))
-		same(t, names(listed, func(e skywake.Entry) string { return e.Path + ":" + e.Kind }), []string{"README.md:file"})
-	})
-
-	t.Run("08 many files written together are one commit", func(t *testing.T) {
-		before := len(must(skywake.Collect(app.Log(ctx))))
-		must(app.WriteFiles(ctx, map[string][]byte{
-			"src/a.ts":  []byte("export const a = 1;\n"),
-			"src/b.ts":  []byte("export const b = 2;\n"),
-			"notes.txt": []byte("hi"),
-		}, skywake.WriteOptions{Message: "three files"}))
-		log := must(skywake.Collect(app.Log(ctx)))
-		same(t, []any{len(log), log[0].Message}, []any{before + 1, "three files"})
-	})
-
-	t.Run("09 both sides changing one file make the merge a MergeConflict", func(t *testing.T) {
-		work := must(app.Fork(ctx, "agent-1"))
-		must(work.Write(ctx, "notes.txt", []byte("from the agent")))
-		must(app.Write(ctx, "notes.txt", []byte("from main")))
-		_, err := work.MergeInto(ctx, "main")
-		same(t, failsWith[*skywake.MergeConflict](t, err).Conflicts, []string{"notes.txt"})
-		settled := must(work.MergeInto(ctx, "main", skywake.MergeOptions{Prefer: "theirs"}))
-		if settled.Commit == "" {
-			t.Fatal("no commit")
-		}
-		same(t, must(app.Read(ctx, "notes.txt")), "from the agent")
-	})
-
-	t.Run("10 grep, find and query on a disk find a file", func(t *testing.T) {
-		must(app.Write(ctx, "docs/coffee.md", []byte("How to brew coffee at home.\n")))
-		lines := must(app.Grep(ctx, "brew"))
-		same(t, names(lines, func(m skywake.Match) string { return m.Path + ":" + strconv.Itoa(m.Line) }), []string{"docs/coffee.md:1"})
-		found := must(app.Find(ctx, "*.md", skywake.FindOptions{Path: "docs"}))
-		same(t, names(found, func(f skywake.Found) string { return f.Path }), []string{"docs/coffee.md"})
-		hits := eventually(func() ([]skywake.FileHit, bool) {
-			hits := must(app.Query(ctx, "coffee"))
-			for _, hit := range hits {
-				if hit.Path == "docs/coffee.md" {
-					return hits, true
-				}
-			}
-			return hits, false
-		})
-		same(t, hits[0].Path, "docs/coffee.md")
-	})
-
-	t.Run("11 read with at returns the old content after a change", func(t *testing.T) {
-		old := must(app.Head(ctx))
-		must(app.Write(ctx, "README.md", []byte("# App, changed\n")))
-		same(t, must(app.Read(ctx, "README.md", skywake.ReadOptions{At: old})), "# App\n")
-		same(t, must(app.Read(ctx, "README.md")), "# App, changed\n")
-	})
-
-	t.Run("12 keys stay in their environment and their role", func(t *testing.T) {
+	t.Run("07 keys stay in their environment and their role", func(t *testing.T) {
 		staging := must(skywake.New(skywake.WithKey(keys.staging), skywake.WithEnvironment("prod")))
 		_, err := staging.Index("products").Query(ctx, "coffee")
 		failsWith[*skywake.PermissionError](t, err)
@@ -198,49 +128,27 @@ func TestScenarios(t *testing.T) {
 		failsWith[*skywake.PermissionError](t, err)
 	})
 
-	t.Run("13 a wrong name is NotFound with a suggestion", func(t *testing.T) {
+	t.Run("08 a wrong name is NotFound with a suggestion", func(t *testing.T) {
 		_, err := sky.Index("prodcts").Query(ctx, "coffee")
 		if hint := failsWith[*skywake.NotFound](t, err).Hint; !strings.Contains(hint, "products") {
 			t.Fatalf("hint %q", hint)
 		}
-		_, err = sky.Disk("ap").Read(ctx, "README.md")
-		if hint := failsWith[*skywake.NotFound](t, err).Hint; !regexp.MustCompile("`app`").MatchString(hint) {
-			t.Fatalf("hint %q", hint)
-		}
 	})
 
-	t.Run("14 destroying a branch, then the index and the disk, empties the lists", func(t *testing.T) {
+	t.Run("09 destroying a branch, then the indexes, empties the list", func(t *testing.T) {
 		if err := products.On("draft").Destroy(ctx); err != nil {
 			t.Fatal(err)
 		}
 		same(t, names(must(products.Branches(ctx)), func(b skywake.Branch) string { return b.Name }), []string{"main"})
 		for _, err := range []error{
-			app.On("agent-1").Destroy(ctx),
 			sky.Index("products").Destroy(ctx),
 			sky.Index("bulk").Destroy(ctx),
-			app.Destroy(ctx),
 		} {
 			if err != nil {
 				t.Fatal(err)
 			}
 		}
 		indexes := must(skywake.Collect(sky.ListIndexes(ctx)))
-		disks := must(skywake.Collect(sky.ListDisks(ctx)))
-		same(t, len(indexes)+len(disks), 0)
-	})
-
-	t.Run("15 a folder goes up as one commit and comes back the same", func(t *testing.T) {
-		dir := t.TempDir()
-		os.WriteFile(filepath.Join(dir, "a.txt"), []byte("alpha"), 0o644)
-		os.WriteFile(filepath.Join(dir, "b.bin"), []byte{0, 1, 2, 255}, 0o644)
-		site := sky.Disk("site")
-		must(site.Upload(ctx, dir, skywake.UploadOptions{Message: "site"}))
-		back := t.TempDir()
-		must(site.Download(ctx, back))
-		same(t, string(must(os.ReadFile(filepath.Join(back, "a.txt")))), "alpha")
-		same(t, must(os.ReadFile(filepath.Join(back, "b.bin"))), []byte{0, 1, 2, 255})
-		if err := site.Destroy(ctx); err != nil {
-			t.Fatal(err)
-		}
+		same(t, len(indexes), 0)
 	})
 }
