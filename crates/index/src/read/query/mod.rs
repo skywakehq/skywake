@@ -37,7 +37,7 @@ const REFINE_MOST: usize = 512;
 
 const REFINE_PER_THREAD: usize = 256;
 
-const PROBE_MOST_ROWS: u64 = 1 << 20;
+const PROBE_MOST_ROWS: u64 = 1 << 19;
 
 const EXACT_MOST_ROWS: u64 = 1 << 16;
 
