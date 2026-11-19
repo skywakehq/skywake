@@ -2,6 +2,7 @@
 
 mod commit;
 mod hash;
+pub mod list;
 mod tree;
 
 pub use commit::{Commit, Pack, Packs};

@@ -305,8 +305,9 @@ async fn oracle(index: &Index, version: &Version) {
     if columns.rows.is_empty() {
         return;
     }
-    let map: Vec<Arc<crate::format::rows::RowPage>> =
-        storage.get_all(columns.rows.clone()).await.unwrap();
+    let map = crate::format::rows::all(storage, &columns.rows)
+        .await
+        .unwrap();
     let mut mapped = 0;
     for (at, page) in map.iter().enumerate() {
         for (i, id) in page.ids.iter().enumerate() {

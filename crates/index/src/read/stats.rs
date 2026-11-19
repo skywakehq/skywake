@@ -52,7 +52,7 @@ pub(crate) async fn stats(storage: &Storage, version: &Version) -> Result<Stats>
     };
     let pages = rows::pages_of(storage, &ann.rows, newest.keys().copied()).await?;
     let replaced = (newest.keys())
-        .filter(|id| pages[&rows::page_of(id, ann.rows.len())].find(id).is_some())
+        .filter(|id| pages[&rows::page_in(id, &ann.rows)].find(id).is_some())
         .count() as u64;
     stats.indexed_rows = ann.live - replaced;
     stats.rows += stats.indexed_rows;

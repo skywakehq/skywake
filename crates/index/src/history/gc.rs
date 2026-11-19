@@ -10,6 +10,7 @@ use object_store::path::Path;
 use object_store::prefix::PrefixStore;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
 use skywake_core::kind::{Kind, require};
+use skywake_core::list::Node;
 use skywake_core::lock::{self, Lease};
 use skywake_core::{Hash, Objects};
 
@@ -21,6 +22,7 @@ use crate::format::cluster::ClusterRef;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory::Directory;
 use crate::format::pages::Pages;
+use crate::format::rows::RowMap;
 use crate::format::{SegmentRef, Version, decode_version};
 use crate::store::head::{self, DELETED};
 use crate::store::object_path;
@@ -251,7 +253,7 @@ impl Reachable {
         let Some(ann) = &version.ann else {
             return Ok(());
         };
-        self.blobs.extend(ann.rows.iter().copied());
+        self.row_map(objects, &ann.rows).await?;
         self.blobs.insert(ann.filters);
         for part in ann.parts.values() {
             self.blobs.insert(part.directory);
@@ -279,7 +281,7 @@ impl Reachable {
             .flat_map(|c| [Some(c.dictionary), Some(c.totals), c.leaders])
             .flatten();
         self.blobs.extend(small);
-        self.blobs.extend(columns.rows.iter().copied());
+        self.row_map(objects, &columns.rows).await?;
         for page in self
             .chunks::<Vec<Span>>(objects, columns.ids.iter().copied())
             .await?
@@ -300,6 +302,21 @@ impl Reachable {
                 self.blobs.extend(page.iter().map(|page| page.span.blob));
             }
         }
+        Ok(())
+    }
+
+    async fn row_map(&mut self, objects: &Objects, map: &RowMap) -> Result<()> {
+        if map.root().is_some_and(|root| self.blobs.contains(&root)) {
+            return Ok(());
+        }
+        let walked = map
+            .walk(|hash| async move {
+                let bytes = objects.get_chunk(hash).await?;
+                Ok::<_, Error>(Arc::new(postcard::from_bytes::<Node<Hash>>(&bytes)?))
+            })
+            .await?;
+        self.blobs.extend(walked.nodes);
+        self.blobs.extend(walked.entries);
         Ok(())
     }
 

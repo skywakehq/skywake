@@ -62,7 +62,9 @@ pub(crate) async fn build(
         }
     }
     drop(read);
-    writer.finish(Vec::new(), 0, ann.live, written).await
+    writer
+        .finish(Default::default(), 0, ann.live, written)
+        .await
 }
 
 enum Page {

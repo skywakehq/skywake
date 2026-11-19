@@ -91,7 +91,7 @@ pub(crate) async fn fetch(
             let columns: Vec<_> = version.schema.vectors.iter().collect();
             let mut wanted: BTreeMap<(usize, u32), Vec<Id>> = BTreeMap::new();
             for id in built {
-                let page = &pages[&rows::page_of(&id, ann.rows.len())];
+                let page = &pages[&rows::page_in(&id, &ann.rows)];
                 if let Some(i) = page.find(&id) {
                     for column in 0..columns.len() {
                         let cluster = page.clusters[i * columns.len() + column];
@@ -151,8 +151,7 @@ pub(crate) async fn current(storage: &Storage, version: &Version) -> Result<Hash
     let mut current = HashMap::new();
     match &version.ann {
         Some(ann) => {
-            let pages: Vec<std::sync::Arc<rows::RowPage>> =
-                storage.get_all(ann.rows.clone()).await?;
+            let pages = rows::all(storage, &ann.rows).await?;
             for page in &pages {
                 current.extend(page.ids.iter().cloned().zip(page.seqs.iter().copied()));
             }

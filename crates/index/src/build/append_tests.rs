@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::format::legacy::{V14, V15_FORMAT};
+use crate::format::legacy::{V14, V15_FORMAT, V16_FORMAT};
 use crate::format::{FORMAT, decode_version};
 use crate::store::head;
 use crate::testing::{Gate, brute_force, clustered, table};
@@ -334,7 +334,7 @@ async fn wide_vectors_keep_extended_codes_through_appends_and_reopening() {
         .unwrap()
         .unwrap();
     let raw = index.storage.raw_version(head.version).await.unwrap();
-    assert_eq!(postcard::from_bytes::<(u32,)>(&raw).unwrap().0, FORMAT);
+    assert_eq!(postcard::from_bytes::<(u32,)>(&raw).unwrap().0, V16_FORMAT);
     let reopened = Index::open(gate.clone(), MAIN).await.unwrap();
     for vector in clustered(8, dims, 77) {
         let query = Query::new("v", vector, 10);

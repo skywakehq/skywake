@@ -36,7 +36,7 @@ use crate::format::columns::leaders::Leaders;
 use crate::format::columns::stats::Totals;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
-use crate::format::legacy::{V10, V11, V12, V13, V14, V15};
+use crate::format::legacy::{V10, V11, V12, V13, V14, V15, V16};
 use crate::format::segment_ids::SegmentIds;
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::{extended, ivf};
@@ -606,8 +606,11 @@ pub(crate) fn chunk_path(hash: Hash) -> Path {
 
 fn encode_version(version: &Version) -> Result<Vec<u8>> {
     let columns = version.columns.as_ref();
-    if version.has_extended() {
+    if version.has_trees() {
         return Ok(postcard::to_stdvec(version)?);
+    }
+    if version.has_extended() {
+        return Ok(postcard::to_stdvec(&V16::from(version))?);
     }
     if version.has_pieces() {
         return Ok(postcard::to_stdvec(&V15::from(version))?);

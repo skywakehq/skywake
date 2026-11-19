@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use futures::TryStreamExt;
-use skywake_core::Hash;
 
 use super::REPLACED;
 use super::runs::{Run, Runs, Sorter, Writer};
@@ -155,7 +154,7 @@ pub(super) async fn store_rows(
     row_map: Sorter<'_, RowKey>,
     pages: usize,
     written: &mut Written,
-) -> Result<(Vec<Hash>, u64)> {
+) -> Result<(rows::RowMap, u64)> {
     let mut sorted = row_map.finish().await?;
     let mut next = sorted.next().await?;
     let (mut hashes, mut bytes) = (Vec::with_capacity(pages), 0);
@@ -174,5 +173,5 @@ pub(super) async fn store_rows(
             ready.clear();
         }
     }
-    Ok((hashes, bytes))
+    Ok((rows::map(storage, hashes, written).await?, bytes))
 }

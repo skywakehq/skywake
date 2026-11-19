@@ -127,7 +127,11 @@ async fn an_incremental_build_rewrites_only_the_pages_it_touches() {
     let index = built(&gate, 20_020, 32, 20).await;
     let before = index.version().await.unwrap();
     assert_eq!(before.built.hashes.len(), 2);
-    let rows_before = before.ann.as_ref().unwrap().rows.clone();
+    assert!(before.has_trees());
+    let rows_before =
+        crate::format::rows::hashes(&index.storage, &before.ann.as_ref().unwrap().rows)
+            .await
+            .unwrap();
     assert_eq!(rows_before.len(), 21);
     let clusters_before = table(&index, &before).await;
 
@@ -141,8 +145,10 @@ async fn an_incremental_build_rewrites_only_the_pages_it_touches() {
     assert_eq!(after.built.len, before.built.len + 2);
     assert_eq!(after.built.hashes[0], before.built.hashes[0]);
     assert_ne!(after.built.hashes[1], before.built.hashes[1]);
-    let rows_after = &after.ann.as_ref().unwrap().rows;
-    let changed = rows_before.iter().zip(rows_after).filter(|(a, b)| a != b);
+    let rows_after = crate::format::rows::hashes(&index.storage, &after.ann.as_ref().unwrap().rows)
+        .await
+        .unwrap();
+    let changed = rows_before.iter().zip(&rows_after).filter(|(a, b)| a != b);
     assert!((1..=4).contains(&changed.count()));
     let clusters_after = table(&index, &after).await;
     let changed = (clusters_before.iter().zip(&clusters_after)).filter(|(a, b)| a != b);

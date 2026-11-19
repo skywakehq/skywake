@@ -32,7 +32,7 @@ impl Dead {
         let found = rows::pages_of(storage, map, touched.clone()).await?;
         let mut by_page: BTreeMap<usize, HashSet<&Id>> = BTreeMap::new();
         for id in touched {
-            let row_page = &found[&rows::page_of(id, map.len())];
+            let row_page = &found[&rows::page_in(id, map)];
             if let Some(i) = row_page.find(id) {
                 let page = row_page.clusters[i * stride] as usize;
                 by_page.entry(page).or_default().insert(id);

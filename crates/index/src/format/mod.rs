@@ -22,7 +22,7 @@ use crate::{Attributes, Id, Result, Schema, invalid};
 use columns::Columns;
 use pages::Pages;
 
-pub(crate) const FORMAT: u32 = 16;
+pub(crate) const FORMAT: u32 = 17;
 
 pub(crate) const BLOB_MAX: usize = 4 << 20;
 
@@ -62,6 +62,12 @@ impl Version {
         (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
     }
 
+    pub(crate) fn has_trees(&self) -> bool {
+        let ann = self.ann.iter().map(|ann| &ann.rows);
+        let columns = self.columns.iter().map(|columns| &columns.rows);
+        ann.chain(columns).any(|map| map.root().is_some())
+    }
+
     pub(crate) fn has_extended(&self) -> bool {
         (self.ann.iter().flat_map(|ann| ann.columns.values())).any(|c| c.extended)
     }
@@ -96,7 +102,7 @@ pub(crate) struct SegmentRef {
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Ann {
     pub columns: BTreeMap<String, Clusters>,
-    pub rows: Vec<Hash>,
+    pub rows: rows::RowMap,
     pub rows_bytes: u64,
     pub live: u64,
     pub full_rows: u64,

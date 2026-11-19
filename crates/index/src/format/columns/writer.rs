@@ -10,6 +10,7 @@ use super::leaders::{Gather, Leaders, ranks};
 use super::stats::{Stats, Totals};
 use super::{ColumnRef, Columns, DIRECTORY_PAGE, PageRef, Span, directory};
 use crate::format::cluster::checksum;
+use crate::format::rows::RowMap;
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::{Attributes, Id, Kind, Result, Schema, Value};
 
@@ -183,7 +184,7 @@ impl<'a> Writer<'a> {
 
     pub(crate) async fn finish(
         self,
-        rows: Vec<Hash>,
+        rows: RowMap,
         rows_bytes: u64,
         live: u64,
         written: &mut Written,

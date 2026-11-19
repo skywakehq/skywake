@@ -50,7 +50,7 @@ async fn clusters_of_format_4_are_still_read() {
         &now.tail,
         Some(Ann4 {
             columns,
-            rows: &ann.rows,
+            rows: &crate::format::legacy::flat(&ann.rows),
             rows_bytes: ann.rows_bytes,
             live: ann.live,
             full_rows: ann.full_rows,

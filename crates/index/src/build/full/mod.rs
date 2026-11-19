@@ -110,7 +110,11 @@ pub(super) async fn full_build(
     }
     let (hashes, rows_bytes) = assign::store_rows(storage, rows, pages, written).await?;
     let columns = match writer {
-        Some(writer) => Some(writer.finish(Vec::new(), 0, live as u64, written).await?),
+        Some(writer) => Some(
+            writer
+                .finish(Default::default(), 0, live as u64, written)
+                .await?,
+        ),
         None => None,
     };
     let ann = Ann {

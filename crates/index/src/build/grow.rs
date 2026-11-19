@@ -47,7 +47,7 @@ pub(super) async fn grow(
     let newest = tail.newest();
     let live = tail.live(&newest);
     let touched = rows::pages_of(storage, &ann.rows, newest.keys().copied()).await?;
-    let page_of = |id: &Id| rows::page_of(id, ann.rows.len());
+    let page_of = |id: &Id| rows::page_in(id, &ann.rows);
 
     let mut leave: Vec<HashMap<u32, HashSet<&Id>>> = vec![HashMap::new(); width];
     let mut removed = 0;
@@ -180,10 +180,8 @@ pub(super) async fn grow(
         .map(|(p, page)| (p, page.sorted(width)))
         .unzip();
     let (hashes, page_sizes) = rows::store(storage, &pages, written).await?;
-    let mut row_pages = ann.rows.clone();
-    for (p, hash) in numbers.into_iter().zip(hashes) {
-        row_pages[p] = hash;
-    }
+    let row_pages =
+        rows::replace(storage, &ann.rows, numbers.into_iter().zip(hashes), written).await?;
     Ok(Some(Ann {
         columns: built,
         rows: row_pages,

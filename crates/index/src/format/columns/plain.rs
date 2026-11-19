@@ -117,9 +117,8 @@ async fn rebuild(
     let map: Vec<RowPage> = map.into_iter().map(|page| page.sorted(1)).collect();
     let (hashes, sizes) = rows::store(storage, &map, written).await?;
     let rows_bytes = sizes.iter().sum();
-    writer
-        .finish(hashes, rows_bytes, live as u64, written)
-        .await
+    let map = rows::map(storage, hashes, written).await?;
+    writer.finish(map, rows_bytes, live as u64, written).await
 }
 
 struct Out<'a> {
@@ -159,7 +158,7 @@ async fn grow(
     let schema = &version.schema;
     let tail = Tail::load(storage, version).await?;
     let newest = tail.newest();
-    let n = base.rows.len();
+    let n = base.rows.len() as usize;
     let touched = rows::pages_of(storage, &base.rows, newest.keys().copied()).await?;
     let mut dirty = BTreeSet::new();
     let mut map: BTreeMap<usize, RowPage> = BTreeMap::new();
@@ -235,12 +234,9 @@ async fn grow(
         .sum::<std::result::Result<u64, _>>()?;
     let (stored, sizes) = rows::store(storage, &changed, written).await?;
     let rows_bytes = base.rows_bytes - replaced + sizes.iter().sum::<u64>();
-    let mut hashes = base.rows.clone();
-    for (at, hash) in at.into_iter().zip(stored) {
-        hashes[at] = hash;
-    }
+    let map = rows::replace(storage, &base.rows, at.into_iter().zip(stored), written).await?;
     let live = base.live - removed + added.len() as u64;
-    writer.finish(hashes, rows_bytes, live, written).await
+    writer.finish(map, rows_bytes, live, written).await
 }
 
 #[derive(Default)]

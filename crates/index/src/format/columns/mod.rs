@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
 
 use crate::format::cluster::checksum;
+use crate::format::rows::RowMap;
 use crate::store::{PARALLELISM, Storage, part};
 use crate::{Error, Id, Result};
 use chunk::{Chunk, Layout};
@@ -34,7 +35,7 @@ pub(crate) struct Columns {
     pub pages: u64,
     pub live: u64,
     pub bytes: u64,
-    pub rows: Vec<Hash>,
+    pub rows: RowMap,
     pub rows_bytes: u64,
     pub ids: Vec<Hash>,
     pub columns: BTreeMap<String, ColumnRef>,
@@ -67,7 +68,8 @@ pub(crate) struct PageRef {
 impl Columns {
     pub(crate) fn weight(&self) -> usize {
         let directories: usize = self.columns.values().map(|c| c.directory.len()).sum();
-        let objects = self.rows.len() + self.ids.len() + directories;
+        let rows = self.rows.root().map_or(self.rows.len() as usize, |_| 1);
+        let objects = rows + self.ids.len() + directories;
         256 + 32 * objects + 128 * (self.columns.len() + self.projections.len())
     }
 

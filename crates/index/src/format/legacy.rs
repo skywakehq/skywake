@@ -4,10 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
+use skywake_core::list::List;
 
 use super::columns::chunk::Layout;
+use super::columns::projection::ProjectionRef;
 use super::columns::{ColumnRef, Columns};
 use super::pages::Pages;
+use super::rows::RowMap;
 use super::{Ann, Clusters, FORMAT, SegmentRef, Version};
 use crate::filter::FilterPart;
 use crate::text::part::{PartRef, TextIndex};
@@ -141,7 +144,7 @@ impl From<AnnV9> for Ann {
     fn from(old: AnnV9) -> Self {
         Self {
             columns: clusters_v9(old.columns),
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             live: old.live,
             full_rows: old.full_rows,
@@ -168,7 +171,7 @@ impl From<AnnV7> for Ann {
     fn from(old: AnnV7) -> Self {
         Self {
             columns: clusters_v9(old.columns),
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             live: old.live,
             full_rows: old.full_rows,
@@ -187,7 +190,7 @@ impl From<&Ann> for AnnV7 {
             .collect();
         Self {
             columns,
-            rows: ann.rows.clone(),
+            rows: flat(&ann.rows),
             rows_bytes: ann.rows_bytes,
             live: ann.live,
             full_rows: ann.full_rows,
@@ -823,7 +826,7 @@ impl From<Columns13> for Columns {
             pages: old.pages,
             live: old.live,
             bytes: old.bytes,
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             ids: old.ids,
             columns: old.columns,
@@ -838,7 +841,7 @@ impl From<&Columns> for Columns13 {
             pages: columns.pages,
             live: columns.live,
             bytes: columns.bytes,
-            rows: columns.rows.clone(),
+            rows: flat(&columns.rows),
             rows_bytes: columns.rows_bytes,
             ids: columns.ids.clone(),
             columns: columns.columns.clone(),
@@ -881,7 +884,7 @@ impl From<OldColumns> for Columns {
             pages: old.pages,
             live: old.live,
             bytes: old.bytes,
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             ids: old.ids,
             columns: columns.collect(),
@@ -905,7 +908,7 @@ impl From<&Columns> for OldColumns {
             pages: columns.pages,
             live: columns.live,
             bytes: columns.bytes,
-            rows: columns.rows.clone(),
+            rows: flat(&columns.rows),
             rows_bytes: columns.rows_bytes,
             ids: columns.ids.clone(),
             columns: old.collect(),
@@ -921,6 +924,7 @@ pub(crate) fn decode_version(raw: &[u8]) -> Result<Version> {
     let Format { format } = postcard::from_bytes(raw)?;
     Ok(match format {
         FORMAT => postcard::from_bytes(raw)?,
+        V16_FORMAT => postcard::from_bytes::<V16>(raw)?.into(),
         V15_FORMAT => postcard::from_bytes::<V15>(raw)?.into(),
         V14_FORMAT => postcard::from_bytes::<V14>(raw)?.into(),
         V13_FORMAT => postcard::from_bytes::<V13>(raw)?.into(),
@@ -1000,7 +1004,7 @@ impl From<AnnV14> for Ann {
             columns: (old.columns.into_iter())
                 .map(|(name, c)| (name, c.into()))
                 .collect(),
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             live: old.live,
             full_rows: old.full_rows,
@@ -1017,7 +1021,7 @@ impl From<&Ann> for AnnV14 {
             columns: (ann.columns.iter())
                 .map(|(name, c)| (name.clone(), c.into()))
                 .collect(),
-            rows: ann.rows.clone(),
+            rows: flat(&ann.rows),
             rows_bytes: ann.rows_bytes,
             live: ann.live,
             full_rows: ann.full_rows,
@@ -1038,7 +1042,7 @@ pub(crate) struct V14 {
     ann: Option<AnnV14>,
     next_seq: u64,
     text: Option<TextIndex>,
-    columns: Option<Columns>,
+    columns: Option<ColumnsV16>,
 }
 
 pub(crate) const V14_FORMAT: u32 = 14;
@@ -1054,7 +1058,7 @@ impl From<V14> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
-            columns: old.columns,
+            columns: old.columns.map(Columns::from),
         }
     }
 }
@@ -1070,7 +1074,7 @@ impl From<&Version> for V14 {
             ann: version.ann.as_ref().map(AnnV14::from),
             next_seq: version.next_seq,
             text: version.text.clone(),
-            columns: version.columns.clone(),
+            columns: version.columns.as_ref().map(ColumnsV16::from),
         }
     }
 }
@@ -1136,7 +1140,7 @@ impl From<AnnV15> for Ann {
             columns: (old.columns.into_iter())
                 .map(|(name, c)| (name, c.into()))
                 .collect(),
-            rows: old.rows,
+            rows: List::Inline(old.rows),
             rows_bytes: old.rows_bytes,
             live: old.live,
             full_rows: old.full_rows,
@@ -1153,7 +1157,7 @@ impl From<&Ann> for AnnV15 {
             columns: (ann.columns.iter())
                 .map(|(name, c)| (name.clone(), c.into()))
                 .collect(),
-            rows: ann.rows.clone(),
+            rows: flat(&ann.rows),
             rows_bytes: ann.rows_bytes,
             live: ann.live,
             full_rows: ann.full_rows,
@@ -1174,7 +1178,7 @@ pub(crate) struct V15 {
     ann: Option<AnnV15>,
     next_seq: u64,
     text: Option<TextIndex>,
-    columns: Option<Columns>,
+    columns: Option<ColumnsV16>,
 }
 
 pub(crate) const V15_FORMAT: u32 = 15;
@@ -1190,7 +1194,7 @@ impl From<V15> for Version {
             ann: old.ann.map(Ann::from),
             next_seq: old.next_seq,
             text: old.text,
-            columns: old.columns,
+            columns: old.columns.map(Columns::from),
         }
     }
 }
@@ -1206,7 +1210,145 @@ impl From<&Version> for V15 {
             ann: version.ann.as_ref().map(AnnV15::from),
             next_seq: version.next_seq,
             text: version.text.clone(),
-            columns: version.columns.clone(),
+            columns: version.columns.as_ref().map(ColumnsV16::from),
+        }
+    }
+}
+
+pub(crate) fn flat(map: &RowMap) -> Vec<Hash> {
+    match map {
+        List::Inline(pages) => pages.clone(),
+        List::Tree { .. } => unreachable!("only the current format holds a row map tree"),
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct ColumnsV16 {
+    pages: u64,
+    live: u64,
+    bytes: u64,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    ids: Vec<Hash>,
+    columns: BTreeMap<String, ColumnRef>,
+    projections: Vec<ProjectionRef>,
+}
+
+impl From<ColumnsV16> for Columns {
+    fn from(old: ColumnsV16) -> Self {
+        Self {
+            pages: old.pages,
+            live: old.live,
+            bytes: old.bytes,
+            rows: List::Inline(old.rows),
+            rows_bytes: old.rows_bytes,
+            ids: old.ids,
+            columns: old.columns,
+            projections: old.projections,
+        }
+    }
+}
+
+impl From<&Columns> for ColumnsV16 {
+    fn from(columns: &Columns) -> Self {
+        Self {
+            pages: columns.pages,
+            live: columns.live,
+            bytes: columns.bytes,
+            rows: flat(&columns.rows),
+            rows_bytes: columns.rows_bytes,
+            ids: columns.ids.clone(),
+            columns: columns.columns.clone(),
+            projections: columns.projections.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub(crate) struct AnnV16 {
+    columns: BTreeMap<String, Clusters>,
+    rows: Vec<Hash>,
+    rows_bytes: u64,
+    live: u64,
+    full_rows: u64,
+    removed: u64,
+    filters: Hash,
+    parts: BTreeMap<String, FilterPart>,
+}
+
+impl From<AnnV16> for Ann {
+    fn from(old: AnnV16) -> Self {
+        Self {
+            columns: old.columns,
+            rows: List::Inline(old.rows),
+            rows_bytes: old.rows_bytes,
+            live: old.live,
+            full_rows: old.full_rows,
+            removed: old.removed,
+            filters: old.filters,
+            parts: old.parts,
+        }
+    }
+}
+
+impl From<&Ann> for AnnV16 {
+    fn from(ann: &Ann) -> Self {
+        Self {
+            columns: ann.columns.clone(),
+            rows: flat(&ann.rows),
+            rows_bytes: ann.rows_bytes,
+            live: ann.live,
+            full_rows: ann.full_rows,
+            removed: ann.removed,
+            filters: ann.filters,
+            parts: ann.parts.clone(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct V16 {
+    format: u32,
+    parent: Option<Hash>,
+    schema: Schema,
+    built: Pages,
+    tail: Vec<SegmentRef>,
+    ann: Option<AnnV16>,
+    next_seq: u64,
+    text: Option<TextIndex>,
+    columns: Option<ColumnsV16>,
+}
+
+pub(crate) const V16_FORMAT: u32 = 16;
+
+impl From<V16> for Version {
+    fn from(old: V16) -> Self {
+        Self {
+            format: FORMAT,
+            parent: old.parent,
+            schema: old.schema,
+            built: old.built,
+            tail: old.tail,
+            ann: old.ann.map(Ann::from),
+            next_seq: old.next_seq,
+            text: old.text,
+            columns: old.columns.map(Columns::from),
+        }
+    }
+}
+
+impl From<&Version> for V16 {
+    fn from(version: &Version) -> Self {
+        Self {
+            format: V16_FORMAT,
+            parent: version.parent,
+            schema: version.schema.clone(),
+            built: version.built.clone(),
+            tail: version.tail.clone(),
+            ann: version.ann.as_ref().map(AnnV16::from),
+            next_seq: version.next_seq,
+            text: version.text.clone(),
+            columns: version.columns.as_ref().map(ColumnsV16::from),
         }
     }
 }
