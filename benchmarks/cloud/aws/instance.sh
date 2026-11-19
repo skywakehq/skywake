@@ -90,7 +90,7 @@ export TMPDIR=/data/tmp CARGO_TARGET_DIR=/data/target
 # Packages, Rust and the source come down at the same time.
 packages() {
   dnf install -y -q gcc gcc-c++ make cmake clang git openssl-devel pkgconf fuse3 fuse3-devel \
-    python3.11 python3.11-pip nodejs npm tar fio &&
+    python3.11 python3.11-pip nodejs npm tar fio rsync &&
     { [ "$FILESYSTEM" = 1 ] || python3.11 -m pip install -q h5py numpy pyarrow; }
 }
 rust() { curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain 1.99; }
@@ -265,8 +265,10 @@ if [ "$TPUF" = 1 ]; then
   # after $IDLE minutes without a push.
   [ "${DEV:-0}" = 1 ] || exit 0
   rebuild() {
-    cd /data/skywake &&
-      aws s3 cp --quiet "s3://$BUCKET/push/source.tar.gz" - | tar -xz &&
+    rm -rf /data/pushed && mkdir -p /data/pushed &&
+      aws s3 cp --quiet "s3://$BUCKET/push/source.tar.gz" - | tar -xz -C /data/pushed &&
+      rsync -rc /data/pushed/ /data/skywake/ &&
+      cd /data/skywake &&
       cargo build --release -p skywake-node -p skywake-benchmarks &&
       cp "$CARGO_TARGET_DIR/release/libskywake_node.so" bindings/node/engine.node
   }
