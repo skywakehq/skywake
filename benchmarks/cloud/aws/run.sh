@@ -40,7 +40,7 @@ FILESYSTEM=${FILESYSTEM:-0}
 TPUF=${TPUF:-0}
 FS_ARGS=${FS_ARGS:-}
 if [ "$TPUF" = 1 ]; then
-  SETS=${SETS:-cohere-wiki-10m}
+  SETS=${SETS:-cohere-wiki-10m msmarco}
 elif [ "$MINI" = 1 ]; then
   SETS=${SETS:-sift-1m cohere-1m}
 else

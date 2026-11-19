@@ -197,7 +197,8 @@ if [ "$TPUF" = 1 ]; then
   keep_index() {
     PGPASSWORD=bench pg_dump -h 127.0.0.1 -U bench -d bench --no-owner >/data/database.sql &&
       aws s3 cp --quiet /data/database.sql "$KEPT/state/database.sql" &&
-      aws s3 cp --quiet /data/index.json "$KEPT/state/index.json"
+      aws s3 cp --quiet /data/index.json "$KEPT/state/index.json" &&
+      { [ ! -e /data/text.json ] || aws s3 cp --quiet /data/text.json "$KEPT/state/text.json"; }
   }
   serve() {
     SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$KEPT/store \
@@ -246,6 +247,38 @@ if [ "$TPUF" = 1 ]; then
   fi
   index=$(setting /data/index.json index)
 
+  # Keyword search on MS MARCO's 8.8M passages, kept beside the vector index.
+  marco=/data/datasets/msmarco
+  until [ -e "$marco.ready" ] || [ -e "$marco.failed" ]; do sleep 5; done
+  [ -e "$marco.ready" ] || { say msmarco failed "MS MARCO did not download"; exit 1; }
+  aws s3 cp --quiet "$KEPT/state/text.json" /data/text.json 2>/dev/null || true
+  if [ ! -e /data/text.json ]; then
+    step text-load "load MS MARCO's 8.8M passages over HTTP, 8 writers" \
+      bench --text "$marco" --rows 8841823 --batch 5000 --writers 8 --settle 60 --families text \
+      --qps 8 --warm 0 --seconds 1 --recall 0 --out "$RESULTS/text-load"
+    python3.11 -c 'import json,sys; print(json.dumps({"index": json.load(open(sys.argv[1]))["settings"]["index"]}))' \
+      "$RESULTS/text-load/results.json" >/data/text.json
+    step keep "keep the text index beside the vector one" keep_index
+  fi
+  text=$(setting /data/text.json index)
+
+  # Cold: a second API with no memory or disk cache, so every query reads the bucket.
+  cold() {
+    local out=$1
+    env -u SKYWAKE_INDEX_CACHE_DIR SKYWAKE_INDEX_MEMORY_MB=0 \
+      SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$KEPT/store \
+      SKYWAKE_API_LISTEN=127.0.0.1:8081 SKYWAKE_API_PEER_URL=http://127.0.0.1:8081 \
+      SKYWAKE_API_PEER_TOKEN=$PEER node apps/api/src/main.ts >>"$LOGS/api-cold.log" 2>&1 &
+    local uncached=$!
+    until curl -sf http://127.0.0.1:8081/health >/dev/null; do sleep 1; done
+    cold_bench() { "$CARGO_TARGET_DIR/release/index-bench" api --url http://127.0.0.1:8081 --dataset "/data/datasets/$set" "$@"; }
+    cold_bench --index "$index" --rows 10000000 --families vector,count,count-eq --probes dataset \
+      --qps 1 --warm 0 --seconds 60 --recall 0 --out "$out/tpuf-cold"
+    cold_bench --index "$text" --text "$marco" --families text \
+      --qps 1 --warm 0 --seconds 60 --recall 0 --out "$out/tpuf-text-cold"
+    kill "$uncached" && wait "$uncached" 2>/dev/null || true
+  }
+
   # One round: uniform queries as turbopuffer asks, then real held-out ones.
   measure() {
     local out=$1 warm=$2 seconds=$3
@@ -259,10 +292,15 @@ if [ "$TPUF" = 1 ]; then
       bench --index "$index" --rows 10000000 \
       --families count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered \
       --qps 8 --warm 30 --seconds 60 --recall 0 --out "$out/tpuf-attrs"
+    step text "keyword search on MS MARCO" \
+      bench --index "$text" --text "$marco" --families text \
+      --qps 8 --warm "$warm" --seconds 60 --recall 0 --out "$out/tpuf-text"
     keep_set "$set"
     save
   }
   measure "$RESULTS" "${WARM:-300}" "${SECONDS_RUN:-600}"
+  step cold "cold vector, counts and keyword search, no cache" cold "$RESULTS" || true
+  save
 
   # In dev mode the machine waits for `run.sh push`: each push rebuilds, restarts
   # the API on the kept index and measures a short round. It turns itself off

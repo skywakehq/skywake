@@ -23,7 +23,7 @@ use self::export::{IndexExport, IndexParquetExport};
 use self::history::{
     GRACE, IndexCollectOptions, IndexCollected, IndexVersion, days, version, version_to,
 };
-use self::open::{IndexOpenOptions, disk, stores_of, switch};
+use self::open::{IndexOpenOptions, disk, memory, stores_of, switch};
 use crate::error::{fail_index, invalid};
 use crate::index_json::documents::{
     IndexCounts, IndexDoc, IndexWrite, counts_to, doc_from, doc_to, write_from,
@@ -63,13 +63,15 @@ impl Index {
         let shared = options.as_ref().and_then(|o| o.cache_folder.clone());
         let every_shard = options.as_ref().and_then(|o| o.builders).unwrap_or(true);
         let (store, stores) = stores_of(&location, options)?;
+        let defaults = Options::default();
         let options = Options {
+            cache_bytes: memory()?.unwrap_or(defaults.cache_bytes),
             disk: if encrypted { None } else { disk()? },
             spill: !encrypted,
             shared,
             columns: switch("SKYWAKE_INDEX_COLUMNS")?,
             postings: switch("SKYWAKE_INDEX_POSTINGS")?,
-            ..Options::default()
+            ..defaults
         };
         Ok(Self {
             store,

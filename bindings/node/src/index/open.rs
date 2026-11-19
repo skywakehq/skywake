@@ -74,6 +74,18 @@ pub(crate) fn switch(name: &str) -> Result<bool> {
     }
 }
 
+pub(crate) fn memory() -> Result<Option<usize>> {
+    match std::env::var("SKYWAKE_INDEX_MEMORY_MB") {
+        Err(_) => Ok(None),
+        Ok(mb) => (mb.parse::<usize>()).map(|mb| Some(mb << 20)).map_err(|_| {
+            failure(
+                "internal",
+                format!("SKYWAKE_INDEX_MEMORY_MB: `{mb}` is not a whole number"),
+            )
+        }),
+    }
+}
+
 pub(crate) fn disk() -> Result<Option<Arc<ChunkCache>>> {
     static DISK: OnceLock<std::result::Result<Option<Arc<ChunkCache>>, String>> = OnceLock::new();
     let disk = DISK.get_or_init(open_disk);

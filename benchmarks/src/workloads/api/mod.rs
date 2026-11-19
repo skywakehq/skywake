@@ -1,3 +1,4 @@
+mod text;
 mod vectors;
 
 use std::path::PathBuf;
@@ -33,7 +34,7 @@ pub struct Args {
         long,
         default_value = "count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered",
         value_delimiter = ',',
-        help = "Query families to run; `vector` and `vector-filtered` search the vector column"
+        help = "Query families to run; `vector` and `vector-filtered` search the vector column, `text` searches MS MARCO passages by keywords"
     )]
     families: Vec<String>,
     #[arg(
@@ -89,6 +90,11 @@ pub struct Args {
     settle: u64,
     #[arg(long, help = "Use this index instead of loading a new one")]
     index: Option<String>,
+    #[arg(
+        long,
+        help = "The MS MARCO folder that `benchmarks/datasets/fetch.py get msmarco` writes: loads its passages and asks its dev queries for the `text` family"
+    )]
+    text: Option<PathBuf>,
     #[arg(long, help = "The results folder; by default benchmarks/results/<run>")]
     out: Option<PathBuf>,
 }
@@ -197,9 +203,13 @@ pub async fn run(mut args: Args) -> Result<()> {
             "url": args.url,
         }),
     );
-    let name = match &args.index {
-        Some(name) => name.clone(),
-        None => load(&api, &args, source).await?,
+    let texts = args.text.as_deref().map(text::Queries::open).transpose()?;
+    let name = match (&args.index, &args.text) {
+        (Some(name), _) => name.clone(),
+        (None, Some(dir)) => {
+            text::load(&api, dir, args.rows, args.batch, args.writers, args.settle).await?
+        }
+        (None, None) => load(&api, &args, source).await?,
     };
     run.settings["index"] = json!(name);
     let truth = exact(&families, &args, &asker).await?;
@@ -215,10 +225,15 @@ pub async fn run(mut args: Args) -> Result<()> {
     );
     for family in families {
         let step = progress::start("query", family.name());
+        ensure!(
+            !matches!(family, Kind::Text) || texts.is_some(),
+            "the `text` family needs --text"
+        );
         let shape = Shape {
             family,
             k: args.k,
             asker: asker.clone(),
+            texts: texts.clone(),
         };
         pass(&api, &name, &shape, args.qps, args.warm).await?;
         let (times, errors) = pass(&api, &name, &shape, args.qps, args.seconds).await?;
@@ -261,6 +276,7 @@ pub async fn run(mut args: Args) -> Result<()> {
 enum Kind {
     Attrs(Family),
     Vector { filtered: bool },
+    Text,
 }
 
 impl Kind {
@@ -268,6 +284,7 @@ impl Kind {
         match text {
             "vector" => Some(Kind::Vector { filtered: false }),
             "vector-filtered" => Some(Kind::Vector { filtered: true }),
+            "text" => Some(Kind::Text),
             other => Family::parse(other).map(Kind::Attrs),
         }
     }
@@ -277,6 +294,7 @@ impl Kind {
             Kind::Attrs(family) => family.name(),
             Kind::Vector { filtered: false } => "vector search, top k",
             Kind::Vector { filtered: true } => "vector search, top k, category = c (1%)",
+            Kind::Text => "keyword search, top k, MS MARCO dev queries",
         }
     }
 }
@@ -286,6 +304,7 @@ struct Shape {
     family: Kind,
     k: usize,
     asker: vectors::Asker,
+    texts: Option<text::Queries>,
 }
 
 impl Shape {
@@ -296,6 +315,11 @@ impl Shape {
                 Method::POST,
                 format!("/indexes/{name}/query"),
                 vectors::body(n, self.k, filtered, &self.asker),
+            ),
+            Kind::Text => (
+                Method::POST,
+                format!("/indexes/{name}/query"),
+                (self.texts.as_ref()).map_or(Json::Null, |texts| texts.body(n, self.k)),
             ),
         }
     }
@@ -380,6 +404,11 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
         meter.add(rows?);
     }
     step.done("");
+    settled(api, &name, args.settle).await?;
+    Ok(name)
+}
+
+async fn settled(api: &Api, name: &str, settle: u64) -> Result<()> {
     let step = progress::start("build", "waiting for the index to stop changing");
     let mut last = Json::Null;
     let mut still = Instant::now();
@@ -391,12 +420,12 @@ async fn load(api: &Api, args: &Args, mut source: vectors::Source) -> Result<Str
         let size = json!([info["rows"], info["bytes"]]);
         if size != last {
             (last, still) = (size, Instant::now());
-        } else if still.elapsed() >= Duration::from_secs(args.settle) {
+        } else if still.elapsed() >= Duration::from_secs(settle) {
             break;
         }
     }
     step.done(&format!("{} bytes", last[1]));
-    Ok(name)
+    Ok(())
 }
 
 async fn pass(
