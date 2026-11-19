@@ -173,8 +173,8 @@ impl Estimator {
         factors: &Factors,
     ) -> (f32, f32) {
         let [norm, aligned, to_anchor, on_lift] = *factors;
-        let ones: u32 = bits.iter().map(|w| w.count_ones()).sum();
-        let picked = query.low * ones as f32 + query.step * query.levels(bits) as f32;
+        let (ones, levels) = query.counts(bits);
+        let picked = query.low * ones as f32 + query.step * levels as f32;
         let (along, rounding) = match anchor.norm > 0.0 {
             true => (
                 ((2.0 * picked - query.sum) / self.root - on_lift) / anchor.norm,
@@ -214,7 +214,7 @@ impl Estimator {
     }
 }
 
-type Count = fn(&[u64], &[u64]) -> u32;
+type Count = fn(&[u64], &[u64]) -> (u32, u32);
 
 fn planes(levels: &[u16]) -> Vec<u64> {
     let words = levels.len() / 64;
@@ -227,33 +227,35 @@ fn planes(levels: &[u16]) -> Vec<u64> {
     planes
 }
 
+#[cfg(not(target_arch = "aarch64"))]
 #[inline(always)]
-fn weighted(planes: &[u64], bits: &[u64]) -> u32 {
-    (planes.chunks_exact(bits.len()).enumerate())
+fn weighted(planes: &[u64], bits: &[u64]) -> (u32, u32) {
+    let ones = bits.iter().map(|b| b.count_ones()).sum();
+    let levels = (planes.chunks_exact(bits.len()).enumerate())
         .map(|(bit, plane)| {
-            let set: u32 = plane
-                .iter()
-                .zip(bits)
+            let set: u32 = (plane.iter().zip(bits))
                 .map(|(q, b)| (q & b).count_ones())
                 .sum();
             set << bit
         })
-        .sum()
+        .sum();
+    (ones, levels)
 }
 
-fn portable(planes: &[u64], bits: &[u64]) -> u32 {
+#[cfg(not(target_arch = "aarch64"))]
+fn portable(planes: &[u64], bits: &[u64]) -> (u32, u32) {
     weighted(planes, bits)
 }
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx512f,avx512vpopcntdq")]
-fn wide(planes: &[u64], bits: &[u64]) -> u32 {
+fn wide(planes: &[u64], bits: &[u64]) -> (u32, u32) {
     weighted(planes, bits)
 }
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "popcnt")]
-fn narrow(planes: &[u64], bits: &[u64]) -> u32 {
+fn narrow(planes: &[u64], bits: &[u64]) -> (u32, u32) {
     weighted(planes, bits)
 }
 
@@ -269,14 +271,55 @@ fn counter() -> Count {
     }
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(target_arch = "aarch64")]
+fn neon(planes: &[u64], bits: &[u64]) -> (u32, u32) {
+    use std::arch::aarch64::*;
+    let words = bits.len();
+    let even = words & !1;
+    let (ones, levels) = unsafe {
+        let mut ones = vdupq_n_u16(0);
+        let mut set = [vdupq_n_u16(0); QUERY_BITS];
+        for w in (0..even).step_by(2) {
+            let b = vreinterpretq_u8_u64(vld1q_u64(bits.as_ptr().add(w)));
+            ones = vpadalq_u8(ones, vcntq_u8(b));
+            for (bit, sum) in set.iter_mut().enumerate() {
+                let q = vreinterpretq_u8_u64(vld1q_u64(planes.as_ptr().add(bit * words + w)));
+                *sum = vpadalq_u8(*sum, vcntq_u8(vandq_u8(q, b)));
+            }
+        }
+        let levels: u32 = (set.iter().enumerate())
+            .map(|(bit, sum)| u32::from(vaddvq_u16(*sum)) << bit)
+            .sum();
+        (u32::from(vaddvq_u16(ones)), levels)
+    };
+    let tail = (even..words).map(|w| {
+        let b = bits[w];
+        let levels: u32 = (0..QUERY_BITS)
+            .map(|bit| (planes[bit * words + w] & b).count_ones() << bit)
+            .sum();
+        (b.count_ones(), levels)
+    });
+    tail.fold((ones, levels), |(o, l), (a, b)| (o + a, l + b))
+}
+
+#[cfg(target_arch = "aarch64")]
+fn counter() -> Count {
+    neon
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn counter() -> Count {
     portable
 }
 
 impl Prepared {
-    fn levels(&self, bits: &[u64]) -> u32 {
+    fn counts(&self, bits: &[u64]) -> (u32, u32) {
         (self.count)(&self.planes[..QUERY_BITS * bits.len()], bits)
+    }
+
+    #[cfg(test)]
+    fn levels(&self, bits: &[u64]) -> u32 {
+        self.counts(bits).1
     }
 }
 
@@ -374,7 +417,7 @@ mod tests {
     #[test]
     fn the_level_planes_sum_the_levels_of_set_bits() {
         let mut random = Random(5);
-        for dims in [3, 64, 100, 768] {
+        for dims in [3, 64, 100, 768, 1024, 4096] {
             let estimator = Estimator::new(Metric::Euclidean, dims);
             let query = estimator.prepare(&vector(&mut random, dims));
             let levels: Vec<u32> = (0..dims)
@@ -399,6 +442,8 @@ mod tests {
                     .map(|i| levels[i])
                     .sum();
                 assert_eq!(query.levels(&bits), expected, "{dims}");
+                let ones: u32 = bits.iter().map(|b| b.count_ones()).sum();
+                assert_eq!(query.counts(&bits).0, ones, "{dims}");
                 assert!(levels.iter().all(|&level| level < 256));
             }
         }
