@@ -146,7 +146,7 @@ step build "Skywake in release mode" build
 
 STORE=s3://$BUCKET
 CLIENT="aws $INSTANCE $AWS_REGION, same region as the bucket"
-export SKYWAKE_INDEX_CACHE_DIR=/data/cache
+export SKYWAKE_INDEX_CACHE_DIR=/data/cache SKYWAKE_INDEX_COLUMNS=on SKYWAKE_INDEX_POSTINGS=on
 
 # The filesystem: every suite, latency included.
 filesystem() {
@@ -176,7 +176,7 @@ api() {
 
 # turbopuffer's vector-10m: one API server, the client on the same machine.
 # The index and the API's database are kept in the data bucket under the index
-# format, so a later run with the same format queries them without loading
+# format and engine switches, so a later run with the same ones queries them without loading
 # 10M rows again. FRESH=1 loads anyway.
 if [ "$TPUF" = 1 ]; then
   step postgres "a local Postgres for the API" postgres &
@@ -185,7 +185,7 @@ if [ "$TPUF" = 1 ]; then
   wait "$setup"
   export PATH=/data/node-v22.20.0-linux-x64/bin:$PATH
   format=$(sed -nE 's/^pub\(crate\) const FORMAT: u32 = ([0-9]+);/\1/p' crates/index/src/format/mod.rs)
-  KEPT=s3://$DATA/tpuf/format-$format
+  KEPT=s3://$DATA/tpuf/format-$format-columns-postings
   PEER=bench-peer-$RANDOM$RANDOM
   export SKYWAKE_API_ADMIN_TOKEN=bench-admin-$RANDOM$RANDOM$RANDOM SKYWAKE_API_RATE_LIMIT=0
 
@@ -262,10 +262,10 @@ if [ "$TPUF" = 1 ]; then
   fi
   text=$(setting /data/text.json index)
 
-  # Cold: a second API with no memory or disk cache, so every query reads the bucket.
+  # Cold: a second API that opens the index afresh for every query, with no disk cache.
   cold() {
     local out=$1
-    env -u SKYWAKE_INDEX_CACHE_DIR SKYWAKE_INDEX_MEMORY_MB=0 \
+    env -u SKYWAKE_INDEX_CACHE_DIR SKYWAKE_INDEX_COLD=on \
       SKYWAKE_API_DATABASE=postgres://bench:bench@127.0.0.1/bench SKYWAKE_STORE=$KEPT/store \
       SKYWAKE_API_LISTEN=127.0.0.1:8081 SKYWAKE_API_PEER_URL=http://127.0.0.1:8081 \
       SKYWAKE_API_PEER_TOKEN=$PEER node apps/api/src/main.ts >>"$LOGS/api-cold.log" 2>&1 &

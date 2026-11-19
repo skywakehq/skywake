@@ -23,7 +23,7 @@ use self::export::{IndexExport, IndexParquetExport};
 use self::history::{
     GRACE, IndexCollectOptions, IndexCollected, IndexVersion, days, version, version_to,
 };
-use self::open::{IndexOpenOptions, disk, memory, stores_of, switch};
+use self::open::{IndexOpenOptions, disk, stores_of, switch};
 use crate::error::{fail_index, invalid};
 use crate::index_json::documents::{
     IndexCounts, IndexDoc, IndexWrite, counts_to, doc_from, doc_to, write_from,
@@ -49,6 +49,7 @@ pub struct Index {
     stores: Vec<Arc<dyn ObjectStore>>,
     options: Options,
     every_shard: bool,
+    cold: bool,
     branches: Mutex<HashMap<String, (Branch, Builders)>>,
 }
 
@@ -62,22 +63,22 @@ impl Index {
             (options.as_ref()).is_some_and(|o| o.kms_key_id.is_some() || o.customer_key.is_some());
         let shared = options.as_ref().and_then(|o| o.cache_folder.clone());
         let every_shard = options.as_ref().and_then(|o| o.builders).unwrap_or(true);
+        let cold = switch("SKYWAKE_INDEX_COLD")?;
         let (store, stores) = stores_of(&location, options)?;
-        let defaults = Options::default();
         let options = Options {
-            cache_bytes: memory()?.unwrap_or(defaults.cache_bytes),
-            disk: if encrypted { None } else { disk()? },
+            disk: if encrypted || cold { None } else { disk()? },
             spill: !encrypted,
-            shared,
+            shared: shared.filter(|_| !cold),
             columns: switch("SKYWAKE_INDEX_COLUMNS")?,
             postings: switch("SKYWAKE_INDEX_POSTINGS")?,
-            ..defaults
+            ..Options::default()
         };
         Ok(Self {
             store,
             stores,
             options,
             every_shard,
+            cold,
             branches: Mutex::default(),
         })
     }
@@ -451,7 +452,9 @@ impl Index {
         let open = Branch::open(self.stores.clone(), name, self.options.clone())
             .await
             .map_err(fail_index)?;
-        self.keep(open.clone());
+        if !self.cold {
+            self.keep(open.clone());
+        }
         Ok(open)
     }
 

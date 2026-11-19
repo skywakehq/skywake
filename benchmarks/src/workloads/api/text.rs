@@ -31,7 +31,7 @@ impl Queries {
 
     pub(super) fn body(&self, n: u64, k: usize) -> Json {
         let text = &self.0[n as usize % self.0.len()];
-        json!({ "text": text, "mode": "keywords", "limit": k })
+        json!({ "text": text, "mode": "keywords", "limit": k, "fields": [] })
     }
 }
 
