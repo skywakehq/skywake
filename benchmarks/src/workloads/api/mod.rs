@@ -2,7 +2,7 @@ mod text;
 mod vectors;
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail, ensure};
@@ -235,8 +235,8 @@ pub async fn run(mut args: Args) -> Result<()> {
             asker: asker.clone(),
             texts: texts.clone(),
         };
-        pass(&api, &name, &shape, args.qps, args.warm).await?;
-        let (times, errors) = pass(&api, &name, &shape, args.qps, args.seconds).await?;
+        pass(&api, &name, &shape, args.qps, args.warm, "warm-up").await?;
+        let (times, errors) = pass(&api, &name, &shape, args.qps, args.seconds, "timed").await?;
         let recall = match (&truth, family) {
             (Some(truth), Kind::Vector { filtered }) => {
                 let truth = match filtered {
@@ -434,40 +434,64 @@ async fn pass(
     shape: &Shape,
     qps: f64,
     seconds: u64,
+    phase: &str,
 ) -> Result<(Vec<Duration>, usize)> {
     let total = (qps * seconds as f64).ceil() as u64;
     let interval = Duration::from_secs_f64(1.0 / qps);
     let start = tokio::time::Instant::now();
+    let answered = Arc::new(Mutex::new((Vec::new(), 0usize)));
+    let _heartbeat = heartbeat(shape.family.name(), phase, seconds, &answered);
     let asked: Vec<_> = (0..total)
         .map(|n| {
             let (api, name, shape) = (api.clone(), name.to_string(), shape.clone());
+            let answered = answered.clone();
             let due = start + interval * n as u32;
             tokio::spawn(async move {
                 tokio::time::sleep_until(due).await;
                 let (method, path, body) = shape.request(&name, n);
                 let sent = Instant::now();
                 let answer = api.call(method, &path, Some(&body)).await;
-                (
-                    sent.elapsed(),
-                    answer.and_then(|answer| check(shape.family, &answer)),
-                )
+                let answer = answer.and_then(|answer| check(shape.family, &answer));
+                let mut answered = answered.lock().unwrap_or_else(PoisonError::into_inner);
+                match answer {
+                    Ok(()) => answered.0.push(sent.elapsed()),
+                    Err(e) => {
+                        answered.1 += 1;
+                        if answered.1 == 1 {
+                            progress::note("query", &format!("{}: {e}", shape.family.name()));
+                        }
+                    }
+                }
             })
         })
         .collect();
-    let (mut times, mut errors) = (Vec::new(), 0);
     for asked in asked {
-        let (time, answer) = asked.await?;
-        match answer {
-            Ok(()) => times.push(time),
-            Err(e) => {
-                errors += 1;
-                if errors == 1 {
-                    progress::note("query", &format!("{}: {e}", shape.family.name()));
-                }
-            }
-        }
+        asked.await?;
     }
-    Ok((times, errors))
+    let answered = std::mem::take(&mut *answered.lock().unwrap_or_else(PoisonError::into_inner));
+    Ok(answered)
+}
+
+/// Every 15 s: how far the pass is and its latency so far.
+fn heartbeat(
+    family: &str,
+    phase: &str,
+    seconds: u64,
+    answered: &Arc<Mutex<(Vec<Duration>, usize)>>,
+) -> progress::Heartbeat {
+    let (family, phase, answered) = (family.to_string(), phase.to_string(), answered.clone());
+    let started = Instant::now();
+    progress::every("query", Duration::from_secs(15), move || {
+        let (times, errors) = &*answered.lock().unwrap_or_else(PoisonError::into_inner);
+        let ms = millis(times);
+        format!(
+            "{family} · {phase} {} of {seconds} s · {} answered · p50 {:.1} ms · p90 {:.1} ms · {errors} errors",
+            started.elapsed().as_secs().min(seconds),
+            ms.len(),
+            nearest_rank(&ms, 0.5),
+            nearest_rank(&ms, 0.9),
+        )
+    })
 }
 
 fn request(name: &str, ask: Ask) -> (Method, String, Json) {

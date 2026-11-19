@@ -40,21 +40,34 @@ say() {
 }
 
 # step NAME "what it does" command...: the command's output goes to
-# logs/NAME.log; run.log gets a line before and after, and the log's last
-# lines if it fails.
+# logs/NAME.log; run.log gets a line before and after, every progress line the
+# benchmark prints while it runs, and the log's last lines if it fails.
 step() {
-  local name=$1 what=$2 started status
+  local name=$1 what=$2 started status=0 out relay
   shift 2
   started=$(date +%s)
   say "$name" start "$what"
-  if "$@" >>"$LOGS/$name.log" 2>&1; then
+  exec {out}> >(tee -a "$LOGS/$name.log" | relay "$name")
+  relay=$!
+  "$@" >&"$out" 2>&1 || status=$?
+  exec {out}>&-
+  wait "$relay" 2>/dev/null || true
+  if [ "$status" = 0 ]; then
     say "$name" done "done in $(span $(($(date +%s) - started)))"
   else
-    status=$?
     say "$name" failed "failed with status $status after $(span $(($(date +%s) - started))); see logs/$name.log"
     tail -n 15 "$LOGS/$name.log" | sed 's/^/    /'
     return "$status"
   fi
+}
+
+# The benchmark's own progress lines ("12:00:00  +1:30    query     ..."), into run.log.
+relay() {
+  local line pattern='^[0-9]{2}:[0-9]{2}:[0-9]{2} +\+[^ ]+ +(.+)$'
+  while IFS= read -r line; do
+    [[ $line =~ $pattern ]] && say "$1" progress "> ${BASH_REMATCH[1]}"
+  done
+  return 0
 }
 
 save() { aws s3 cp --quiet --recursive "$RESULTS" "s3://$BUCKET/results/"; }
@@ -65,8 +78,8 @@ finish() {
   shutdown -h now
 }
 trap finish EXIT
-# The log reaches the bucket every minute, so `status` can show it.
-(while sleep 60; do save >/dev/null 2>&1 || true; done) &
+# The log reaches the bucket every 20 s, so `status` can show it.
+(while sleep 20; do save >/dev/null 2>&1 || true; done) &
 
 FILESYSTEM=${FILESYSTEM:-0}
 TPUF=${TPUF:-0}

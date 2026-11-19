@@ -275,8 +275,12 @@ status() {
   local id
   id=$(instance_id)
   echo "machine: ${id:-none running}"
-  aws s3 ls "s3://$BUCKET/results/" 2>/dev/null || echo "no results yet"
-  aws s3 cp --quiet "s3://$BUCKET/results/run.log" - 2>/dev/null | tail -n 15 || true
+  local log
+  log=$(aws s3 cp --quiet "s3://$BUCKET/results/run.log" - 2>/dev/null) || { echo "no results yet"; return 0; }
+  echo "steps:"
+  awk '$4 != ">" && !/^    /' <<<"$log" | sed 's/^/  /'
+  echo "now:"
+  awk '$4 == ">"' <<<"$log" | tail -n 6 | sed 's/^/  /' 
 }
 
 fetch() {
