@@ -308,7 +308,11 @@ if [ "$TPUF" = 1 ]; then
     keep_set "$set"
     save
   }
-  measure "$RESULTS" "${WARM:-300}" "${SECONDS_RUN:-600}"
+  if [ "${DEV:-0}" = 1 ]; then
+    measure "$RESULTS" "${WARM:-60}" "${SECONDS_RUN:-120}"
+  else
+    measure "$RESULTS" "${WARM:-300}" "${SECONDS_RUN:-600}"
+  fi
 
   # In dev mode the machine waits for `run.sh push`: each push rebuilds, restarts
   # the API on the kept index and measures a short round. It turns itself off
