@@ -51,6 +51,9 @@ impl Drop for Builder {
 pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
     let (count, builds) = watch::channel(0);
     let task = tokio::spawn(async move {
+        if let Err(error) = index.storage.inline_head(index.branch()).await {
+            tracing::warn!(%error, branch = index.branch(), "could not inline the version");
+        }
         let mut failures = 0;
         let mut laid = None;
         let mut calibrating = JoinSet::new();

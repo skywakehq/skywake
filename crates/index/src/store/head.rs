@@ -101,6 +101,10 @@ fn text(version: Hash, hints: &[Hint], inline: Option<&[u8]>) -> String {
     text
 }
 
+pub(crate) fn fits(raw: &[u8]) -> bool {
+    pack(raw).is_some()
+}
+
 fn pack(raw: &[u8]) -> Option<String> {
     let packed = zstd::bulk::compress(raw, 3).ok()?;
     (packed.len() <= INLINE_BYTES).then(|| STANDARD.encode(packed))

@@ -189,6 +189,20 @@ impl Storage {
         self.pointed(&head).await
     }
 
+    /// Writes the version into a head written before heads carried it.
+    pub(crate) async fn inline_head(&self, branch: &str) -> Result<()> {
+        let head = self.head(branch).await?;
+        if head.inline.is_some() {
+            return Ok(());
+        }
+        let raw = self.chunks.objects.get_raw(head.version).await?;
+        if head::fits(&raw) {
+            let store = self.store.as_ref();
+            head::advance(store, branch, &head, head.version, &head.hints, Some(&raw)).await?;
+        }
+        Ok(())
+    }
+
     async fn pointed(&self, head: &Head) -> Result<Arc<Version>> {
         let Some(raw) = &head.inline else {
             return self.version(head.version).await;

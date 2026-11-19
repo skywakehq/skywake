@@ -292,6 +292,9 @@ if [ "$TPUF" = 1 ]; then
         --qps 8 --warm "$warm" --seconds 60 --recall 1000 --out "$out/tpuf-dataset"
     fi
     if wants attrs; then
+      step layout "range and filtered queries, so the builder lays the index out for them" \
+        bench --index "$index" --rows 10000000 --families count-and,grouped-filtered,order-filtered \
+        --qps 8 --warm 0 --seconds 20 --recall 0 --out "$out/tpuf-attrs-layout"
       step attrs "counts, grouped counts and order by" \
         bench --index "$index" --rows 10000000 \
         --families count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered \
