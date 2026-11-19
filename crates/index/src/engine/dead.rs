@@ -38,10 +38,8 @@ impl Dead {
                 by_page.entry(page).or_default().insert(id);
             }
         }
-        let spans: Vec<_> = by_page
-            .keys()
-            .map(|&page| resolved.ids[page].clone())
-            .collect();
+        let ids = resolved.ids(storage).await?;
+        let spans: Vec<_> = by_page.keys().map(|&page| ids[page].clone()).collect();
         let pages = columns::ids_many(storage, &spans).await?;
         for ((page, gone), ids) in by_page.into_iter().zip(pages) {
             let mut bits = vec![0u64; ids.len().div_ceil(64)];

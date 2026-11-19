@@ -46,7 +46,11 @@ pub(crate) async fn order(
     if !usable {
         return Ok(None);
     }
-    let resolved = Resolved::of(storage, columns).await?;
+    let mut names = loaded.clone();
+    names.extend(order.include.iter().map(String::as_str));
+    names.sort_unstable();
+    names.dedup();
+    let resolved = Resolved::of(storage, columns, &names).await?;
     if attributes
         .iter()
         .any(|name| has_nan(&resolved.columns[name.as_str()]))
@@ -96,8 +100,9 @@ pub(crate) async fn order(
         let rows = materialize(storage, &resolved, &tail, order, best.finish()).await?;
         return Ok(Some(rows.into_iter().skip(order.offset).collect()));
     }
-    let mut pages: Vec<(usize, Option<Value>, f64)> = (0..resolved.pages())
-        .filter(|&page| resolved.rows[page] > 0)
+    let rows = resolved.rows(storage).await?;
+    let mut pages: Vec<(usize, Option<Value>, f64)> = (0..rows.len())
+        .filter(|&page| rows[page] > 0)
         .map(|page| {
             let share = filter.map_or(1.0, |f| share(f, &resolved, page));
             (page, bound(order, descending, column, page), share)

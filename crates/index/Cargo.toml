@@ -11,6 +11,7 @@ bench = []
 [dependencies]
 skywake-core.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 blake3.workspace = true
 chrono.workspace = true
 futures.workspace = true

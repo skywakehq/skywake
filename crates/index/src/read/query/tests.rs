@@ -15,7 +15,9 @@ use crate::{Doc, Filter, Hit, Index, Kind, Metric, Options, Query, Schema};
 
 async fn branch(gate: &Arc<Gate>, index: &Index, name: &str, version: &Version) -> Index {
     let hash = index.storage.put_version(version).await.unwrap();
-    head::create(gate.as_ref(), name, hash, &[]).await.unwrap();
+    head::create(gate.as_ref(), name, hash, &[], None)
+        .await
+        .unwrap();
     Index::open(gate.clone(), name).await.unwrap()
 }
 

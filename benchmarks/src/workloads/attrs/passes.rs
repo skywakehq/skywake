@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, ensure};
 use futures::stream::{FuturesUnordered, StreamExt};
-use skywake_index::{Index, Options, Reads, Snapshot, Value, counted};
+use skywake_index::{BuildPolicy, Index, Options, Reads, Snapshot, Value, counted};
 
 use super::data::{Ask, Family, doc, schema};
 use super::report::{Answer, Pass, Setup, Temperature};
@@ -96,9 +96,13 @@ async fn adapt(index: &Index, plan: &Plan) -> Result<()> {
         }
     }
     let started = Instant::now();
-    index.rebuild().await?;
+    let policy = BuildPolicy {
+        interval: Duration::from_millis(10),
+        ..BuildPolicy::default()
+    };
+    index.spawn_builder(policy).wait_for(1).await;
     step.done(&format!(
-        "rebuilt in {:.1} s",
+        "laid out in {:.1} s",
         started.elapsed().as_secs_f64()
     ));
     Ok(())

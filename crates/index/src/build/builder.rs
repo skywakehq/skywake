@@ -1,11 +1,14 @@
-//! Builds a branch in the background when enough was written.
+//! Builds a branch in the background when enough was written, or when the
+//! queries it serves want a column layout it does not have.
 
 use std::time::Duration;
 
 use tokio::sync::watch;
 use tokio::task::{JoinHandle, JoinSet};
 
+use super::Mode;
 use crate::Index;
+use crate::layout::Wanted;
 
 #[derive(Clone, Debug)]
 pub struct BuildPolicy {
@@ -49,6 +52,7 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
     let (count, builds) = watch::channel(0);
     let task = tokio::spawn(async move {
         let mut failures = 0;
+        let mut laid = None;
         let mut calibrating = JoinSet::new();
         loop {
             while calibrating.try_join_next().is_some() {}
@@ -60,9 +64,17 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
                     }
                 });
             }
-            match due(&index, &policy).await {
-                Ok(false) => failures = 0,
-                Ok(true) => match index.build_inner(false).await {
+            let next = match due(&index, &policy).await {
+                Ok(true) => {
+                    laid = None;
+                    Ok(Some(Mode::Grow))
+                }
+                Ok(false) => Ok(relayout(&index, &mut laid).await),
+                Err(error) => Err(error),
+            };
+            match next {
+                Ok(None) => failures = 0,
+                Ok(Some(mode)) => match index.build_inner(mode).await {
                     Ok(true) => {
                         failures = 0;
                         count.send_modify(|builds| *builds += 1);
@@ -90,6 +102,15 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
         }
     });
     Builder { task, builds }
+}
+
+/// A layout the queries want, once per wanted layout until new rows arrive, so a
+/// layout that cannot be reached is not rebuilt again and again.
+async fn relayout(index: &Index, laid: &mut Option<Wanted>) -> Option<Mode> {
+    let wanted = (index.layout_wanted().await).filter(|wanted| laid.as_ref() != Some(wanted))?;
+    let mode = Mode::Layout { sort: wanted.sort };
+    *laid = Some(wanted);
+    Some(mode)
 }
 
 async fn due(index: &Index, policy: &BuildPolicy) -> crate::Result<bool> {

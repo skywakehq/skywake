@@ -276,6 +276,68 @@ async fn a_rebuild_sorts_the_pages_of_an_index_with_vectors() {
 }
 
 async fn sorts_pages_on_the_busiest_range(vectors: bool) {
+    let (index, count, latest) = ranged(vectors).await;
+    let before = index.aggregate(&count).await.unwrap();
+    let ordered = index.order(&latest).await.unwrap();
+    for _ in 0..32 {
+        index.aggregate(&count).await.unwrap();
+    }
+    index.rebuild().await.unwrap();
+    assert!(same(&index.aggregate(&count).await.unwrap(), &before));
+    assert!(same_rows(&index.order(&latest).await.unwrap(), &ordered));
+    assert!(sorted_on(&index, "at").await);
+    index.storage.shapes().forget();
+    index.rebuild().await.unwrap();
+    let version = index.storage.current(&index.branch).await.unwrap();
+    let kept = crate::layout::key(&index.storage, &version.schema, version.columns.as_ref())
+        .await
+        .unwrap();
+    assert_eq!(kept.as_deref(), Some("at"));
+}
+
+#[tokio::test]
+async fn the_builder_sorts_pages_for_reads_alone() {
+    the_builder_lays_out_for_reads(false).await;
+}
+
+#[tokio::test]
+async fn the_builder_sorts_pages_for_reads_alone_and_keeps_the_clusters() {
+    the_builder_lays_out_for_reads(true).await;
+}
+
+async fn the_builder_lays_out_for_reads(vectors: bool) {
+    let (index, count, latest) = ranged(vectors).await;
+    let before = index.aggregate(&count).await.unwrap();
+    let ordered = index.order(&latest).await.unwrap();
+    let clusters = index
+        .storage
+        .current(&index.branch)
+        .await
+        .unwrap()
+        .ann
+        .clone();
+    assert!(!sorted_on(&index, "at").await);
+    for _ in 0..32 {
+        index.aggregate(&count).await.unwrap();
+    }
+    let policy = crate::BuildPolicy {
+        interval: std::time::Duration::from_millis(10),
+        ..crate::BuildPolicy::default()
+    };
+    let mut builder = index.spawn_builder(policy);
+    let laid = tokio::time::timeout(std::time::Duration::from_secs(30), builder.wait_for(1));
+    laid.await
+        .expect("the builder lays the columns out for the queries it saw");
+    assert!(sorted_on(&index, "at").await);
+    assert!(same(&index.aggregate(&count).await.unwrap(), &before));
+    assert!(same_rows(&index.order(&latest).await.unwrap(), &ordered));
+    let version = index.storage.current(&index.branch).await.unwrap();
+    assert!(version.ann == clusters);
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert_eq!(builder.builds(), 1);
+}
+
+async fn ranged(vectors: bool) -> (Index, Aggregate, Order) {
     let schema = Schema::new()
         .attribute("at", Kind::Datetime)
         .attribute("n", Kind::Int)
@@ -315,41 +377,25 @@ async fn sorts_pages_on_the_busiest_range(vectors: bool) {
         measures: BTreeMap::from([("n".to_string(), Measure::Count(None))]),
         ..Aggregate::default()
     };
-    let before = index.aggregate(&count).await.unwrap();
     let mut latest = Order::new("at", 15);
     latest.descending = true;
     latest.filter = count.filter.clone();
-    let ordered = index.order(&latest).await.unwrap();
-    for _ in 0..32 {
-        index.aggregate(&count).await.unwrap();
-    }
-    index.rebuild().await.unwrap();
-    assert!(same(&index.aggregate(&count).await.unwrap(), &before));
-    assert!(same_rows(&index.order(&latest).await.unwrap(), &ordered));
+    (index, count, latest)
+}
+
+async fn sorted_on(index: &Index, name: &str) -> bool {
     let version = index.storage.current(&index.branch).await.unwrap();
     let columns = version.columns.as_ref().unwrap();
-    let pages = crate::format::columns::pages(&index.storage, &columns.columns["at"])
+    let pages = crate::format::columns::pages(&index.storage, &columns.columns[name])
         .await
         .unwrap();
-    let bounds: Vec<_> = pages
-        .iter()
-        .map(|p| (p.stats.min.clone(), p.stats.max.clone()))
-        .collect();
-    assert!(bounds.len() > 1);
-    assert!(bounds.windows(2).all(|w| {
-        w[0].1
-            .as_ref()
-            .unwrap()
-            .order(w[1].0.as_ref().unwrap())
-            .is_le()
-    }));
-    index.storage.shapes().forget();
-    index.rebuild().await.unwrap();
-    let version = index.storage.current(&index.branch).await.unwrap();
-    let kept = crate::layout::key(&index.storage, &version.schema, version.columns.as_ref())
-        .await
-        .unwrap();
-    assert_eq!(kept.as_deref(), Some("at"));
+    pages.len() > 1
+        && pages.windows(2).all(|w| {
+            let (Some(max), Some(min)) = (&w[0].stats.max, &w[1].stats.min) else {
+                return false;
+            };
+            max.order(min).is_le()
+        })
 }
 
 #[tokio::test(flavor = "multi_thread")]

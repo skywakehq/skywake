@@ -101,7 +101,7 @@ impl Index {
         fresh.parent = None;
         let copy = Index::at(store, MAIN, self.options.clone());
         let hash = copy.storage.put_version(&fresh).await?;
-        head::create(copy.storage.store.as_ref(), MAIN, hash, &[]).await?;
+        head::create(copy.storage.store.as_ref(), MAIN, hash, &[], None).await?;
         Ok(copy)
     }
 }

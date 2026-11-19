@@ -11,14 +11,13 @@ use crate::text::part::{blocking, read_blob};
 use crate::{Error, Id, Result};
 
 pub(crate) async fn open(storage: &Storage, hash: Hash, bytes: u64) -> Result<Arc<Directory>> {
-    let key = part(hash, "postings");
-    if let Some(found) = storage.cache().get(key) {
-        return Ok(found);
-    }
-    let raw = read_blob(storage.store.as_ref(), hash, bytes).await?;
-    let directory = Arc::new(Directory::decode(&raw)?);
-    (storage.cache()).insert(key, directory.clone(), directory.weight());
-    Ok(directory)
+    (storage.cached(part(hash, "postings"), async {
+        let raw = read_blob(storage.store.as_ref(), hash, bytes).await?;
+        let directory = Arc::new(Directory::decode(&raw)?);
+        let weight = directory.weight();
+        Ok((directory, weight))
+    }))
+    .await
 }
 
 pub(crate) async fn opened(storage: &Storage, postings: &PostingsRef) -> Result<Arc<Directory>> {

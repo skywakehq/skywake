@@ -123,3 +123,17 @@ async fn warming_puts_every_blob_on_the_disk() {
         .collect();
     assert!(from_bucket.is_empty(), "{from_bucket:?}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_a_branch_reads_its_version_from_the_head() {
+    let gate = Gate::new();
+    let index = built(&gate, 2_000, 16, 500).await;
+    let head = index.storage.head("main").await.unwrap();
+    assert!(head.inline.is_some());
+    gate.reads.lock().unwrap().clear();
+    let fresh = Index::open(gate.clone(), "main").await.unwrap();
+    assert_eq!(fresh.stats().await.unwrap().rows, 2_000);
+    let version = format!("objects/{}", head.version);
+    let reads = gate.reads.lock().unwrap();
+    assert!(reads.iter().all(|(path, _)| *path != version), "{reads:?}");
+}

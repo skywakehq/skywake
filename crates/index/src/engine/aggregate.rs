@@ -35,7 +35,7 @@ pub(crate) async fn aggregate(
     if !usable {
         return Ok(None);
     }
-    let resolved = Resolved::of(storage, columns).await?;
+    let resolved = Resolved::of(storage, columns, &names).await?;
     let tail = Tail::load(storage, version).await?;
     let newest = tail.newest();
     let dead = Dead::find(storage, version, &resolved, newest.keys().copied()).await?;
@@ -61,14 +61,18 @@ pub(crate) async fn aggregate(
         .values()
         .all(|m| *m == Measure::Count(None));
     let totals = counting && filter.is_none() && groups.start_from_totals(&resolved);
+    let rows: &[usize] = match totals && dead.pages.is_empty() {
+        true => &[],
+        false => resolved.rows(storage).await?,
+    };
     let mut scans = Vec::new();
-    for page in 0..resolved.pages() {
+    for (page, &page_rows) in rows.iter().enumerate() {
         let dead_rows = dead.pages.get(&page);
         if totals && dead_rows.is_none() {
             continue;
         }
         if totals {
-            groups.uncount_page(&resolved, page);
+            groups.uncount_page(page, page_rows);
         }
         let proof = filter.map_or(Proof::All, |f| prove(f, &resolved, page));
         if proof == Proof::None {
@@ -76,7 +80,7 @@ pub(crate) async fn aggregate(
         }
         if counting
             && dead_rows.is_none()
-            && groups.count_from_stats(&resolved, page, proof, filter)
+            && groups.count_from_stats(&resolved, page, page_rows, proof, filter)
         {
             continue;
         }
@@ -281,7 +285,7 @@ impl<'a> Groups<'a> {
                 .filter(|(_, column)| {
                     (column.dictionary.values.len() + 1) * measures.len().max(1) <= DENSE_TALLIES
                 })
-                .map(|(name, column)| Some((name.as_str(), column))),
+                .map(|(name, column)| Some((name.as_str(), &**column))),
             _ => None,
         };
         let dense = column.map(|column| {
@@ -317,11 +321,10 @@ impl<'a> Groups<'a> {
         }
     }
 
-    fn histogram_of(&self, resolved: &Resolved, page: usize) -> Option<Vec<(usize, u64)>> {
+    fn histogram_of(&self, page: usize, rows: usize) -> Option<Vec<(usize, u64)>> {
         let dense = self.dense.as_ref()?;
-        let rows = resolved.rows[page] as u64;
         let Some((_, column)) = dense.column else {
-            return Some(vec![(0, rows)]);
+            return Some(vec![(0, rows as u64)]);
         };
         let stats = &column.pages[page].stats;
         let missing = (dense.missing(), stats.missing as u64);
@@ -359,8 +362,8 @@ impl<'a> Groups<'a> {
         true
     }
 
-    fn uncount_page(&mut self, resolved: &Resolved, page: usize) {
-        let histogram = self.histogram_of(resolved, page);
+    fn uncount_page(&mut self, page: usize, rows: usize) {
+        let histogram = self.histogram_of(page, rows);
         for (slot, n) in histogram.expect("totals were complete") {
             if n > 0 {
                 self.uncount(slot, n);
@@ -372,10 +375,11 @@ impl<'a> Groups<'a> {
         &mut self,
         resolved: &Resolved,
         page: usize,
+        rows: usize,
         proof: Proof,
         filter: Option<&Filter>,
     ) -> bool {
-        let Some(histogram) = self.histogram_of(resolved, page) else {
+        let Some(histogram) = self.histogram_of(page, rows) else {
             return false;
         };
         if proof == Proof::All {

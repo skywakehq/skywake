@@ -40,12 +40,24 @@ pub(crate) struct Settings {
     pub postings: bool,
 }
 
+/// What a build redoes: only what was written since the last one, the column
+/// layout the queries ask for, or everything.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Grow,
+    Layout { sort: bool },
+    Full,
+}
+
 pub(crate) async fn build(
     storage: &Storage,
     branch: &str,
     settings: Settings,
-    full: bool,
+    mode: Mode,
 ) -> Result<bool> {
+    let full = mode == Mode::Full;
+    let layout = matches!(mode, Mode::Layout { .. });
+    let resort = full || mode == (Mode::Layout { sort: true });
     let Settings {
         budget,
         cluster_rows,
@@ -63,7 +75,7 @@ pub(crate) async fn build(
         columns.is_some() && version.columns.is_none() && (version.ann.is_some() || !vectors);
     let postings_missing = postings
         && (version.text.iter().flat_map(|text| &text.parts)).any(|p| p.postings.is_none());
-    let rebuilt = parts_missing || columns_missing || postings_missing;
+    let rebuilt = parts_missing || columns_missing || postings_missing || layout;
     let nothing_new = version.tail.is_empty() && built_before && !rebuilt;
     if covers == 0 || (nothing_new && !full) {
         return Ok(false);
@@ -118,7 +130,7 @@ pub(crate) async fn build(
                 storage,
                 &version,
                 (page_rows, budget, spill),
-                full,
+                resort,
                 &mut written,
             );
             Some(build.await?)
@@ -160,7 +172,7 @@ pub(crate) async fn build(
         .save(branch, &written, |current| {
             let apply = match incremental {
                 true => same_clusters(current.ann.as_ref(), base.as_ref()),
-                false => current.covers() < covers || (full && current.ann == base),
+                false => current.covers() < covers || ((full || layout) && current.ann == base),
             };
             let text_applies = current.text == version.text && current.columns == version.columns;
             let skip = covers.checked_sub(current.covers())?;

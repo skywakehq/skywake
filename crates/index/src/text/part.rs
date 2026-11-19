@@ -99,33 +99,33 @@ pub(crate) async fn read_blob(store: &dyn ObjectStore, hash: Hash, len: u64) -> 
 
 pub(crate) async fn open(storage: &Storage, hot: Hash, hot_bytes: u64) -> Result<Arc<Opened>> {
     let key = Hash::of(format!("{hot}/opened").as_bytes());
-    if let Some(found) = storage.cache().get(key) {
-        return Ok(found);
-    }
-    let bytes = read_blob(storage.store.as_ref(), hot, hot_bytes).await?;
-    let hot = Hot::decode(&bytes)?;
-    let store = storage.store.clone();
-    let cache = Arc::downgrade(storage.cache());
-    let opened = Arc::new(
-        blocking(move || -> Result<Opened> {
-            let files = Files {
-                files: &hot.files,
-                atomic: &hot.atomic,
-                ranges: &hot.ranges,
-            };
-            let dir = BlobDir::open(store, files, cache);
-            let hot_bytes = dir.hot_bytes();
-            let searcher = searcher(dir)?;
-            Ok(Opened {
-                searcher,
-                ids: hot.ids.clone(),
-                hot_bytes,
+    (storage.cached(key, async {
+        let bytes = read_blob(storage.store.as_ref(), hot, hot_bytes).await?;
+        let hot = Hot::decode(&bytes)?;
+        let store = storage.store.clone();
+        let cache = Arc::downgrade(storage.cache());
+        let opened = Arc::new(
+            blocking(move || -> Result<Opened> {
+                let files = Files {
+                    files: &hot.files,
+                    atomic: &hot.atomic,
+                    ranges: &hot.ranges,
+                };
+                let dir = BlobDir::open(store, files, cache);
+                let hot_bytes = dir.hot_bytes();
+                let searcher = searcher(dir)?;
+                Ok(Opened {
+                    searcher,
+                    ids: hot.ids.clone(),
+                    hot_bytes,
+                })
             })
-        })
-        .await??,
-    );
-    storage.cache().insert(key, opened.clone(), opened.weight());
-    Ok(opened)
+            .await??,
+        );
+        let weight = opened.weight();
+        Ok((opened, weight))
+    }))
+    .await
 }
 
 pub(crate) fn widest(opened: &[Arc<Opened>]) -> Option<&tantivy::schema::Schema> {

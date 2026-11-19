@@ -1,9 +1,12 @@
 //! Branch heads.
 
 use std::hash::{BuildHasher, RandomState};
+use std::io::Read;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use futures::TryStreamExt;
 use object_store::path::Path;
 use object_store::{ObjectStore, ObjectStoreExt, PutMode, UpdateVersion};
@@ -11,11 +14,17 @@ use skywake_core::Hash;
 
 use crate::{Error, Result};
 
+/// The version a branch points at. A small version travels inside the head,
+/// so one read opens the branch.
 pub(crate) struct Head {
     pub version: Hash,
     pub hints: Vec<Hint>,
+    pub inline: Option<Vec<u8>>,
     tag: UpdateVersion,
 }
+
+const INLINE_BYTES: usize = 64 << 10;
+const INLINE_LIMIT: usize = 64 << 20;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Hint {
@@ -79,13 +88,32 @@ impl Hint {
     }
 }
 
-fn text(version: Hash, hints: &[Hint]) -> String {
+fn text(version: Hash, hints: &[Hint], inline: Option<&[u8]>) -> String {
     let mut text = version.to_string();
     for hint in hints {
         text.push('\n');
         text.push_str(&hint.line());
     }
+    if let Some(packed) = inline.and_then(pack) {
+        text.push_str("\ninline ");
+        text.push_str(&packed);
+    }
     text
+}
+
+fn pack(raw: &[u8]) -> Option<String> {
+    let packed = zstd::bulk::compress(raw, 3).ok()?;
+    (packed.len() <= INLINE_BYTES).then(|| STANDARD.encode(packed))
+}
+
+fn unpack(line: &str, version: Hash) -> Option<Vec<u8>> {
+    let packed = STANDARD.decode(line.strip_prefix("inline ")?).ok()?;
+    let mut raw = Vec::new();
+    (zstd::stream::read::Decoder::new(packed.as_slice()).ok()?)
+        .take(INLINE_LIMIT as u64)
+        .read_to_end(&mut raw)
+        .ok()?;
+    (Hash::of(&raw) == version).then_some(raw)
 }
 
 pub(crate) async fn read(store: &dyn ObjectStore, branch: &str) -> Result<Option<Head>> {
@@ -104,10 +132,11 @@ pub(crate) async fn read(store: &dyn ObjectStore, branch: &str) -> Result<Option
     let version = (lines.next())
         .and_then(|hex| hex.parse().ok())
         .ok_or_else(|| Error::Corrupt(format!("{path} is not a hash")))?;
-    let hints = lines.filter_map(Hint::parse).collect();
+    let (inline, hints): (Vec<&str>, Vec<&str>) = lines.partition(|l| l.starts_with("inline "));
     Ok(Some(Head {
         version,
-        hints,
+        hints: hints.into_iter().filter_map(Hint::parse).collect(),
+        inline: inline.first().and_then(|line| unpack(line, version)),
         tag,
     }))
 }
@@ -117,11 +146,12 @@ pub(crate) async fn create(
     branch: &str,
     version: Hash,
     hints: &[Hint],
+    inline: Option<&[u8]>,
 ) -> Result<()> {
     let written = store
         .put_opts(
             &path(branch)?,
-            text(version, hints).into(),
+            text(version, hints, inline).into(),
             PutMode::Create.into(),
         )
         .await;
@@ -140,9 +170,10 @@ pub(crate) async fn advance(
     from: &Head,
     version: Hash,
     hints: &[Hint],
+    inline: Option<&[u8]>,
 ) -> Result<bool> {
     let mode = PutMode::Update(from.tag.clone());
-    let text = text(version, hints);
+    let text = text(version, hints, inline);
     let written = store
         .put_opts(&path(branch)?, text.into(), mode.into())
         .await;
@@ -226,11 +257,26 @@ mod tests {
             Hint::Segment(a),
             Hint::Directory(b),
         ];
-        let written = format!("{}\nsomething new {b}", text(b, &hints));
+        let written = format!("{}\nsomething new {b}", text(b, &hints, None));
         let mut lines = written.lines();
         assert_eq!(lines.next().unwrap().parse::<Hash>().unwrap(), b);
         let parsed: Vec<Hint> = lines.filter_map(Hint::parse).collect();
         assert_eq!(parsed, hints);
-        assert_eq!(text(a, &[]), a.to_string());
+        assert_eq!(text(a, &[], None), a.to_string());
+    }
+
+    #[test]
+    fn an_inline_version_comes_back_only_when_it_matches_its_hash() {
+        let raw = b"a version".to_vec();
+        let version = Hash::of(&raw);
+        let written = text(version, &[Hint::Segment(version)], Some(&raw));
+        let line = written.lines().find(|l| l.starts_with("inline ")).unwrap();
+        assert_eq!(unpack(line, version), Some(raw));
+        assert_eq!(unpack(line, Hash::of(b"other")), None);
+        assert_eq!(Hint::parse(line), None);
+        let large: Vec<u8> = (0..1u32 << 20)
+            .flat_map(|n| n.wrapping_mul(2654435761).to_le_bytes())
+            .collect();
+        assert!(!text(Hash::of(&large), &[], Some(&large)).contains("inline"));
     }
 }

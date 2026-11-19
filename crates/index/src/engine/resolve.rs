@@ -2,22 +2,27 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, OnceLock};
 
 use skywake_core::Hash;
+use tokio::sync::OnceCell;
 
 use crate::format::columns::chunk::Layout;
 use crate::format::columns::dictionary::{Dictionary, Word};
 use crate::format::columns::leaders::Leaders;
 use crate::format::columns::projection::{self, Projected};
 use crate::format::columns::stats::Totals;
-use crate::format::columns::{self, Columns, PageRef, Span};
+use crate::format::columns::{self, ColumnRef, Columns, PageRef, Span};
 use crate::store::Storage;
 use crate::{Result, Value};
 
+/// The column metadata one query needs: only the columns it names, and the
+/// rows and row ids of each page only once something asks for them.
 pub(crate) struct Resolved {
     pub live: u64,
-    pub ids: Vec<Span>,
-    pub rows: Vec<usize>,
-    pub columns: BTreeMap<String, Column>,
+    pub columns: BTreeMap<String, Arc<Column>>,
     pub projections: Vec<Projected>,
+    first: Option<ColumnRef>,
+    rows: OnceCell<Vec<usize>>,
+    ids: Vec<Hash>,
+    spans: OnceCell<Arc<Vec<Span>>>,
 }
 
 pub(crate) struct Column {
@@ -39,47 +44,23 @@ impl Column {
         });
         lookup.get(&Word::of(value)?).copied()
     }
-}
 
-impl Resolved {
-    pub(crate) async fn of(storage: &Storage, columns: &Columns) -> Result<Arc<Resolved>> {
-        let key = Hash::of(&postcard::to_stdvec(columns)?);
-        if let Some(found) = storage.cache().get(key) {
-            return Ok(found);
-        }
-        let loads = columns.columns.iter().map(|(name, column)| async move {
+    async fn of(storage: &Storage, column: &ColumnRef) -> Result<Arc<Column>> {
+        let key = Hash::of(&postcard::to_stdvec(column)?);
+        (storage.cached(key, async {
             let (dictionary, totals, pages, leaders) = futures::try_join!(
                 columns::dictionary(storage, column),
                 columns::totals(storage, column),
                 columns::pages(storage, column),
                 columns::leaders(storage, column),
             )?;
-            Ok::<_, crate::Error>((name, column, dictionary, totals, pages, leaders))
-        });
-        let projected = (columns.projections.iter()).map(|p| projection::directory(storage, p));
-        let (ids, loaded, projections) = futures::try_join!(
-            columns::directory::<Span>(storage, &columns.ids),
-            futures::future::try_join_all(loads),
-            futures::future::try_join_all(projected),
-        )?;
-        let mut resolved = BTreeMap::new();
-        let mut weight = 64 * ids.len();
-        weight += (projections.iter())
-            .flat_map(|p| &p.runs)
-            .map(|run| {
-                let removed = run.removed.as_ref().map_or(0, |r| r.blocks.len());
-                48 * (run.added.blocks.len() + removed) + run.added.owners.len()
-            })
-            .sum::<usize>();
-        for (name, column, dictionary, totals, pages, leaders) in loaded {
-            weight += 64 * pages.len() + 16 * dictionary.values.len() + 8 * totals.histogram.len();
-            weight += leaders
-                .as_ref()
-                .map_or(0, |l| 48 * (l.high.rows.len() + l.low.rows.len()));
+            let mut weight =
+                64 * pages.len() + 16 * dictionary.values.len() + 8 * totals.histogram.len();
+            weight += (leaders.as_ref()).map_or(0, |l| 48 * (l.high.rows.len() + l.low.rows.len()));
             weight += (pages.iter())
                 .map(|page| 8 * page.stats.histogram.as_ref().map_or(0, Vec::len))
                 .sum::<usize>();
-            let column = Column {
+            let resolved = Arc::new(Column {
                 layout: column.layout,
                 dictionary,
                 source: column.dictionary,
@@ -87,28 +68,72 @@ impl Resolved {
                 pages,
                 leaders,
                 lookup: OnceLock::new(),
-            };
-            resolved.insert(name.clone(), column);
-        }
-        let rows = (resolved.values().next())
-            .map(|column| {
-                (column.pages.iter())
-                    .map(|page| page.stats.rows as usize)
-                    .collect()
-            })
-            .unwrap_or_default();
-        let resolved = Arc::new(Resolved {
+            });
+            Ok((resolved, weight))
+        }))
+        .await
+    }
+}
+
+impl Resolved {
+    pub(crate) async fn of(
+        storage: &Storage,
+        columns: &Columns,
+        names: &[&str],
+    ) -> Result<Resolved> {
+        let named = (names.iter())
+            .filter_map(|&name| Some((name, columns.columns.get(name)?)))
+            .map(|(name, column)| async move {
+                Ok::<_, crate::Error>((name.to_string(), Column::of(storage, column).await?))
+            });
+        let projected = (columns.projections.iter())
+            .filter(|p| names.contains(&p.by.as_str()) && names.contains(&p.sort.as_str()))
+            .map(|p| projection::directory(storage, p));
+        let (named, projections) = futures::try_join!(
+            futures::future::try_join_all(named),
+            futures::future::try_join_all(projected),
+        )?;
+        let named: BTreeMap<String, Arc<Column>> = named.into_iter().collect();
+        let rows = (names.iter())
+            .find_map(|&name| named.get(name))
+            .map(|column| rows_of(&column.pages));
+        Ok(Resolved {
             live: columns.live,
-            ids,
-            rows,
-            columns: resolved,
+            columns: named,
             projections,
-        });
-        storage.cache().insert(key, Arc::clone(&resolved), weight);
-        Ok(resolved)
+            first: columns.columns.values().next().cloned(),
+            rows: OnceCell::new_with(rows),
+            ids: columns.ids.clone(),
+            spans: OnceCell::new(),
+        })
     }
 
-    pub(crate) fn pages(&self) -> usize {
-        self.ids.len()
+    pub(crate) async fn rows(&self, storage: &Storage) -> Result<&[usize]> {
+        let rows = self.rows.get_or_try_init(|| async {
+            match &self.first {
+                Some(column) => {
+                    Ok::<_, crate::Error>(rows_of(&columns::pages(storage, column).await?))
+                }
+                None => Ok(Vec::new()),
+            }
+        });
+        Ok(rows.await?.as_slice())
     }
+
+    pub(crate) async fn ids(&self, storage: &Storage) -> Result<&[Span]> {
+        let spans = self.spans.get_or_try_init(|| async {
+            let key = Hash::of(&postcard::to_stdvec(&self.ids)?);
+            (storage.cached(key, async {
+                let spans = Arc::new(columns::directory::<Span>(storage, &self.ids).await?);
+                let weight = 64 * spans.len();
+                Ok((spans, weight))
+            }))
+            .await
+        });
+        Ok(spans.await?.as_slice())
+    }
+}
+
+fn rows_of(pages: &[PageRef]) -> Vec<usize> {
+    pages.iter().map(|page| page.stats.rows as usize).collect()
 }

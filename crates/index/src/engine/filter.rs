@@ -165,23 +165,24 @@ impl<'a> Page<'a> {
             })
             .collect();
         let id_spans: Vec<Span> = match ids {
-            true => pages
-                .iter()
-                .map(|&page| resolved.ids[page].clone())
-                .collect(),
+            true => {
+                let spans = resolved.ids(storage).await?;
+                pages.iter().map(|&page| spans[page].clone()).collect()
+            }
             false => Vec::new(),
         };
         let (chunks, ids) = futures::try_join!(
             columns::chunks(storage, &spans),
             columns::ids_many(storage, &id_spans),
         )?;
+        let rows = resolved.rows(storage).await?;
         let mut chunks = chunks.into_iter();
         let mut ids = ids.into_iter();
         Ok((pages.iter())
             .map(|&page| Page {
                 resolved,
                 page,
-                rows: resolved.rows[page],
+                rows: rows[page],
                 chunks: (names.iter().map(|name| name.to_string()))
                     .zip(chunks.by_ref())
                     .collect(),

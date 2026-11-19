@@ -6,6 +6,8 @@ use std::sync::{PoisonError, RwLock};
 
 use serde::{Deserialize, Serialize};
 
+use crate::format::Version;
+use crate::format::columns::chunk::Layout;
 use crate::format::columns::{self, Columns};
 use crate::store::Storage;
 use crate::{Attributes, Filter, Id, Kind, Result, Schema, Value};
@@ -193,6 +195,46 @@ fn scalar_kind(schema: &Schema, name: &str) -> bool {
         schema.attributes.get(name),
         Some(Kind::Number | Kind::Int | Kind::Datetime)
     )
+}
+
+/// The sort key and projections the queries seen so far ask for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Wanted {
+    pub sort: bool,
+    key: Option<String>,
+    pairs: Vec<(String, String)>,
+}
+
+/// What the queries seen so far want that the built columns lack: pages not
+/// in order of the busiest ranged key, or a projection not built yet.
+pub(crate) async fn stale(storage: &Storage, version: &Version) -> Result<Option<Wanted>> {
+    let Some(columns) = &version.columns else {
+        return Ok(None);
+    };
+    let shapes = storage.shapes();
+    let key = (shapes.busiest(&version.schema)).filter(|key| columns.columns.contains_key(key));
+    let pairs: Vec<(String, String)> = (shapes.pairs(&version.schema).into_iter())
+        .filter(|(by, sort)| projectable(columns, by, sort))
+        .collect();
+    let by_cluster = version.ann.is_some() && columns.rows.is_empty();
+    let sort = match &key {
+        Some(_) if by_cluster => true,
+        Some(key) => {
+            let pages = columns::pages(storage, &columns.columns[key]).await?;
+            !sorted(pages.iter().map(|page| (&page.stats.min, &page.stats.max)))
+        }
+        None => false,
+    };
+    let unbuilt = (pairs.iter())
+        .any(|(by, sort)| !(columns.projections.iter()).any(|p| p.by == *by && p.sort == *sort));
+    Ok((sort || unbuilt).then_some(Wanted { sort, key, pairs }))
+}
+
+fn projectable(columns: &Columns, by: &str, sort: &str) -> bool {
+    match (columns.columns.get(by), columns.columns.get(sort)) {
+        (Some(by), Some(sort)) => by.layout == Layout::Dictionary && sort.layout != Layout::Values,
+        _ => false,
+    }
 }
 
 pub(crate) fn projections(

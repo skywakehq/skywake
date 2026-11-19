@@ -140,7 +140,7 @@ impl Index {
         let written = Written::new();
         let hash = index.storage.put_version(&version).await?;
         index.storage.settle(&written, hash).await?;
-        head::create(index.storage.store.as_ref(), MAIN, hash, &[]).await?;
+        head::create(index.storage.store.as_ref(), MAIN, hash, &[], None).await?;
         Ok(index)
     }
 
@@ -154,7 +154,7 @@ impl Index {
         options: Options,
     ) -> Result<Self> {
         let index = Self::at(store, branch, options);
-        let version = index.storage.current(branch).await?;
+        let version = index.storage.prefetched(branch).await?;
         *lock(&index.opened) = Some((Instant::now(), version.clone()));
         *lock(&index.seen) = Some((Instant::now(), version));
         Ok(index)
@@ -231,7 +231,14 @@ impl Index {
     pub async fn fork(&self, branch: &str) -> Result<Self> {
         let head = self.storage.head(&self.branch).await?;
         let store = self.storage.store.as_ref();
-        head::create(store, branch, head.version, &head.hints).await?;
+        head::create(
+            store,
+            branch,
+            head.version,
+            &head.hints,
+            head.inline.as_deref(),
+        )
+        .await?;
         Ok(self.other(branch))
     }
 
@@ -317,7 +324,7 @@ impl Index {
                 version
             }
             _ => {
-                let version = self.storage.current(&self.branch).await?;
+                let version = self.storage.prefetched(&self.branch).await?;
                 self.remember(epoch, version.clone());
                 version
             }
@@ -334,7 +341,7 @@ impl Index {
         }
         let index = self.clone();
         tokio::spawn(async move {
-            if let Ok(version) = index.storage.current(&index.branch).await {
+            if let Ok(version) = index.storage.prefetched(&index.branch).await {
                 index.remember(epoch, version);
             }
         });
@@ -372,14 +379,14 @@ impl Index {
     }
 
     pub async fn build(&self) -> Result<()> {
-        self.build_inner(false).await.map(drop)
+        self.build_inner(build::Mode::Grow).await.map(drop)
     }
 
     pub async fn rebuild(&self) -> Result<()> {
-        self.build_inner(true).await.map(drop)
+        self.build_inner(build::Mode::Full).await.map(drop)
     }
 
-    async fn build_inner(&self, full: bool) -> Result<bool> {
+    async fn build_inner(&self, mode: build::Mode) -> Result<bool> {
         let options = &self.options;
         let settings = build::Settings {
             budget: options.build_bytes,
@@ -388,12 +395,17 @@ impl Index {
             columns: options.columns.then_some(options.page_rows.max(1)),
             postings: options.postings,
         };
-        build::build(&self.storage, &self.branch, settings, full).await
+        build::build(&self.storage, &self.branch, settings, mode).await
     }
 
     pub async fn recalibrate(&self) -> Result<bool> {
         let budget = self.options.build_bytes;
         build::calibrate::recalibrate(&self.storage, &self.branch, budget).await
+    }
+
+    async fn layout_wanted(&self) -> Option<layout::Wanted> {
+        let version = self.version().await.ok()?;
+        layout::stale(&self.storage, &version).await.ok().flatten()
     }
 
     async fn calibration_wanted(&self) -> bool {

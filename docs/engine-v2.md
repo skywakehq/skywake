@@ -858,6 +858,30 @@ deploy saves a profile, so `skywake --profile local indexes` works straight away
 Not done yet: applying to `docker` (SSH), `kubernetes`, `aws`, `gcp` and `azure` (they plan and cost today, and
 say so when asked to apply), `lite`, the one-click buttons, bucket checks in `doctor`, and the docs pages.
 
+### Cold opens and read-driven layout
+
+Measured on 1M rows, columns on, the slow store (60 ms a request), `attrs --adapt`:
+
+| Query, cold p50                        | Before      | After        |
+| -------------------------------------- | ----------: | -----------: |
+| count                                  | 126 ms, 2 waves | 64 ms, 1 wave |
+| count, category = c                    | 128 ms      | 128 ms       |
+| count, two filters                     | 226 ms, 19.6 MB | 199 ms, 1.1 MB |
+| order by, top 10, category = c         | 240 ms, 71 MB | 197 ms, 1.3 MB |
+
+Range filters and filtered order by are 0.1 ms hot once laid out.
+
+- The head carries the version itself (zstd, base64, checked against its hash) when it compresses to 64 KB or
+  less, so opening a branch is one read. Readers that do not know the line skip it, and a head without it still
+  opens with a second read.
+- Opening no longer waits for the hinted objects: they are fetched in the background, and a query that asks for
+  one joins the fetch already running. Every load of the same object at once shares one fetch.
+- A query resolves only the columns it names, and the rows and row ids of each page only when it needs them.
+- The builder lays a branch out for the queries it serves even when nothing is written: it sorts on the busiest
+  range key and builds the projections the shape log wants, once per wanted layout until new rows arrive.
+
+Not done: the AWS run, and text measured cold (MS MARCO is not on the laptop).
+
 ## 9. Decisions for approval
 
 1. The design above, including our own text engine in place of Tantivy's scoring.

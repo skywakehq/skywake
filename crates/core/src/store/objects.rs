@@ -157,10 +157,17 @@ impl Objects {
         self.put_at(commit_path, commit).await
     }
 
+    pub async fn put_raw(&self, raw: &[u8]) -> Result<Hash> {
+        self.put_raw_at(object_path, raw).await
+    }
+
     async fn put_at<T: Serialize>(&self, path: fn(Hash) -> Path, value: &T) -> Result<Hash> {
-        let bytes = postcard::to_stdvec(value)?;
-        let hash = Hash::of(&bytes);
-        let stored = encode(&bytes)?;
+        self.put_raw_at(path, &postcard::to_stdvec(value)?).await
+    }
+
+    async fn put_raw_at(&self, path: fn(Hash) -> Path, bytes: &[u8]) -> Result<Hash> {
+        let hash = Hash::of(bytes);
+        let stored = encode(bytes)?;
         let path = path(hash);
         if !held::hold(&path, &stored) {
             self.store.put(&path, stored.clone().into()).await?;
