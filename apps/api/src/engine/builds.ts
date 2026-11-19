@@ -106,21 +106,24 @@ export class Builds {
 
   async build(order: BuildOrder) {
     const key = keyOf(order.folder, order.branch);
-    const { region, folder, shards, kmsKeyId } = order;
-    await this.#stores.ready(region);
-    const index = this.#stores.index(region, folder, { shards, kmsKeyId });
-    const was = this.#building.get(key);
-    const build = [...new Set([...(was?.order.build ?? []), ...order.build])].sort((a, b) => a - b);
-    const now = Date.now();
-    const same =
-      was?.index === index &&
-      was.order.build.length === build.length &&
-      now - was.synced < RESYNC_MS;
-    const synced = same ? was.synced : now;
-    this.#building.set(key, { order: { ...order, build }, index, last: now, synced });
-    if (same) return;
+    const { region, folder, shards, kmsKeyId, branch } = order;
     try {
-      await index.buildShards(order.branch, build);
+      await this.#stores.ready(region);
+      const index = this.#stores.index(region, folder, { shards, kmsKeyId });
+      const was = this.#building.get(key);
+      const build = [...new Set([...(was?.order.build ?? []), ...order.build])].sort(
+        (a, b) => a - b,
+      );
+      const now = Date.now();
+      const same =
+        was?.index === index &&
+        was.order.build.length === build.length &&
+        now - was.synced < RESYNC_MS;
+      const synced = same ? was.synced : now;
+      this.#building.set(key, { order: { ...order, build }, index, last: now, synced });
+      if (same) return;
+      await index.buildShards(branch, build);
+      if (!was) this.#log({ level: "info", msg: "index builders started", folder, branch, build });
     } catch (error) {
       this.#log({
         level: "warn",
@@ -145,6 +148,8 @@ export class Builds {
       }
       this.#building.delete(key);
       await building.index.buildShards(building.order.branch, []).catch(() => {});
+      const { folder, branch } = building.order;
+      this.#log({ level: "info", msg: "index builders stopped", folder, branch });
     }
     for (const [key, at] of this.#told) if (now - at >= AGAIN_MS) this.#told.delete(key);
   }

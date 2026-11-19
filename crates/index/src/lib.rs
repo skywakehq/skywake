@@ -404,8 +404,16 @@ impl Index {
     }
 
     async fn layout_wanted(&self) -> Option<layout::Wanted> {
-        let version = self.version().await.ok()?;
-        layout::stale(&self.storage, &version).await.ok().flatten()
+        let checked = match self.version().await {
+            Ok(version) => layout::stale(&self.storage, &version).await,
+            Err(error) => Err(error),
+        };
+        checked
+            .inspect_err(|error| {
+                tracing::warn!(%error, branch = self.branch(), "could not check the layout");
+            })
+            .ok()
+            .flatten()
     }
 
     async fn calibration_wanted(&self) -> bool {

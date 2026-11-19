@@ -54,6 +54,8 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
         if let Err(error) = index.storage.inline_head(index.branch()).await {
             tracing::warn!(%error, branch = index.branch(), "could not inline the version");
         }
+        let wanted = index.layout_wanted().await;
+        tracing::info!(branch = index.branch(), ?wanted, "index builder started");
         let mut failures = 0;
         let mut laid = None;
         let mut calibrating = JoinSet::new();
