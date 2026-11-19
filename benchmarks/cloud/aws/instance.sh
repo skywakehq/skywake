@@ -280,27 +280,35 @@ if [ "$TPUF" = 1 ]; then
   }
 
   # One round: uniform queries as turbopuffer asks, then real held-out ones.
+  wants() { [[ ",${SUITES:-vector,attrs,text,cold}," == *",$1,"* ]]; }
   measure() {
     local out=$1 warm=$2 seconds=$3
-    step tpuf "top 10 at 8 QPS, uniform queries, ${seconds} s after ${warm} s of warm-up" \
-      bench --index "$index" --rows 10000000 --families vector --probes uniform \
-      --qps 8 --warm "$warm" --seconds "$seconds" --recall 100 --out "$out/tpuf-uniform"
-    step recall "real held-out queries, unfiltered and at 1%" \
-      bench --index "$index" --rows 10000000 --families vector,vector-filtered --probes dataset \
-      --qps 8 --warm "$warm" --seconds 60 --recall 1000 --out "$out/tpuf-dataset"
-    step attrs "counts, grouped counts and order by" \
-      bench --index "$index" --rows 10000000 \
-      --families count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered \
-      --qps 8 --warm 30 --seconds 60 --recall 0 --out "$out/tpuf-attrs"
-    step text "keyword search on MS MARCO" \
-      bench --index "$text" --text "$marco" --families text \
-      --qps 8 --warm "$warm" --seconds 60 --recall 0 --out "$out/tpuf-text"
+    if wants vector; then
+      step tpuf "top 10 at 8 QPS, uniform queries, ${seconds} s after ${warm} s of warm-up" \
+        bench --index "$index" --rows 10000000 --families vector --probes uniform \
+        --qps 8 --warm "$warm" --seconds "$seconds" --recall 100 --out "$out/tpuf-uniform"
+      step recall "real held-out queries, unfiltered and at 1%" \
+        bench --index "$index" --rows 10000000 --families vector,vector-filtered --probes dataset \
+        --qps 8 --warm "$warm" --seconds 60 --recall 1000 --out "$out/tpuf-dataset"
+    fi
+    if wants attrs; then
+      step attrs "counts, grouped counts and order by" \
+        bench --index "$index" --rows 10000000 \
+        --families count,count-eq,count-and,grouped,grouped-filtered,order,order-filtered \
+        --qps 8 --warm 30 --seconds 60 --recall 0 --out "$out/tpuf-attrs"
+    fi
+    if wants text; then
+      step text "keyword search on MS MARCO" \
+        bench --index "$text" --text "$marco" --families text \
+        --qps 8 --warm "$warm" --seconds 60 --recall 0 --out "$out/tpuf-text"
+    fi
+    if wants cold; then
+      step cold "cold vector, counts and keyword search, no cache" cold "$out" || true
+    fi
     keep_set "$set"
     save
   }
   measure "$RESULTS" "${WARM:-300}" "${SECONDS_RUN:-600}"
-  step cold "cold vector, counts and keyword search, no cache" cold "$RESULTS" || true
-  save
 
   # In dev mode the machine waits for `run.sh push`: each push rebuilds, restarts
   # the API on the kept index and measures a short round. It turns itself off
