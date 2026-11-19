@@ -69,6 +69,8 @@ pub struct Options {
     pub page_rows: usize,
     pub postings: bool,
     pub partials: bool,
+    /// Built writes fold into parts once there are this many bytes of them.
+    pub fold_bytes: u64,
 }
 
 impl Default for Options {
@@ -87,6 +89,7 @@ impl Default for Options {
             page_rows: 8192,
             postings: false,
             partials: true,
+            fold_bytes: if cfg!(test) { 1 } else { 64 << 20 },
         }
     }
 }
@@ -229,16 +232,7 @@ impl Index {
     }
 
     pub async fn fork(&self, branch: &str) -> Result<Self> {
-        let head = self.storage.head(&self.branch).await?;
-        let store = self.storage.store.as_ref();
-        head::create(
-            store,
-            branch,
-            head.version,
-            &head.hints,
-            head.inline.as_deref(),
-        )
-        .await?;
+        self.storage.fork(&self.branch, branch).await?;
         Ok(self.other(branch))
     }
 
@@ -394,6 +388,7 @@ impl Index {
             spill: options.spill,
             columns: options.columns.then_some(options.page_rows.max(1)),
             postings: options.postings,
+            fold_bytes: options.fold_bytes,
         };
         build::build(&self.storage, &self.branch, settings, mode).await
     }

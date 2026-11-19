@@ -230,6 +230,7 @@ pub(crate) fn encode_docs(schema: &Schema, docs: &[Doc]) -> Result<Vec<(Vec<u8>,
                 .collect(),
             attributes: docs.iter().map(|doc| doc.attributes.clone()).collect(),
             deletes: Vec::new(),
+            seqs: Vec::new(),
         };
         Ok(postcard::to_stdvec(&segment)?)
     })

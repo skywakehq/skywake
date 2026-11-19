@@ -8,8 +8,8 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt, stream};
 use object_store::{ObjectStore, ObjectStoreExt};
 
-use crate::format::pages::Paged;
-use crate::format::{Segment, SegmentRef, Version};
+use crate::format::parts::{self, Source};
+use crate::format::{Segment, Version};
 use crate::history::gc;
 use crate::read::live;
 use crate::store::head;
@@ -60,7 +60,7 @@ impl Index {
 pub struct Export {
     storage: Arc<Storage>,
     version: Arc<Version>,
-    segments: Vec<SegmentRef>,
+    segments: Vec<Source>,
     current: HashMap<Id, u64>,
     next: usize,
 }
@@ -68,8 +68,7 @@ pub struct Export {
 impl Index {
     pub async fn export(&self) -> Result<Export> {
         let version = self.version().await?;
-        let built: Paged<SegmentRef> = version.built.open(&self.storage).await?;
-        let segments = built.iter().chain(version.tail()).cloned().collect();
+        let segments = parts::sources(&self.storage, &version, true).await?;
         let current = live::current(&self.storage, &version).await?;
         Ok(Export {
             storage: self.storage.clone(),
@@ -112,7 +111,7 @@ impl Export {
             return Ok(None);
         };
         self.next += 1;
-        let blob: Arc<Segment> = self.storage.get(segment.hash).await?;
+        let blob = segment.get(&self.storage).await?;
         let docs = blob.writes(segment.first_seq).filter_map(|(seq, id, row)| {
             let row = row?;
             (self.current.get(id) == Some(&seq)).then(|| doc(&self.version, &blob, row))
@@ -122,10 +121,11 @@ impl Export {
 }
 
 async fn segments(storage: &Storage, version: &Version) -> Result<Vec<(u64, Arc<Segment>)>> {
-    let built: Paged<SegmentRef> = version.built.open(storage).await?;
-    let refs: Vec<&SegmentRef> = built.iter().chain(version.tail()).collect();
-    let blobs = storage
-        .get_all(refs.iter().map(|r| r.hash).collect())
+    let refs = parts::sources(storage, version, true).await?;
+    let blobs: Vec<Arc<Segment>> = stream::iter(refs.clone())
+        .map(|r| async move { r.get(storage).await })
+        .buffered(PARALLELISM)
+        .try_collect()
         .await?;
     Ok(refs.iter().map(|r| r.first_seq).zip(blobs).collect())
 }

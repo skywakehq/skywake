@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use futures::{StreamExt, TryStreamExt, stream};
 
+use crate::format::Version;
 use crate::format::cluster::ClusterRef;
 use crate::format::pages::Paged;
+use crate::format::parts;
 use crate::format::rows;
 use crate::format::segment_ids::SegmentIds;
-use crate::format::{SegmentRef, Version};
 use crate::store::PARALLELISM;
 use crate::store::Storage;
 use crate::{Id, Result};
@@ -30,14 +31,13 @@ pub(crate) async fn stats(storage: &Storage, version: &Version) -> Result<Stats>
     let newest = newest(&tail);
     let current = newest.values().filter(|&&doc| doc).count() as u64;
     let documents: u64 = tail.iter().map(|(_, s)| s.ids.len() as u64).sum();
-    let built: Paged<SegmentRef> = version.built.open(storage).await?;
-    let segments = built.iter().chain(version.tail());
+    let sources = parts::sources(storage, version, true).await?;
     let mut stats = Stats {
         rows: current,
         deleted_rows: documents - current,
-        segments: (version.covers() + version.tail().len()) as u64,
+        segments: sources.len() as u64,
         unindexed_rows: current,
-        bytes: segments.map(|s| s.bytes).sum(),
+        bytes: sources.iter().map(|s| s.bytes).sum(),
         ..Stats::default()
     };
     let (text_live, text_replaced, text_bytes) =

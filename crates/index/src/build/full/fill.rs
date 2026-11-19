@@ -6,15 +6,15 @@ use super::REPLACED;
 use super::runs::Run;
 use super::spill::Spill;
 use crate::build::{Coding, groups, segments, store_clusters};
-use crate::format::SegmentRef;
 use crate::format::cluster::{Cluster, ClusterRef};
 use crate::format::columns::writer::Writer;
+use crate::format::parts::Source;
 use crate::store::{Storage, Written};
 use crate::{Attributes, Error, Id, Result};
 
 pub(super) async fn fill(
     storage: &Storage,
-    refs: &[SegmentRef],
+    refs: &[Source],
     (slots, c, counts): (&Run<'_>, usize, &[u64]),
     (budget, row_bytes, spill): (usize, usize, bool),
     coding: &Coding,
@@ -116,7 +116,7 @@ fn push(cluster: &mut Cluster, id: Id, seq: u64, vector: &[f32], attributes: Att
 
 async fn scan(
     storage: &Storage,
-    refs: &[SegmentRef],
+    refs: &[Source],
     slots: &Run<'_>,
     c: usize,
     dims: usize,

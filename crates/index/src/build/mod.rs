@@ -3,6 +3,7 @@
 mod builder;
 pub(crate) mod calibrate;
 pub(crate) mod directory;
+mod fold;
 pub(crate) mod full;
 mod grow;
 mod pieces;
@@ -20,7 +21,9 @@ use grow::{Sizes, grow};
 use crate::filter;
 use crate::format;
 use crate::format::cluster::{self, Cluster, ClusterRef, Coder};
-use crate::format::{Ann, Segment, SegmentRef, Version};
+use crate::format::pages::Pages;
+use crate::format::parts::Source;
+use crate::format::{Ann, Segment, Version};
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::vector::ivf;
 use crate::vector::rabitq::Rotation;
@@ -38,6 +41,7 @@ pub(crate) struct Settings {
     pub spill: bool,
     pub columns: Option<usize>,
     pub postings: bool,
+    pub fold_bytes: u64,
 }
 
 /// What a build redoes: only what was written since the last one, the column
@@ -64,6 +68,7 @@ pub(crate) async fn build(
         spill,
         columns,
         postings,
+        fold_bytes,
     } = settings;
     let version = storage.current(branch).await?;
     let covers = version.covers() + version.tail.len();
@@ -168,6 +173,18 @@ pub(crate) async fn build(
     let built = (version.built)
         .append(storage, &version.tail, &mut written)
         .await?;
+    let folded = fold::fold(
+        storage,
+        &version,
+        &built,
+        (budget, spill, fold_bytes),
+        &mut written,
+    )
+    .await?;
+    let (built, folded, parts) = match folded {
+        Some(folded) => (Pages::default(), folded.folded, folded.parts),
+        None => (built, version.folded, version.parts.clone()),
+    };
     storage
         .save(branch, &written, |current| {
             let apply = match incremental {
@@ -176,8 +193,11 @@ pub(crate) async fn build(
             };
             let text_applies = current.text == version.text && current.columns == version.columns;
             let skip = covers.checked_sub(current.covers())?;
-            (apply && text_applies && skip <= current.tail.len()).then(|| Version {
+            let history = current.folded == version.folded && current.parts == version.parts;
+            (apply && text_applies && history && skip <= current.tail.len()).then(|| Version {
                 built: built.clone(),
+                folded,
+                parts: parts.clone(),
                 tail: current.tail[skip..].to_vec(),
                 ann: calibrated(ann.clone(), current.ann.as_ref(), incremental),
                 text: text.clone(),
@@ -224,10 +244,10 @@ fn calibrated(mut ann: Option<Ann>, current: Option<&Ann>, incremental: bool) ->
 
 pub(crate) fn segments<'a>(
     storage: &'a Storage,
-    refs: &'a [SegmentRef],
+    refs: &'a [Source],
 ) -> impl Stream<Item = Result<(u64, Segment)>> + 'a {
     stream::iter(refs)
-        .map(move |r| async move { Ok((r.first_seq, storage.fetch::<Segment>(r.hash).await?)) })
+        .map(move |r| async move { Ok((r.first_seq, r.fetch(storage).await?)) })
         .buffered(READ_AHEAD)
 }
 
@@ -324,5 +344,7 @@ fn groups<T>(items: &[T], budget: usize, size: impl Fn(&T) -> usize) -> Vec<&[T]
 
 #[cfg(test)]
 mod append_tests;
+#[cfg(test)]
+mod fold_tests;
 #[cfg(test)]
 mod tests;

@@ -15,7 +15,8 @@ use crate::filter::attrs::Attrs;
 use crate::format::columns::Columns;
 use crate::format::columns::writer::Writer;
 use crate::format::pages::Pages;
-use crate::format::{Ann, Clusters, SegmentRef, Version};
+use crate::format::parts;
+use crate::format::{Ann, Clusters, Version};
 use crate::store::{Storage, Written};
 use crate::vector::groups::Groups;
 use crate::vector::{extended, ivf};
@@ -38,11 +39,7 @@ pub(super) async fn full_build(
     written: &mut Written,
 ) -> Result<(Ann, Option<Columns>)> {
     let columns: Vec<Column> = version.schema.vectors.values().copied().collect();
-    let mut refs: Vec<SegmentRef> = (version.built.open::<SegmentRef>(storage).await?)
-        .iter()
-        .cloned()
-        .collect();
-    refs.extend_from_slice(&version.tail);
+    let refs = parts::sources(storage, version, true).await?;
     let refs = &refs;
     let writes: u64 = refs.iter().map(|r| r.rows).sum();
     let want = ivf::sample_size(ivf::clusters_for(writes as usize, cluster_rows));

@@ -5,9 +5,8 @@ use futures::{StreamExt, TryStreamExt, stream};
 use super::Columns;
 use super::writer::{Old, Values, Writer, covers};
 use crate::build::full::runs::{Runs, Sorter};
-use crate::format::pages::Paged;
 use crate::format::rows::{self, RowPage};
-use crate::format::{SegmentRef, Version};
+use crate::format::{Version, parts};
 use crate::layout::{self, Keyed};
 use crate::read::tail::Tail;
 use crate::store::{PARALLELISM, Storage, Written};
@@ -47,10 +46,7 @@ async fn rebuild(
     written: &mut Written,
 ) -> Result<Columns> {
     let schema = &version.schema;
-    let built: Paged<SegmentRef> = version.built.open(storage).await?;
-    let refs: Vec<SegmentRef> = (built.iter().cloned())
-        .chain(version.tail.iter().cloned())
-        .collect();
+    let refs = parts::sources(storage, version, true).await?;
     let mut latest: HashMap<Id, (u64, bool)> = HashMap::new();
     let mut sample = Batch::default();
     let mut read = crate::build::segments(storage, &refs);

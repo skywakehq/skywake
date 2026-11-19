@@ -37,6 +37,7 @@ use crate::format::columns::stats::Totals;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory;
 use crate::format::legacy::{V10, V11, V12, V13, V14, V15, V16};
+use crate::format::parts;
 use crate::format::segment_ids::SegmentIds;
 use crate::format::{Clusters, Segment, Version, decode_version};
 use crate::vector::{extended, ivf};
@@ -336,6 +337,18 @@ impl Storage {
             .await
     }
 
+    pub(crate) async fn part(&self, hash: Hash) -> Result<Arc<Segment>> {
+        self.cached(hash, async {
+            let bytes = self.chunk(hash).await?;
+            Ok((Arc::new(parts::decode(&bytes)?), bytes.len()))
+        })
+        .await
+    }
+
+    pub(crate) async fn fetch_raw(&self, hash: Hash) -> Result<Vec<u8>> {
+        Ok(self.chunks.objects.get_chunk(hash).await?)
+    }
+
     pub(crate) async fn fetch<T: DeserializeOwned>(&self, hash: Hash) -> Result<T> {
         Ok(postcard::from_bytes(
             &self.chunks.objects.get_chunk(hash).await?,
@@ -584,6 +597,25 @@ impl Storage {
         Err(Error::Conflict(branch.to_string()))
     }
 
+    /// Starts `branch` at the current version of `from`, on a line of its own.
+    pub(crate) async fn fork(&self, from: &str, branch: &str) -> Result<()> {
+        let head = self.head(from).await?;
+        let current = self.pointed(&head).await?;
+        let mut seed = branch.as_bytes().to_vec();
+        seed.extend_from_slice(head.version.to_string().as_bytes());
+        let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+        seed.extend_from_slice(&nanos.unwrap_or_default().as_nanos().to_le_bytes());
+        let id = u64::from_str_radix(&Hash::of(&seed).to_string()[..16], 16).unwrap_or(1);
+        let mut next = (*current).clone();
+        next.parent = Some(head.version);
+        next.line = current.line.fork(id.max(1), current.next_seq);
+        let raw = encode_version(&next)?;
+        let hash = self.chunks.objects.put_raw(&raw).await?;
+        self.settle(&Written::new(), hash).await?;
+        let store = self.store.as_ref();
+        head::create(store, branch, hash, &hints(&next), Some(&raw)).await
+    }
+
     pub(crate) async fn settle(&self, written: &Written, version: Hash) -> Result<()> {
         let store = self.store.as_ref();
         if lock::settle(store, written.since).await? {
@@ -606,7 +638,7 @@ pub(crate) fn chunk_path(hash: Hash) -> Path {
 
 fn encode_version(version: &Version) -> Result<Vec<u8>> {
     let columns = version.columns.as_ref();
-    if version.has_trees() {
+    if version.is_current() {
         return Ok(postcard::to_stdvec(version)?);
     }
     if version.has_extended() {

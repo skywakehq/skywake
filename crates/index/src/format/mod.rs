@@ -4,7 +4,10 @@ pub(crate) mod cluster;
 pub(crate) mod columns;
 pub(crate) mod directory;
 pub(crate) mod legacy;
+pub(crate) mod line;
+pub(crate) mod lists;
 pub(crate) mod pages;
+pub(crate) mod parts;
 pub(crate) mod rows;
 pub(crate) mod segment_ids;
 
@@ -12,6 +15,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
+use skywake_core::list::List;
 
 pub(crate) use legacy::decode_version;
 
@@ -20,7 +24,9 @@ use crate::text::part::TextIndex;
 use crate::vector::calibrate::Calibration;
 use crate::{Attributes, Id, Result, Schema, invalid};
 use columns::Columns;
+use line::Line;
 use pages::Pages;
+use parts::PartRef;
 
 pub(crate) const FORMAT: u32 = 17;
 
@@ -37,6 +43,9 @@ pub(crate) struct Version {
     pub next_seq: u64,
     pub text: Option<TextIndex>,
     pub columns: Option<Columns>,
+    pub folded: u64,
+    pub parts: List<PartRef>,
+    pub line: Line,
 }
 
 impl Version {
@@ -51,21 +60,29 @@ impl Version {
             next_seq: 0,
             text: None,
             columns: None,
+            folded: 0,
+            parts: List::default(),
+            line: Line::default(),
         }
     }
 
+    /// How many segments builds have taken in, folded or not.
     pub(crate) fn covers(&self) -> usize {
-        self.built.len as usize
+        (self.folded + self.built.len) as usize
     }
 
     pub(crate) fn has_postings(&self) -> bool {
         (self.text.iter().flat_map(|text| &text.parts)).any(|part| part.postings.is_some())
     }
 
-    pub(crate) fn has_trees(&self) -> bool {
+    /// Whether only the current format holds this version.
+    pub(crate) fn is_current(&self) -> bool {
         let ann = self.ann.iter().map(|ann| &ann.rows);
         let columns = self.columns.iter().map(|columns| &columns.rows);
         ann.chain(columns).any(|map| map.root().is_some())
+            || self.folded > 0
+            || !self.parts.is_empty()
+            || self.line != Line::default()
     }
 
     pub(crate) fn has_extended(&self) -> bool {
@@ -87,7 +104,15 @@ impl Version {
             .sum();
         let parts = self.text.as_ref().map_or(0, |text| 256 * text.parts.len());
         let columns = self.columns.as_ref().map_or(0, Columns::weight);
-        1024 + 64 * self.tail.len() + 32 * (self.built.hashes.len() + pages) + parts + columns
+        let folded = match &self.parts {
+            List::Inline(parts) => 128 * parts.len(),
+            List::Tree { .. } => 64,
+        };
+        1024 + 64 * self.tail.len()
+            + 32 * (self.built.hashes.len() + pages)
+            + parts
+            + columns
+            + folded
     }
 }
 
@@ -136,15 +161,20 @@ pub(crate) struct Segment {
     pub vectors: Vec<Vec<f32>>,
     pub attributes: Vec<Attributes>,
     pub deletes: Vec<Id>,
+    #[serde(skip)]
+    pub seqs: Vec<u64>,
 }
 
 impl Segment {
     pub(crate) fn writes(&self, first_seq: u64) -> impl Iterator<Item = (u64, &Id, Option<usize>)> {
         let docs = self.ids.iter().enumerate().map(|(row, id)| (id, Some(row)));
         let deletes = self.deletes.iter().map(|id| (id, None));
-        (first_seq..)
-            .zip(docs.chain(deletes))
-            .map(|(seq, (id, row))| (seq, id, row))
+        (docs.chain(deletes))
+            .enumerate()
+            .map(move |(at, (id, row))| {
+                let seq = self.seqs.get(at).copied().unwrap_or(first_seq + at as u64);
+                (seq, id, row)
+            })
     }
 
     pub(crate) fn vector(&self, column: usize, dims: usize, row: usize) -> &[f32] {

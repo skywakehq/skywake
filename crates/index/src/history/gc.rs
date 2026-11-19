@@ -10,7 +10,7 @@ use object_store::path::Path;
 use object_store::prefix::PrefixStore;
 use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt};
 use skywake_core::kind::{Kind, require};
-use skywake_core::list::Node;
+use skywake_core::list::{List, Node};
 use skywake_core::lock::{self, Lease};
 use skywake_core::{Hash, Objects};
 
@@ -21,6 +21,7 @@ use serde::de::DeserializeOwned;
 use crate::format::cluster::ClusterRef;
 use crate::format::columns::{Columns, PageRef, Span, projection};
 use crate::format::directory::Directory;
+use crate::format::lists::Entry;
 use crate::format::pages::Pages;
 use crate::format::rows::RowMap;
 use crate::format::{SegmentRef, Version, decode_version};
@@ -240,6 +241,8 @@ impl Reachable {
         for page in self.pages::<SegmentRef>(objects, &version.built).await? {
             self.blobs.extend(page.iter().map(|segment| segment.hash));
         }
+        let parts = self.list(objects, &version.parts).await?;
+        self.blobs.extend(parts.iter().map(|part| part.hash));
         for part in version.text.iter().flat_map(|text| &text.parts) {
             self.blobs.insert(part.hot);
             self.blobs.extend(part.blobs.iter().copied());
@@ -306,18 +309,24 @@ impl Reachable {
     }
 
     async fn row_map(&mut self, objects: &Objects, map: &RowMap) -> Result<()> {
-        if map.root().is_some_and(|root| self.blobs.contains(&root)) {
-            return Ok(());
+        let pages = self.list(objects, map).await?;
+        self.blobs.extend(pages);
+        Ok(())
+    }
+
+    /// The entries of a list whose tree this walk has not marked yet.
+    async fn list<T: Entry>(&mut self, objects: &Objects, list: &List<T>) -> Result<Vec<T>> {
+        if list.root().is_some_and(|root| self.blobs.contains(&root)) {
+            return Ok(Vec::new());
         }
-        let walked = map
+        let walked = list
             .walk(|hash| async move {
                 let bytes = objects.get_chunk(hash).await?;
-                Ok::<_, Error>(Arc::new(postcard::from_bytes::<Node<Hash>>(&bytes)?))
+                Ok::<_, Error>(Arc::new(postcard::from_bytes::<Node<T>>(&bytes)?))
             })
             .await?;
         self.blobs.extend(walked.nodes);
-        self.blobs.extend(walked.entries);
-        Ok(())
+        Ok(walked.entries)
     }
 
     async fn pages<T: DeserializeOwned>(

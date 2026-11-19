@@ -187,6 +187,7 @@ async fn an_incremental_build_rewrites_only_the_pages_it_touches() {
 async fn turning_columns_on_backfills_and_off_writes_format_10() {
     let gate = Gate::new();
     let options = Options {
+        fold_bytes: u64::MAX,
         cluster_rows: 150,
         ..Options::default()
     };

@@ -9,7 +9,8 @@ use futures::future::try_join_all;
 use super::fields::{Fields, key};
 use super::part::{self, PartRef, PartWriter, TextIndex, blocking};
 use crate::build::segments;
-use crate::format::{Segment, SegmentRef, Version};
+use crate::format::parts::{self, Source};
+use crate::format::{Segment, Version};
 use crate::store::{Storage, Written};
 use crate::{Id, Result};
 
@@ -39,12 +40,10 @@ pub(crate) async fn build(
         || dead * DEAD_SHARE > docs
         || (base.parts.is_empty() && version.covers() > 0)
         || (postings && base.parts.iter().any(|p| p.postings.is_none()));
-    let mut refs: Vec<SegmentRef> = Vec::new();
-    if anew {
-        let built = version.built.open::<SegmentRef>(storage).await?;
-        refs.extend(built.iter().cloned());
-    }
-    refs.extend_from_slice(&version.tail);
+    let refs: Vec<Source> = match anew {
+        true => parts::sources(storage, version, true).await?,
+        false => version.tail.iter().map(Source::from).collect(),
+    };
     if refs.is_empty() {
         return Ok(Some(base));
     }

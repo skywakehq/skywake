@@ -257,6 +257,9 @@ impl From<V2> for Version {
         let (vectors, attributes) = old.schema;
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: Schema {
                 vectors: columns(vectors),
@@ -294,6 +297,9 @@ impl From<V3> for Version {
         let (vectors, attributes, text) = old.schema;
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: Schema {
                 vectors: columns(vectors),
@@ -327,6 +333,9 @@ impl From<V4> for Version {
     fn from(old: V4) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema.into(),
             built: old.built,
@@ -355,6 +364,9 @@ impl From<V5> for Version {
     fn from(old: V5) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema.into(),
             built: old.built,
@@ -401,6 +413,9 @@ impl From<V6> for Version {
     fn from(old: V6) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema.into(),
             built: old.built,
@@ -446,6 +461,9 @@ impl From<V7> for Version {
         };
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema,
             built: old.built,
@@ -560,6 +578,9 @@ impl From<V9> for Version {
     fn from(old: V9) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -641,6 +662,9 @@ impl From<V10> for Version {
     fn from(old: V10) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -687,6 +711,9 @@ impl From<V11> for Version {
     fn from(old: V11) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -734,6 +761,9 @@ impl From<V12> for Version {
     fn from(old: V12) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -781,6 +811,9 @@ impl From<V13> for Version {
     fn from(old: V13) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -1051,6 +1084,9 @@ impl From<V14> for Version {
     fn from(old: V14) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -1187,6 +1223,9 @@ impl From<V15> for Version {
     fn from(old: V15) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,
@@ -1325,6 +1364,9 @@ impl From<V16> for Version {
     fn from(old: V16) -> Self {
         Self {
             format: FORMAT,
+            folded: 0,
+            parts: List::default(),
+            line: Default::default(),
             parent: old.parent,
             schema: old.schema,
             built: old.built,

@@ -126,8 +126,8 @@ async fn an_incremental_build_rewrites_only_the_pages_it_touches() {
     let gate = Gate::new();
     let index = built(&gate, 20_020, 32, 20).await;
     let before = index.version().await.unwrap();
-    assert_eq!(before.built.hashes.len(), 2);
-    assert!(before.has_trees());
+    assert!(before.built.hashes.is_empty() && !before.parts.is_empty());
+    assert!(before.is_current());
     let rows_before =
         crate::format::rows::hashes(&index.storage, &before.ann.as_ref().unwrap().rows)
             .await
@@ -142,9 +142,7 @@ async fn an_incremental_build_rewrites_only_the_pages_it_touches() {
     index.build().await.unwrap();
     let after = index.version().await.unwrap();
 
-    assert_eq!(after.built.len, before.built.len + 2);
-    assert_eq!(after.built.hashes[0], before.built.hashes[0]);
-    assert_ne!(after.built.hashes[1], before.built.hashes[1]);
+    assert_eq!(after.covers(), before.covers() + 2);
     let rows_after = crate::format::rows::hashes(&index.storage, &after.ann.as_ref().unwrap().rows)
         .await
         .unwrap();

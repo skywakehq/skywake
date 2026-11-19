@@ -6,8 +6,9 @@ use std::sync::Arc;
 use futures::{StreamExt, TryStreamExt, stream};
 use serde::{Deserialize, Serialize};
 use skywake_core::Hash;
-use skywake_core::list::{Built, List, Node};
+use skywake_core::list::List;
 
+use super::lists;
 use super::pages::PAGE;
 use crate::store::{PARALLELISM, Storage, Written};
 use crate::{Id, Result};
@@ -43,8 +44,6 @@ impl RowPage {
 }
 
 pub(crate) type RowMap = List<Hash>;
-
-const INLINE: usize = if cfg!(test) { 4 } else { 256 };
 
 pub(crate) fn pages_for(rows: usize) -> usize {
     rows.div_ceil(PAGE).max(1)
@@ -83,13 +82,7 @@ pub(crate) async fn map(
     pages: Vec<Hash>,
     written: &mut Written,
 ) -> Result<RowMap> {
-    save(
-        storage,
-        List::build(pages, INLINE)?,
-        &HashSet::new(),
-        written,
-    )
-    .await
+    lists::store(storage, pages, &HashSet::new(), written).await
 }
 
 pub(crate) async fn replace(
@@ -98,35 +91,17 @@ pub(crate) async fn replace(
     changed: impl IntoIterator<Item = (usize, Hash)>,
     written: &mut Written,
 ) -> Result<RowMap> {
-    let walked = map.walk(|hash| storage.get::<Node<Hash>>(hash)).await?;
+    let walked = lists::walk(storage, map).await?;
     let mut pages = walked.entries;
     for (at, hash) in changed {
         pages[at] = hash;
     }
     let old = walked.nodes.into_iter().collect();
-    save(storage, List::build(pages, INLINE)?, &old, written).await
-}
-
-async fn save(
-    storage: &Storage,
-    built: Built<Hash>,
-    old: &HashSet<Hash>,
-    written: &mut Written,
-) -> Result<RowMap> {
-    let fresh = (built.nodes.into_iter())
-        .filter(|(hash, _)| !old.contains(hash))
-        .map(|(_, bytes)| bytes);
-    let stored: Vec<Hash> = stream::iter(fresh)
-        .map(|bytes| storage.put(bytes))
-        .buffered(PARALLELISM)
-        .try_collect()
-        .await?;
-    written.chunks(stored);
-    Ok(built.list)
+    lists::store(storage, pages, &old, written).await
 }
 
 pub(crate) async fn hashes(storage: &Storage, map: &RowMap) -> Result<Vec<Hash>> {
-    map.all(|hash| storage.get::<Node<Hash>>(hash)).await
+    lists::all(storage, map).await
 }
 
 pub(crate) async fn all(storage: &Storage, map: &RowMap) -> Result<Vec<Arc<RowPage>>> {
@@ -144,9 +119,7 @@ pub(crate) async fn pages_of<'a>(
 ) -> Result<BTreeMap<usize, Arc<RowPage>>> {
     let wanted: BTreeSet<usize> = ids.map(|id| page_in(id, map)).collect();
     let at: Vec<u64> = wanted.iter().map(|&p| p as u64).collect();
-    let hashes = map
-        .get_many(&at, |hash| storage.get::<Node<Hash>>(hash))
-        .await?;
+    let hashes = lists::get_many(storage, map, &at).await?;
     let pages = storage.get_all(hashes).await?;
     Ok(wanted.into_iter().zip(pages).collect())
 }

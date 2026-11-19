@@ -13,9 +13,13 @@ use crate::{Doc, Id, Index, MAIN, Metric, Options, Query, Schema};
 const DIMS: usize = 16;
 
 async fn created(gate: &Arc<Gate>) -> Index {
+    created_with(gate, Options::default()).await
+}
+
+async fn created_with(gate: &Arc<Gate>, options: Options) -> Index {
     let options = Options {
         cluster_rows: 50,
-        ..Options::default()
+        ..options
     };
     let schema = Schema::new().vector("v", DIMS, Metric::Euclidean);
     Index::create_with(gate.clone(), schema, options)
@@ -269,7 +273,11 @@ async fn racing_builds_and_writers_lose_nothing() {
 #[tokio::test(flavor = "multi_thread")]
 async fn indexes_without_pieces_keep_the_old_format_and_old_ones_still_open() {
     let gate = Gate::new();
-    let index = created(&gate).await;
+    let unfolded = Options {
+        fold_bytes: u64::MAX,
+        ..Options::default()
+    };
+    let index = created_with(&gate, unfolded).await;
     index.upsert(docs(0..1000, 1)).await.unwrap();
     index.build().await.unwrap();
     let format = |index: Index| async move {
@@ -311,6 +319,7 @@ async fn wide_vectors_keep_extended_codes_through_appends_and_reopening() {
     let gate = Gate::new();
     let options = Options {
         cluster_rows: 50,
+        fold_bytes: u64::MAX,
         ..Options::default()
     };
     let schema = Schema::new().vector("v", dims, Metric::Cosine);

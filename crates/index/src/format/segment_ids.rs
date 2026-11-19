@@ -93,6 +93,7 @@ mod tests {
             vectors: vec![vec![0.5; 6]],
             attributes: vec![Attributes::default(), Attributes::default()],
             deletes: vec![Id::Num(7)],
+            seqs: Vec::new(),
         };
         let bytes = postcard::to_allocvec(&segment).unwrap();
         let ids: SegmentIds = postcard::from_bytes(&bytes).unwrap();
