@@ -59,6 +59,7 @@ type Builders = HashMap<usize, Builder>;
 impl Index {
     #[napi(factory)]
     pub fn open(location: String, options: Option<IndexOpenOptions>) -> Result<Self> {
+        crate::log::start();
         let encrypted =
             (options.as_ref()).is_some_and(|o| o.kms_key_id.is_some() || o.customer_key.is_some());
         let shared = options.as_ref().and_then(|o| o.cache_folder.clone());

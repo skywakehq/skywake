@@ -77,7 +77,7 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
             };
             match next {
                 Ok(None) => failures = 0,
-                Ok(Some(mode)) => match index.build_inner(mode).await {
+                Ok(Some(mode)) => match built(&index, mode).await {
                     Ok(true) => {
                         failures = 0;
                         count.send_modify(|builds| *builds += 1);
@@ -105,6 +105,23 @@ pub(crate) fn spawn(index: Index, policy: BuildPolicy) -> Builder {
         }
     });
     Builder { task, builds }
+}
+
+async fn built(index: &Index, mode: Mode) -> crate::Result<bool> {
+    let started = std::time::Instant::now();
+    tracing::info!(branch = index.branch(), ?mode, "index build started");
+    let saved = index.build_inner(mode).await;
+    let seconds = started.elapsed().as_secs_f64();
+    if let Ok(saved) = saved {
+        tracing::info!(
+            branch = index.branch(),
+            ?mode,
+            seconds,
+            saved,
+            "index build finished"
+        );
+    }
+    saved
 }
 
 /// A layout the queries want, once per wanted layout until new rows arrive, so a

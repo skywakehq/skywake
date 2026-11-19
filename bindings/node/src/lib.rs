@@ -4,6 +4,7 @@ mod engine;
 mod error;
 mod index;
 mod index_json;
+mod log;
 
 #[cfg(not(windows))]
 #[global_allocator]
