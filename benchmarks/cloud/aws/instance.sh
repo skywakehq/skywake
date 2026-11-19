@@ -254,7 +254,7 @@ if [ "$TPUF" = 1 ]; then
       --qps 8 --warm "$warm" --seconds "$seconds" --recall 100 --out "$out/tpuf-uniform"
     step recall "real held-out queries, unfiltered and at 1%" \
       bench --index "$index" --rows 10000000 --families vector,vector-filtered --probes dataset \
-      --qps 8 --warm 30 --seconds 60 --recall 1000 --out "$out/tpuf-dataset"
+      --qps 8 --warm "$warm" --seconds 60 --recall 1000 --out "$out/tpuf-dataset"
     keep_set "$set"
     save
   }
