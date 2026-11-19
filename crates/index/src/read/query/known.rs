@@ -280,9 +280,12 @@ impl Whole {
         if let Some(found) = storage.cache().get(key) {
             return Some(found);
         }
-        let pages = (directory.pages.iter())
+        let Some(pages) = (directory.pages.iter())
             .map(|&page| storage.cache().get::<Page>(page))
-            .collect::<Option<Vec<Arc<Page>>>>()?;
+            .collect::<Option<Vec<Arc<Page>>>>()
+        else {
+            return None;
+        };
         let mut whole = Self {
             clusters: Vec::new(),
             centroids: Vec::new(),

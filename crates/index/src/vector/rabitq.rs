@@ -7,7 +7,7 @@ const EPSILON: f32 = 1.9;
 
 const ROUNDS: usize = 3;
 
-const QUERY_BITS: usize = 4;
+const QUERY_BITS: usize = 8;
 
 pub(crate) type Factors = [f32; 4];
 
@@ -98,8 +98,7 @@ pub(crate) fn encode(
 }
 
 pub(crate) struct Prepared {
-    planes: Vec<u64>,
-    count: Count,
+    table: Vec<u16>,
     low: f32,
     step: f32,
     sum: f32,
@@ -135,8 +134,7 @@ impl Estimator {
     pub(crate) fn prepare(&self, query: &[f32]) -> Prepared {
         let mut levels = vec![0u16; words(self.dims) * 64];
         let mut prepared = Prepared {
-            planes: Vec::new(),
-            count: counter(),
+            table: Vec::new(),
             low: 0.0,
             step: 0.0,
             sum: query.iter().sum(),
@@ -158,7 +156,7 @@ impl Estimator {
             }
             levels[i] = level as u16;
         }
-        prepared.planes = planes(&levels);
+        prepared.table = table(&levels);
         prepared.low = low;
         prepared.step = step;
         prepared.rounding = 2.0 * over.max(under) / self.root;
@@ -214,69 +212,28 @@ impl Estimator {
     }
 }
 
-type Count = fn(&[u64], &[u64]) -> u32;
-
-fn planes(levels: &[u16]) -> Vec<u64> {
-    let words = levels.len() / 64;
-    let mut planes = vec![0u64; QUERY_BITS * words];
-    for (i, &level) in levels.iter().enumerate() {
-        for (bit, plane) in planes.chunks_exact_mut(words).enumerate() {
-            plane[i / 64] |= u64::from(level >> bit & 1) << (i % 64);
+fn table(levels: &[u16]) -> Vec<u16> {
+    let mut table = vec![0u16; levels.len() / 8 * 256];
+    for (byte, levels) in levels.as_chunks::<8>().0.iter().enumerate() {
+        let entries = &mut table[byte * 256..(byte + 1) * 256];
+        for value in 1..256usize {
+            let low = value.trailing_zeros() as usize;
+            entries[value] = entries[value & (value - 1)] + levels[low];
         }
     }
-    planes
-}
-
-#[inline(always)]
-fn weighted(planes: &[u64], bits: &[u64]) -> u32 {
-    (planes.chunks_exact(bits.len()).enumerate())
-        .map(|(bit, plane)| {
-            let set: u32 = plane
-                .iter()
-                .zip(bits)
-                .map(|(q, b)| (q & b).count_ones())
-                .sum();
-            set << bit
-        })
-        .sum()
-}
-
-fn portable(planes: &[u64], bits: &[u64]) -> u32 {
-    weighted(planes, bits)
-}
-
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx512f,avx512vpopcntdq")]
-fn wide(planes: &[u64], bits: &[u64]) -> u32 {
-    weighted(planes, bits)
-}
-
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "popcnt")]
-fn narrow(planes: &[u64], bits: &[u64]) -> u32 {
-    weighted(planes, bits)
-}
-
-#[cfg(target_arch = "x86_64")]
-fn counter() -> Count {
-    match (
-        is_x86_feature_detected!("avx512vpopcntdq"),
-        is_x86_feature_detected!("popcnt"),
-    ) {
-        (true, _) => |planes, bits| unsafe { wide(planes, bits) },
-        (false, true) => |planes, bits| unsafe { narrow(planes, bits) },
-        _ => portable,
-    }
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-fn counter() -> Count {
-    portable
+    table
 }
 
 impl Prepared {
     fn levels(&self, bits: &[u64]) -> u32 {
-        (self.count)(&self.planes[..QUERY_BITS * bits.len()], bits)
+        let table = &self.table[..bits.len() * 2048];
+        let word = |(w, bits): (usize, &u64)| -> u32 {
+            let base = w * 2048;
+            (bits.to_le_bytes().iter().enumerate())
+                .map(|(k, &byte)| table[base + k * 256 + byte as usize] as u32)
+                .sum()
+        };
+        bits.iter().enumerate().map(word).sum()
     }
 }
 
@@ -372,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn the_level_planes_sum_the_levels_of_set_bits() {
+    fn the_level_table_sums_the_levels_of_set_bits() {
         let mut random = Random(5);
         for dims in [3, 64, 100, 768] {
             let estimator = Estimator::new(Metric::Euclidean, dims);
