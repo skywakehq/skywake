@@ -14,7 +14,7 @@ COPY sdks/rust sdks/rust
 COPY apps/desktop/src-tauri apps/desktop/src-tauri
 RUN cargo build --release --locked -p skywake-node
 
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 # The engine's S3 client needs the system's CA certificates.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* && corepack enable
