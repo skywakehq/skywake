@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "bindings/node", "benchmarks", "sdks/rust"]
+members = ["crates/*", "bindings/node", "benchmarks", "apps/desktop/src-tauri", "sdks/rust"]
 exclude = ["vendor/tantivy"]
 resolver = "3"
 

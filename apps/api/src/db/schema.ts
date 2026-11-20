@@ -110,6 +110,67 @@ export const logins = api.table(
   (table) => [index("logins_expires").on(table.expires)],
 );
 
+/** Codes the console gives the desktop app, each good once for a minute. */
+export const oauthCodes = api.table(
+  "oauth_codes",
+  {
+    hash: bytea("hash").primaryKey(),
+    org: text("org").notNull(),
+    client: text("client").notNull(),
+    redirect: text("redirect").notNull(),
+    challenge: text("challenge").notNull(),
+    device: text("device").notNull(),
+    role: text("role").notNull(),
+    environment: text("environment"),
+    only: text("only").array().notNull(),
+    orgs: text("orgs").array().notNull(),
+    createdBy: text("created_by").notNull(),
+    createdByEmail: text("created_by_email"),
+    expires: time("expires").notNull(),
+  },
+  (table) => [
+    index("oauth_codes_expires").on(table.expires),
+    foreignKey({
+      name: "oauth_codes_org_fkey",
+      columns: [table.org],
+      foreignColumns: [orgs.id],
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * A desktop app's standing sign-in. Its access token is an ordinary key
+ * (`keyId`) that lives an hour; the refresh token makes the next one.
+ */
+export const oauthGrants = api.table(
+  "oauth_grants",
+  {
+    id: text("id").primaryKey(),
+    org: text("org").notNull(),
+    client: text("client").notNull(),
+    device: text("device").notNull(),
+    role: text("role").notNull(),
+    environment: text("environment"),
+    only: text("only").array().notNull(),
+    orgs: text("orgs").array().notNull(),
+    createdBy: text("created_by").notNull(),
+    createdByEmail: text("created_by_email"),
+    keyId: text("key_id").notNull(),
+    refreshHash: bytea("refresh_hash").notNull(),
+    previousHash: bytea("previous_hash"),
+    created: time("created").notNull().defaultNow(),
+    expires: time("expires").notNull(),
+  },
+  (table) => [
+    index("oauth_grants_expires").on(table.expires),
+    foreignKey({
+      name: "oauth_grants_org_fkey",
+      columns: [table.org],
+      foreignColumns: [orgs.id],
+    }).onDelete("cascade"),
+  ],
+);
+
 export const environments = api.table(
   "environments",
   {

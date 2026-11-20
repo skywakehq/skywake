@@ -1,0 +1,29 @@
+[package]
+name = "skywake-desktop"
+description = "Skywake for Mac: your disks as folders, signed in through the browser."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "skywake_desktop"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+async-trait.workspace = true
+axum = { workspace = true, features = ["query"] }
+base64.workspace = true
+gethostname = "1"
+keyring = { version = "3", features = ["apple-native"] }
+libc.workspace = true
+nfsserve = "0.11"
+reqwest = { workspace = true, features = ["json", "query", "rustls"] }
+ring.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-opener = "2"
+tokio = { workspace = true, features = ["process"] }

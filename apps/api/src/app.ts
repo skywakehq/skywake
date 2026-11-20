@@ -46,6 +46,7 @@ import { loginsFeature } from "./features/logins/routes.ts";
 import { Syncer } from "./features/links/sync.ts";
 import { Deleter } from "./features/deletions/worker.ts";
 import { namespacesFeature } from "./features/namespaces/routes.ts";
+import { oauthFeature } from "./features/oauth/routes.ts";
 import { Allowlists } from "./features/orgs/allowlist.ts";
 import { orgsFeature } from "./features/orgs/routes.ts";
 import { pinnedQueriesFeature } from "./features/pinning/routing.ts";
@@ -70,6 +71,7 @@ const FEATURES: Feature[] = [
   ssoFeature,
   keysFeature,
   loginsFeature,
+  oauthFeature,
   auditFeature,
   environmentsFeature,
   namespacesFeature,

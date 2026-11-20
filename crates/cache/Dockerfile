@@ -8,6 +8,8 @@ COPY vendor vendor
 COPY bindings/node bindings/node
 COPY benchmarks benchmarks
 COPY sdks/rust sdks/rust
+# Cargo loads every workspace member, even the ones it does not build.
+COPY apps/desktop/src-tauri apps/desktop/src-tauri
 RUN cargo build --release --locked -p skywake-cache
 
 FROM debian:bookworm-slim

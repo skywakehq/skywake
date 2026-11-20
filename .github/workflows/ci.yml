@@ -34,10 +34,11 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      # The desktop app is macOS only, so it has its own job below.
+      - run: cargo clippy --workspace --exclude skywake-desktop --all-targets -- -D warnings
       # The tests mount FUSE, change owners and act as other users, so they run
       # as root, as in the dev container (scripts/shell.sh).
-      - run: cargo test --workspace
+      - run: cargo test --workspace --exclude skywake-desktop
         env:
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: sudo -E
 
@@ -56,7 +57,28 @@ jobs:
           toolchain: stable
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-      - run: cargo clippy --workspace --benches --features skywake-index/bench -- -D warnings
+      - run: cargo clippy --workspace --exclude skywake-desktop --benches --features skywake-index/bench -- -D warnings
+
+  desktop:
+    name: Desktop app (macOS)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The app embeds the built web page, so build it first.
+      - run: pnpm --filter @skywake/desktop build
+      - run: cargo clippy -p skywake-desktop --all-targets -- -D warnings
+      - run: cargo test -p skywake-desktop
 
   format:
     name: Formatting

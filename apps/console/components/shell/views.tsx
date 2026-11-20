@@ -3,6 +3,7 @@
 import { Activity } from "@/features/activity/activity";
 import { BranchView } from "@/features/branches/branch-view";
 import { CliLogin } from "@/features/cli/cli-login";
+import { DesktopSignIn } from "@/features/desktop/desktop-sign-in";
 import { Branches } from "@/features/branches/branches";
 import { Files } from "@/features/files/files";
 import { History } from "@/features/namespaces/history";
@@ -27,6 +28,8 @@ export function Views() {
       return <Usage />;
     case "cli":
       return <CliLogin key={route.code} code={route.code} />;
+    case "desktop":
+      return <DesktopSignIn />;
     case "disks":
       return <Namespaces key={route.env} env={route.env} />;
     case "activity":

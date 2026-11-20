@@ -239,6 +239,13 @@
       "when": 1794863909096,
       "tag": "0033_cli_logins",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1795204065704,
+      "tag": "0034_oauth",
+      "breakpoints": true
     }
   ]
 }
