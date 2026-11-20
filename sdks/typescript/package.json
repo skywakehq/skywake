@@ -41,6 +41,6 @@
   "devDependencies": {
     "@skywake/config": "workspace:*",
     "openapi-typescript": "^7.8.0",
-    "typescript": "^5.8.3"
+    "typescript": "^7.0.2"
   }
 }
