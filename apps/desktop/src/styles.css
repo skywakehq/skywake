@@ -1,0 +1,193 @@
+@import "tailwindcss";
+@source "../../../packages/ui/src/components/globe.tsx";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The brand's paper and ink on solid surfaces, as a plain Mac app. A disk's
+   own colour shows only on its small folder in the sidebar. The signal colour
+   is only for focus; green, amber and red are kept for saved, saving and a
+   problem. */
+:root {
+  --text: rgb(22 22 20 / 0.92);
+  --secondary: rgb(22 22 20 / 0.58);
+  --tertiary: rgb(22 22 20 / 0.38);
+  --separator: rgb(22 22 20 / 0.08);
+  --fill: rgb(22 22 20 / 0.045);
+  --fill-strong: rgb(22 22 20 / 0.08);
+  --content: #f6f5f1;
+  --card: #fdfcfa;
+  --sidebar: #efeee9;
+  --edge: rgb(22 22 20 / 0.09);
+  --well: rgb(22 22 20 / 0.045);
+  --ink: #161614;
+  --paper: #f6f5f1;
+  --signal: #e5482a;
+  --green: #2f8f4e;
+  --amber: #b0741a;
+  --danger: #c8372b;
+  --folder: linear-gradient(180deg, #e0dfd8, #bdbcb5);
+  --folder-back: #9c9b95;
+}
+.dark {
+  --text: rgb(237 237 237 / 0.94);
+  --secondary: rgb(237 237 237 / 0.6);
+  --tertiary: rgb(237 237 237 / 0.36);
+  --separator: rgb(237 237 237 / 0.08);
+  --fill: rgb(237 237 237 / 0.055);
+  --fill-strong: rgb(237 237 237 / 0.1);
+  --content: #101113;
+  --card: #17181b;
+  --sidebar: #16171a;
+  --edge: rgb(0 0 0 / 0.5);
+  --well: rgb(0 0 0 / 0.28);
+  --ink: #ededed;
+  --paper: #101113;
+  --signal: #ff6a45;
+  --green: #5fc47c;
+  --amber: #e0a552;
+  --danger: #f0605a;
+  --folder: linear-gradient(180deg, #6a6b70, #47484c);
+  --folder-back: #333438;
+}
+
+@theme inline {
+  --color-text: var(--text);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
+  --color-separator: var(--separator);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
+  --color-content: var(--content);
+  --color-card: var(--card);
+  --color-well: var(--well);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-signal: var(--signal);
+  --color-amber: var(--amber);
+  --color-green: var(--green);
+  --color-danger: var(--danger);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  html {
+    background: var(--content);
+  }
+  body {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    /* An app, not a page: no text selection by dragging, an arrow cursor. */
+    user-select: none;
+    cursor: default;
+  }
+  button {
+    cursor: default;
+  }
+  ::selection {
+    background: var(--fill-strong);
+  }
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+@layer components {
+  /* A push button: a raised white face with a hairline edge. */
+  .btn {
+    background: var(--card);
+    box-shadow:
+      0 0 0 0.5px var(--edge),
+      0 0.5px 1.5px rgb(0 0 0 / 0.1);
+  }
+  .btn:hover {
+    background: color-mix(in oklab, var(--card), var(--text) 4%);
+  }
+  .btn-ink {
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow:
+      0 0 0 0.5px rgb(0 0 0 / 0.2),
+      0 0.5px 1.5px rgb(0 0 0 / 0.18);
+  }
+  .btn-ink:hover {
+    background: color-mix(in oklab, var(--ink), var(--paper) 12%);
+  }
+  /* Menus, sheets and the toast. */
+  .popover {
+    background: var(--card);
+    box-shadow:
+      0 0 0 0.5px var(--edge),
+      0 2px 6px rgb(0 0 0 / 0.08),
+      0 18px 44px -14px rgb(0 0 0 / 0.32);
+  }
+  .field {
+    background: var(--fill-strong);
+  }
+  .card {
+    background: var(--card);
+    box-shadow:
+      0 0 0 0.5px var(--edge),
+      0 1px 2px rgb(0 0 0 / 0.04);
+  }
+}
+
+/* Light that runs across a line of text while it waits. */
+@keyframes sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.animate-sweep {
+  background: linear-gradient(90deg, var(--text) 40%, var(--tertiary) 50%, var(--text) 60%) 0 0 /
+    200% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: sweep 2.4s linear infinite;
+}
+
+/* A soft beat for something in progress. */
+@keyframes beat {
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-beat {
+  animation: beat 1.4s ease-in-out infinite;
+}
+
+/* A ring that leaves a dot, for a disk that is live on this Mac. */
+@keyframes halo {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+.animate-halo {
+  animation: halo 2.2s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sweep,
+  .animate-beat,
+  .animate-halo {
+    animation: none;
+  }
+}

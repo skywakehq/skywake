@@ -8,7 +8,7 @@ import { signedIn } from "../../http/request.ts";
 import { expiresIn } from "../keys/queries.ts";
 import * as logins from "./queries.ts";
 
-function scopeFor(caller: Caller, environment: string | null, role: Role) {
+export function scopeFor(caller: Caller, environment: string | null, role: Role) {
   if (!caller.actor.startsWith("user:"))
     throw forbidden("only a person signed in to the console can approve a sign-in");
   if (environment === null) allowOrgAdmin(caller);

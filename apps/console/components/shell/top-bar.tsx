@@ -33,6 +33,7 @@ export function TopBar() {
   const trail: TrailStep[] = [];
   if (path === "/usage" || path === "/settings") trail.push({ label: page });
   else if (route.view === "cli") trail.push({ label: "Sign in the CLI" });
+  else if (route.view === "desktop") trail.push({ label: "Sign in Skywake for Mac" });
   else if (route.view === "index") {
     if (env) trail.push({ label: env, href: envPath(env) });
     trail.push({ label: "Indexes", href: env && envPath(env, "indexes") });

@@ -15,3 +15,5 @@ sdks/csharp/**/bin/
 sdks/csharp/**/obj/
 apps/www/.guide-programs/
 apps/docs/.example-runs/
+apps/desktop/src-tauri/gen/
+apps/desktop/dist/

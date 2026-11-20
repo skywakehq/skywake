@@ -10,6 +10,7 @@ export type Route =
   | { view: "settings" }
   | { view: "usage" }
   | { view: "cli"; code: string }
+  | { view: "desktop" }
   | { view: "disks"; env: string }
   | { view: (typeof ENV_PAGES)[number]; env: string }
   | { view: (typeof DISK_TABS)[number]; ns: string }
@@ -46,6 +47,7 @@ export function parse(path: string): Route {
   if (!first) return { view: "home" };
   if ((first === "settings" || first === "usage") && !id) return { view: first };
   if (first === "cli") return { view: "cli", code: id ?? "" };
+  if (first === "desktop" && !id) return { view: "desktop" };
   const tail = [kind, name, ...rest].filter((part): part is string => Boolean(part));
   if (first === "n" && id) return legacyDisk(id, tail);
   if (first === "i" && id) return index(id, tail);

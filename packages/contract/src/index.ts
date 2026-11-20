@@ -12,6 +12,7 @@ import * as keys from "./keys.ts";
 import * as links from "./links.ts";
 import * as logins from "./logins.ts";
 import * as namespaces from "./namespaces.ts";
+import * as oauth from "./oauth.ts";
 import * as orgs from "./orgs.ts";
 import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
@@ -33,6 +34,7 @@ export {
   links,
   logins,
   namespaces,
+  oauth,
   orgs,
   sessions,
   sso,
@@ -66,6 +68,9 @@ export const routes = {
     keys.revokeMemberKeys,
     logins.getLogin,
     logins.approveLogin,
+    oauth.createCode,
+    oauth.token,
+    oauth.revoke,
   ],
   audit: [audit.auditLog, audit.recordAuditEvents],
   environments: [

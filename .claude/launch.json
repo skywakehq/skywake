@@ -28,6 +28,16 @@
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "desktop",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@skywake/desktop",
+        "web"
+      ],
+      "port": 1420
     }
   ]
 }

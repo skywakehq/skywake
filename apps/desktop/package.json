@@ -1,0 +1,36 @@
+{
+  "name": "@skywake/desktop",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Skywake for Mac: your disks as folders, for you and your agents.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "vite build",
+    "app": "tauri build",
+    "web": "vite",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@skywake/ui": "workspace:*",
+    "@tauri-apps/api": "2.12.4",
+    "lucide-react": "^1.69.0",
+    "motion": "^14.9.1",
+    "next-themes": "^0.4.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@skywake/config": "workspace:*",
+    "@tailwindcss/vite": "4.3.5",
+    "@tauri-apps/cli": "2.12.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "eslint": "^9.39.5",
+    "tailwindcss": "^4.3.4",
+    "typescript": "^5.9.3",
+    "vite": "8.3.6"
+  }
+}
