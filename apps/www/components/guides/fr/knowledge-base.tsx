@@ -266,7 +266,7 @@ export function KnowledgeBaseGuide({
 /** The cover: the search the reader is about to build. */
 function KnowledgeCover() {
   const Search = SNIPPETS[0]!;
-  return <Search tone="blue" />;
+  return <Search />;
 }
 
 /** Today's setup next to the Skywake one: a sync job that can break, then no sync job at all. */

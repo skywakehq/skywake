@@ -5,7 +5,6 @@ import { SitePage } from "@/components/layout/site-page";
 import { Guide } from "@/components/guides";
 import { GetStarted } from "@/components/sections/get-started";
 import { UseCaseRelated } from "@/components/sections/use-case-page";
-import { TextureBand } from "@/components/ui/texture";
 import { getMessages } from "@/content/messages";
 import { findUseCase, useCases } from "@/content/use-cases";
 import { buildMetadata } from "@/lib/metadata";
@@ -42,7 +41,6 @@ export default async function UseCase({ params }: PageProps<"/[locale]/use-cases
   return (
     <SitePage locale={locale} messages={t}>
       <Guide id={item.id} locale={locale} t={t} />
-      <TextureBand />
       <UseCaseRelated useCase={item} locale={locale} t={t} />
       <GetStarted t={t} />
     </SitePage>

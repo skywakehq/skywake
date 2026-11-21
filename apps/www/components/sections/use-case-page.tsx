@@ -1,17 +1,13 @@
-// The use case cards: the related guides under each guide, and the full list.
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
-import { GuideArt } from "@/components/art/guide-art";
 import type { HomeMessages } from "@/content/messages";
 import { findUseCase, type UseCase } from "@/content/use-cases";
 import { localizePath, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Band } from "@/components/ui/frame";
 import { Head } from "@/components/ui/statement";
-import { Eyebrow } from "@/components/ui/eyebrow";
-
-const CELL = "bg-background px-6 py-10 sm:px-10 lg:px-12";
+import { FolderIcon } from "@/components/ui/folder-icon";
 
 export function UseCaseRelated({
   useCase,
@@ -43,7 +39,7 @@ export function UseCaseRelated({
   );
 }
 
-/** Use cases as open link cells. Each cell is one link to its page. */
+/** Use cases as a folder listing. Each row is one link to its guide. */
 export function UseCaseList({
   items,
   locale,
@@ -56,25 +52,25 @@ export function UseCaseList({
   columns: string;
 }) {
   return (
-    <ul className={cn("grid gap-px bg-border", columns)}>
+    <ul className={cn("grid gap-3", columns)}>
       {items.map((item) => {
         const copy = t.guides.items[item.id]!;
         return (
           <li key={item.id} className="flex">
             <Link
               href={localizePath(locale, `/use-cases/${item.id}`)}
-              className={cn(CELL, "group flex w-full flex-col transition-colors hover:bg-card")}
+              className="panel reveal group flex w-full items-center gap-4 p-5 transition-colors hover:bg-(--panel-hover) sm:gap-5 sm:p-6"
             >
-              <GuideArt id={item.id} className="mb-12 h-44 w-auto self-center" />
-              <Eyebrow as="span">{copy.name}</Eyebrow>
-              <span className="mt-8 text-[1.5rem] leading-[1.25] font-medium tracking-[-0.02em] text-pretty text-foreground">
-                {copy.title}
+              <FolderIcon className="w-11 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-lg font-medium tracking-[-0.02em] text-foreground">
+                  {copy.name}
+                </span>
+                <span className="mt-0.5 block text-sm text-pretty text-muted-foreground">
+                  {copy.title}
+                </span>
               </span>
-              <span className="t-body mt-3 text-muted-foreground">{copy.lead}</span>
-              <span className="t-small mt-auto flex items-center gap-1.5 pt-10 text-signal">
-                {t.guides.read}
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </span>
+              <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
             </Link>
           </li>
         );

@@ -271,7 +271,7 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
 /** La copertina: tanti run dallo stesso punto di partenza, con il migliore in evidenza. */
 function RlCover() {
   const Runs = SNIPPETS[4]!;
-  return <Runs tone="blue" />;
+  return <Runs />;
 }
 
 /** Una cartella condivisa in cui ogni run lascia qualcosa, accanto a un punto di partenza fisso e una copia per run. */

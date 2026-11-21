@@ -2,22 +2,10 @@ export type Page = { title: string; description: string; priority: number };
 
 export const pages = {
   "/": {
-    title: "Skywake: Fast filesystem and search on S3 for AI agents",
+    title: "Skywake: A shared disk for AI agents, with search built in",
     description:
-      "Open-source filesystem and search on your own S3 bucket. Mount it like a local disk, give every AI agent its own copy in 10 ms, and search it.",
+      "An open-source shared disk for AI agents. Mount it on any machine, let every agent read and write the same files, and search them by meaning or exact words. On your own S3 bucket.",
     priority: 1,
-  },
-  "/filesystem": {
-    title: "S3 filesystem for AI agents: mount, copy and merge",
-    description:
-      "Mount S3 or any object storage as a fast local disk. Give every agent its own copy of 20,000 files in 10 ms, then diff and merge the changes like git.",
-    priority: 0.9,
-  },
-  "/search": {
-    title: "Vector and full-text search on S3",
-    description:
-      "Vector, full-text and hybrid search straight from your own object storage. 10 ms warm queries over 10M vectors, and no separate database to run.",
-    priority: 0.9,
   },
   "/use-cases": {
     title: "Use cases: knowledge bases, agent memory, coding agents and more",
@@ -30,12 +18,6 @@ export const pages = {
     description:
       "Free to self-host, with every feature and no limits. Skywake Cloud is in private beta.",
     priority: 0.8,
-  },
-  "/benchmarks": {
-    title: "Benchmarks",
-    description:
-      "Measured on AWS with the bucket in the same region: agent copies, uploads and builds, and search over 10M vectors.",
-    priority: 0.7,
   },
   "/privacy": {
     title: "Privacy",

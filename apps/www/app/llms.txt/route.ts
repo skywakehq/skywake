@@ -18,7 +18,7 @@ const text = `# ${site.name}
 
 ${site.name} is open source (Apache-2.0) and runs on any object storage with conditional writes, such as AWS S3, Cloudflare R2 or RustFS. It has two products on the same bucket:
 
-- **Filesystem**: a versioned filesystem. Mount any branch as a normal local folder, give each agent its own copy of a workspace in 10 ms, whatever its size, then diff and merge the changes like git. Saved writes survive a crash.
+- **Filesystem**: a shared, versioned disk. Mount it as a normal local folder on any machine, so many agents read and write the same files, then branch, diff and merge the changes like git. Saved writes survive a crash.
 - **Search**: vector, full-text (BM25) and hybrid search indexes, read straight from object storage, with branches and time travel like the filesystem.
 
 Self-hosting is free today. A hosted version, Skywake Cloud, is coming soon: join the waitlist at ${url("/#waitlist")}.

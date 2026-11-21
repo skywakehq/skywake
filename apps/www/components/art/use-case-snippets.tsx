@@ -1,16 +1,14 @@
-// Small, still moments from the product, one per use case, drawn in the console's style.
-// They sit in the same corner frame as the product screenshots, so they read as part of the app.
 import { Check, ChevronRight, File, Folder, GitBranch, Search } from "lucide-react";
 
-import { TONES, type Tone } from "@/components/art/iso-art";
+const TONE = "var(--signal)";
+const SECOND_TONE = "#5cc495";
 
 const ROW = "flex h-9 items-center gap-2.5 border-b border-border px-1 whitespace-nowrap";
 const QUIET = "text-muted-foreground";
 const MONO = "font-mono text-[12px]";
 
-type Snippet = (props: { tone: Tone }) => React.ReactNode;
+type Snippet = () => React.ReactNode;
 
-// A search result: the file, then the line with the matching words in bold.
 function Hit({ path, children }: { path: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-1">
@@ -39,7 +37,7 @@ const Knowledge: Snippet = () => (
 );
 
 /** Context layer: an agent's notes, kept as a plain file other agents can read. */
-const Context: Snippet = ({ tone }) => (
+const Context: Snippet = () => (
   <div className="grid">
     <div className={ROW}>
       <Folder className={`size-3.5 ${QUIET}`} /> memory
@@ -48,7 +46,7 @@ const Context: Snippet = ({ tone }) => (
     <div className={`${ROW} rounded-md border-transparent bg-foreground/[0.06] px-2`}>
       <File className={`size-3.5 ${QUIET}`} /> notes.md
       <span className="ml-auto flex items-center gap-1.5 text-[12px] text-muted-foreground">
-        <span className="size-1.5 rounded-full" style={{ background: TONES[tone] }} />
+        <span className="size-1.5 rounded-full" style={{ background: TONE }} />
         Read by 3 agents
       </span>
     </div>
@@ -61,7 +59,7 @@ const Context: Snippet = ({ tone }) => (
 );
 
 /** Shared filesystem: two agents in one file, saved to the bucket a moment ago. */
-const Shared: Snippet = ({ tone }) => {
+const Shared: Snippet = () => {
   const cursor = (name: string, color: string) => (
     <span className="relative inline-block h-4 w-px align-middle" style={{ background: color }}>
       <span
@@ -81,15 +79,15 @@ const Shared: Snippet = ({ tone }) => {
         </span>
       </div>
       <div className={`grid gap-3 leading-6 ${QUIET}`}>
-        <p>Revenue grew{cursor("agent-1", TONES[tone])} 18% this quarter, led by annual plans.</p>
-        <p>Churn fell{cursor("agent-2", TONES.blue)} to 2.1%, the lowest since launch.</p>
+        <p>Revenue grew{cursor("agent-1", TONE)} 18% this quarter, led by annual plans.</p>
+        <p>Churn fell{cursor("agent-2", SECOND_TONE)} to 2.1%, the lowest since launch.</p>
       </div>
     </div>
   );
 };
 
-/** Coding agents: one fix tried six ways, each on its own copy. The best one merges. */
-const Coding: Snippet = ({ tone }) => (
+/** Coding agents: one fix tried five ways, each on its own branch. The best one merges. */
+const Coding: Snippet = () => (
   <div className="grid">
     <div className={ROW}>
       <GitBranch className={`size-3.5 ${QUIET}`} /> main
@@ -103,14 +101,13 @@ const Coding: Snippet = ({ tone }) => (
             <span
               className="flex items-center gap-1 rounded-full px-2 leading-5"
               style={{
-                color: TONES[tone],
-                background: `color-mix(in oklab, ${TONES[tone]} 14%, transparent)`,
+                color: TONE,
+                background: `color-mix(in oklab, ${TONE} 14%, transparent)`,
               }}
             >
               <Check className="size-3" /> Merged
             </span>
           )}
-          10 ms
         </span>
       </div>
     ))}
@@ -118,7 +115,7 @@ const Coding: Snippet = ({ tone }) => (
 );
 
 /** Evals: many runs from the same start. The best score stands out. */
-const Evals: Snippet = ({ tone }) => {
+const Evals: Snippet = () => {
   const runs = [0.71, 0.68, 0.83, 0.92, 0.77];
   const best = Math.max(...runs);
   return (
@@ -137,9 +134,7 @@ const Evals: Snippet = ({ tone }) => {
               style={{
                 width: `${score * 100}%`,
                 background:
-                  score === best
-                    ? TONES[tone]
-                    : "color-mix(in oklab, var(--foreground) 25%, transparent)",
+                  score === best ? TONE : "color-mix(in oklab, var(--foreground) 25%, transparent)",
               }}
             />
           </span>

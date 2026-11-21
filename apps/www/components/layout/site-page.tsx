@@ -17,7 +17,7 @@ export function SitePage({
   messages: HomeMessages;
 }) {
   return (
-    <div style={{ zoom: 1.1 }} className="overflow-x-clip">
+    <div className="overflow-x-clip">
       <Nav locale={locale} messages={messages} />
       <main>
         <Frame>{children}</Frame>

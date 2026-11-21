@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { DropdownContent, DropdownMenu, DropdownTrigger } from "@skywake/ui/components/dropdown";
 import { MenuItem } from "@skywake/ui/components/menu-item";
 import { isSitePath, localizePath, type Locale } from "@/lib/i18n";
+import { NAV_ICON } from "./nav-icon";
 
 export function MobileMenu({
   links,
@@ -28,10 +29,7 @@ export function MobileMenu({
   return (
     <div className="lg:hidden">
       <DropdownMenu>
-        <DropdownTrigger
-          aria-label={label}
-          className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-foreground/[0.05] hover:text-foreground data-[state=open]:bg-foreground/[0.05] data-[state=open]:text-foreground"
-        >
+        <DropdownTrigger aria-label={label} className={NAV_ICON}>
           <Menu className="size-[18px]" />
         </DropdownTrigger>
         <DropdownContent align="end">

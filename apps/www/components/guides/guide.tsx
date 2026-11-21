@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Band } from "@/components/ui/frame";
 import { GuideToc } from "@/components/guides/guide-toc";
-import { Pattern, PATTERNS } from "@/components/ui/pattern";
 
 const PAD = "px-6 sm:px-10 lg:px-12";
 
@@ -40,7 +39,7 @@ export function ArticleHero({
       <section
         className={cn(PAD, "flex flex-col items-center pt-24 pb-20 text-center lg:pt-32 lg:pb-28")}
       >
-        <p className="t-eyebrow text-muted-foreground">
+        <p className="text-sm font-medium text-muted-foreground">
           <Link
             href={localizePath(locale, "/use-cases")}
             className="text-signal transition-colors hover:text-foreground"
@@ -50,34 +49,27 @@ export function ArticleHero({
           <span className="mx-2.5 text-muted-foreground/40">/</span>
           {name}
         </p>
-        <h1 className="t-display t-regular mt-6 max-w-[20ch] text-balance text-foreground">
-          {title}
-        </h1>
+        <h1 className="t-display mt-6 max-w-[20ch] text-balance text-foreground">{title}</h1>
         <p className="t-lead mt-8 max-w-[52ch] text-muted-foreground">{dek}</p>
         <ul className="mt-8 flex flex-wrap justify-center gap-2">
           {meta.map((item) => (
             <li
               key={item}
-              className="t-small rounded-full border border-border px-3 py-1 text-muted-foreground"
+              className="t-small rounded-full bg-(--soft) px-3 py-1 text-muted-foreground"
             >
               {item}
             </li>
           ))}
         </ul>
       </section>
-      <Band className="h-[22rem] sm:h-[26rem]">
-        <div className="absolute inset-0 overflow-hidden text-signal">
-          <Pattern {...PATTERNS.banner} fade="center" origin={[0.5, 0.5]} />
-        </div>
-        <div className="relative grid h-full place-items-center px-6">
-          <div className="screen-frame w-full max-w-[32rem] overflow-hidden rounded-xl border bg-background">
-            <div className="flex h-9 items-center gap-1.5 border-b border-border px-3">
-              {[0, 1, 2].map((i) => (
-                <span key={i} className="size-2.5 rounded-full bg-foreground/10" />
-              ))}
-            </div>
-            <div className="p-5 text-[13px] text-foreground">{cover}</div>
+      <Band className="panel panel-sun grid h-[22rem] place-items-center px-6 sm:h-[26rem]">
+        <div className="tile w-full max-w-[32rem] -rotate-1 overflow-hidden">
+          <div className="flex h-9 items-center gap-1.5 px-4">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className="size-2.5 rounded-full bg-foreground/12" />
+            ))}
           </div>
+          <div className="px-5 pb-5 text-[13px] text-foreground">{cover}</div>
         </div>
       </Band>
     </>
@@ -101,9 +93,9 @@ export function Article({
   // One column on phones, held to the screen's width so wide code can't stretch it.
   return (
     <Band className="grid grid-cols-[minmax(0,1fr)] lg:grid-cols-[16rem_minmax(0,1fr)]">
-      <nav aria-label={label} className="hidden border-r border-border lg:block">
+      <nav aria-label={label} className="hidden lg:block">
         <div className="sticky top-24 px-8 py-16">
-          <p className="t-eyebrow text-muted-foreground">{label}</p>
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
           <GuideToc items={toc} />
         </div>
       </nav>
@@ -139,14 +131,8 @@ export function Article({
  */
 export function Chapter({ id, step, title }: { id: string; step?: number; title: string }) {
   return (
-    <header
-      id={id}
-      className={cn(
-        "mb-6 scroll-mt-28 first-of-type:mt-0",
-        step ? "mt-16 border-t border-border pt-12" : "mt-16",
-      )}
-    >
-      {step && <Eyebrow>Step {String(step).padStart(2, "0")}</Eyebrow>}
+    <header id={id} className={cn("mb-6 scroll-mt-28 first-of-type:mt-0", "mt-16")}>
+      {step && <Eyebrow>Step {step}</Eyebrow>}
       <h2
         className={cn(
           "text-[1.625rem] leading-[1.25] font-medium tracking-[-0.02em] text-foreground",
@@ -193,7 +179,7 @@ export async function Code({ file, code }: { file: string; code: string }) {
 /** A folder as a list of paths, each with an optional note. */
 export function Tree({ root, items }: { root: string; items: [path: string, note?: string][] }) {
   return (
-    <figure className="rounded-xl border border-border bg-card p-5 font-mono text-[13px] leading-7">
+    <figure className="rounded-2xl bg-(--panel) p-5 font-mono text-[13px] leading-7">
       <p className="text-foreground">{root}/</p>
       <ul>
         {items.map(([path, note], i) => (
@@ -213,9 +199,9 @@ export function Tree({ root, items }: { root: string; items: [path: string, note
 /** What the reader will have at the end, ticked off. */
 export function Checklist({ items }: { items: ReactNode[] }) {
   return (
-    <ul className="my-8 grid divide-y divide-border overflow-hidden rounded-xl border border-border">
+    <ul className="my-8 grid gap-1 overflow-hidden rounded-2xl bg-(--panel) p-1.5">
       {items.map((item, i) => (
-        <li key={i} className="flex items-start gap-3 bg-background px-5 py-4">
+        <li key={i} className="flex items-start gap-3 rounded-xl bg-background px-5 py-4">
           <span className="mt-1 grid size-5 shrink-0 place-items-center rounded-full bg-signal/12 text-signal">
             <Check className="size-3" strokeWidth={2.5} />
           </span>

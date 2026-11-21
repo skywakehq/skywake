@@ -292,7 +292,7 @@ export function CodingAgentsGuide({
 /** Das Cover: ein Fix, auf mehrere Arten versucht, jede auf ihrem eigenen Branch. */
 function CodingCover() {
   const Branches = SNIPPETS[3]!;
-  return <Branches tone="blue" />;
+  return <Branches />;
 }
 
 /** Viele Agenten in einem Ordner, neben einem Branch für jeden Agenten. */

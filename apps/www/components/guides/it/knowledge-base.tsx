@@ -263,7 +263,7 @@ export function KnowledgeBaseGuide({
 /** La copertina: la ricerca che il lettore sta per costruire. */
 function KnowledgeCover() {
   const Search = SNIPPETS[0]!;
-  return <Search tone="blue" />;
+  return <Search />;
 }
 
 /** Il setup di oggi accanto a quello con Skywake: un job di sync che può rompersi, poi nessun job di sync. */

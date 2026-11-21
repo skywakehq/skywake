@@ -283,7 +283,7 @@ export function CodingAgentsGuide({
 /** La portada: una solución probada de varias formas, cada una en su propia rama. */
 function CodingCover() {
   const Branches = SNIPPETS[3]!;
-  return <Branches tone="blue" />;
+  return <Branches />;
 }
 
 /** Muchos agentes en una carpeta, junto a una rama para cada agente. */

@@ -264,7 +264,7 @@ export function KnowledgeBaseGuide({
 /** Das Cover: die Suche, die der Leser gleich baut. */
 function KnowledgeCover() {
   const Search = SNIPPETS[0]!;
-  return <Search tone="blue" />;
+  return <Search />;
 }
 
 /** Das heutige Setup neben dem von Skywake: ein Sync-Job, der ausfallen kann, dann gar keiner. */

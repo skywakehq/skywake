@@ -1,11 +1,11 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { DropdownContent, DropdownMenu, DropdownTrigger } from "@skywake/ui/components/dropdown";
 import { MenuItem } from "@skywake/ui/components/menu-item";
 import { localeFlags, localeNames, locales, stripLocale, type Locale } from "@/lib/i18n";
+import { NAV_ICON } from "./nav-icon";
 
 // The middleware reads this cookie to send later visits to the same language.
 function remember(locale: Locale) {
@@ -24,15 +24,10 @@ export function LocaleSwitcher({ locale, label }: { locale: Locale; label: strin
 
   return (
     <DropdownMenu>
-      <DropdownTrigger
-        aria-label={label}
-        className="t-small inline-flex h-9 items-center gap-1.5 rounded-md px-2.5 text-muted-foreground outline-none transition-colors hover:bg-foreground/[0.05] hover:text-foreground data-[state=open]:bg-foreground/[0.05] data-[state=open]:text-foreground"
-      >
-        <span aria-hidden className="text-base leading-none">
+      <DropdownTrigger aria-label={label} className={NAV_ICON}>
+        <span aria-hidden className="text-lg leading-none">
           {localeFlags[locale]}
         </span>
-        <span className="hidden sm:inline">{localeNames[locale]}</span>
-        <ChevronDown className="size-3.5" />
       </DropdownTrigger>
       <DropdownContent align="end" checkedIndex={locales.indexOf(locale)}>
         {locales.map((code, index) => (

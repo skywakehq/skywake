@@ -1,115 +1,34 @@
-// Open source: a field of stack icons around a beating heart.
-import {
-  siApache,
-  siDocker,
-  siDotnet,
-  siGithub,
-  siGo,
-  siHelm,
-  siKubernetes,
-  siOpenjdk,
-  siPostgresql,
-  siPython,
-  siRuby,
-  siRust,
-  siTypescript,
-  type SimpleIcon,
-} from "simple-icons";
+import { siGithub } from "simple-icons";
 
 import { BrandIcon } from "@/components/ui/brand-icon";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { Band } from "@/components/ui/frame";
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
-import { Band } from "@/components/ui/frame";
-import { Statement } from "@/components/ui/statement";
 
 const HEART =
   "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z";
 
-const ICONS: SimpleIcon[] = [
-  siRust,
-  siTypescript,
-  siPython,
-  siGo,
-  siDocker,
-  siPostgresql,
-  siRuby,
-  siKubernetes,
-  siOpenjdk,
-  siHelm,
-  siDotnet,
-  siGithub,
-  siApache,
-];
-const COLS = 15;
-const ROWS = 6;
-const WARM = [17, 34, 41, 63, 70, 80];
-
-const isClearing = (row: number, col: number) => row >= 1 && row <= 4 && col >= 5 && col <= 9;
-
-function Tile({ index }: { index: number }) {
-  if (isClearing(Math.floor(index / COLS), index % COLS)) return <span />;
-  const warm = WARM.indexOf(index);
-  return (
-    <span
-      className={`grid size-16 place-items-center rounded-2xl bg-background text-muted-foreground/45 ring-1 ring-border ${
-        warm >= 0 ? "oss-warm" : ""
-      }`}
-      style={warm >= 0 ? { animationDelay: `${warm * 1.1}s` } : undefined}
-    >
-      <BrandIcon icon={ICONS[(index * 7) % ICONS.length]!} className="size-6" />
-    </span>
-  );
-}
-
+/** The closing card: the licence and a link to the repo. */
 export function OpenSource({ t }: { t: HomeMessages }) {
-  const [before, after] = t.openSource.title.split("Apache 2.0");
   return (
-    <>
-      <Statement
-        id="open-source"
-        pill={t.openSource.label}
-        title={
-          <>
-            {before}
-            <span className="text-signal">Apache 2.0</span>
-            {after}
-          </>
-        }
-        line={t.openSource.line}
-        action={
-          site.repoUrl ? (
-            <a href={site.repoUrl} className="btn btn-sm btn-secondary">
-              <BrandIcon icon={siGithub} className="size-3.5" /> {t.openSource.star}
-            </a>
-          ) : undefined
-        }
-      />
-      <Band className="h-[440px]">
-        <div className="absolute inset-0 overflow-hidden">
-          <div
-            aria-hidden
-            className="absolute top-1/2 left-1/2 grid -translate-x-1/2 -translate-y-1/2 gap-3 [mask-image:radial-gradient(closest-side,black_40%,transparent)]"
-            style={{ gridTemplateColumns: `repeat(${COLS}, 4rem)` }}
-          >
-            {Array.from({ length: COLS * ROWS }, (_, i) => (
-              <Tile key={i} index={i} />
-            ))}
-          </div>
-          <div
-            aria-hidden
-            className="oss-glow absolute top-1/2 left-1/2 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full"
-          />
-          <svg
-            role="img"
-            aria-label="A heart"
-            viewBox="0 0 24 24"
-            className="oss-love absolute top-1/2 left-1/2 w-40 -translate-x-1/2 -translate-y-1/2 overflow-visible"
-          >
-            <path d={HEART} className="echo" />
-            <path d={HEART} className="beat" />
-          </svg>
-        </div>
-      </Band>
-    </>
+    <Band id="open-source" className="pt-4">
+      <div className="panel reveal flex flex-col items-start p-6 sm:p-10">
+        <svg aria-hidden viewBox="0 0 24 24" className="oss-love w-16 overflow-visible">
+          <path d={HEART} className="echo" />
+          <path d={HEART} className="beat" />
+        </svg>
+        <Eyebrow className="mt-auto pt-10">{t.openSource.label}</Eyebrow>
+        <h2 className="t-h2 mt-4 max-w-[28ch] text-balance text-foreground">
+          {t.openSource.title}
+        </h2>
+        <p className="t-lead mt-4 max-w-[36ch] text-muted-foreground">{t.openSource.line}</p>
+        {site.repoUrl && (
+          <a href={site.repoUrl} className="btn btn-secondary mt-8">
+            <BrandIcon icon={siGithub} className="size-4" /> {t.openSource.star}
+          </a>
+        )}
+      </div>
+    </Band>
   );
 }

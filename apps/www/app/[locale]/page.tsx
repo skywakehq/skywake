@@ -1,14 +1,14 @@
+import { FileJourney } from "@/components/art/file-journey";
 import { SitePage } from "@/components/layout/site-page";
-import { Architecture } from "@/components/sections/architecture";
 import { Cost } from "@/components/sections/cost";
 import { GetStarted } from "@/components/sections/get-started";
-import { WorksWithGit } from "@/components/sections/git";
+import { Bento } from "@/components/sections/bento";
 import { Hero } from "@/components/sections/hero";
+import { Numbers } from "@/components/sections/numbers";
 import { OpenSource } from "@/components/sections/open-source";
-import { Products } from "@/components/sections/products";
+import { SearchSection } from "@/components/sections/search";
+import { Shared } from "@/components/sections/shared";
 import { UseCases } from "@/components/sections/use-cases";
-import { Band } from "@/components/ui/frame";
-import { TextureBand } from "@/components/ui/texture";
 import { getMessages } from "@/content/messages";
 import { pageMetadata } from "@/lib/metadata";
 import { structuredData } from "@/lib/structured-data";
@@ -25,22 +25,20 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
     <SitePage locale={locale} messages={t}>
       <script
         type="application/ld+json"
-        // Escaped so the JSON can't close the script tag early.
         dangerouslySetInnerHTML={{
           __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
         }}
       />
-      <Hero t={t} />
-      <Products t={t} locale={locale} />
+      <FileJourney>
+        <Hero t={t} />
+        <Shared t={t} />
+      </FileJourney>
+      <SearchSection t={t} />
       <UseCases t={t} locale={locale} />
-      <TextureBand />
+      <Bento t={t} />
+      <Numbers t={t} />
       <Cost t={t} />
-      <TextureBand />
-      <WorksWithGit t={t} />
-      <Architecture t={t} />
       <OpenSource t={t} />
-      {/* Blank space before the waitlist, which has its own pattern. */}
-      <Band className="h-28 sm:h-36" />
       <GetStarted t={t} />
     </SitePage>
   );

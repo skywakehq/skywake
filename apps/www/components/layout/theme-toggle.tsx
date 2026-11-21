@@ -2,19 +2,20 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@skywake/ui/components/button";
+
+import { NAV_ICON } from "./nav-icon";
 
 export function ThemeToggle({ label }: { label: string }) {
   const { resolvedTheme, setTheme } = useTheme();
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <button
+      type="button"
       aria-label={label}
+      className={NAV_ICON}
       onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
     >
-      <Sun className="dark:hidden" />
-      <Moon className="hidden dark:block" />
-    </Button>
+      <Sun className="size-[18px] dark:hidden" />
+      <Moon className="hidden size-[18px] dark:block" />
+    </button>
   );
 }

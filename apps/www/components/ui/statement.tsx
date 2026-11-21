@@ -1,82 +1,45 @@
-// Two ways to open a section: a centred statement, or a head set to the left.
 import type { ReactNode } from "react";
 
-import { cn } from "@/lib/utils";
-import { Band, Pill } from "@/components/ui/frame";
-import { Pattern, PATTERNS } from "@/components/ui/pattern";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { Band } from "@/components/ui/frame";
+import { cn } from "@/lib/utils";
 
-export function Statement({
-  id,
-  pill,
-  title,
-  line,
-  action,
-  children,
-}: {
-  id?: string;
-  pill: ReactNode;
-  title: ReactNode;
-  line?: ReactNode;
-  action?: ReactNode;
-  children?: ReactNode;
-}) {
-  return (
-    <Band id={id} className="flex flex-col items-center px-6 py-20 text-center lg:py-28">
-      <Pill>{pill}</Pill>
-      <h2 className="t-h2 t-regular mt-6 max-w-[26ch] text-foreground">{title}</h2>
-      {line && <p className="t-lead mt-5 max-w-[48ch] text-muted-foreground">{line}</p>}
-      {action && <div className="mt-8">{action}</div>}
-      {children}
-    </Band>
-  );
-}
-
+/** The words that open a section: a label and a heading on the left, a line and an action on the right. */
 export function Head({
   id,
   eyebrow,
   title,
   line,
   action,
-  pattern,
-  center,
+  as: Heading = "h2",
+  className,
 }: {
   id?: string;
   eyebrow?: ReactNode;
   title: ReactNode;
   line?: ReactNode;
   action?: ReactNode;
-  /** A taller banner with accent tiles drifting in from the right. */
-  pattern?: boolean;
-  /** Centre the words, to match the hero. */
-  center?: boolean;
+  as?: "h1" | "h2";
+  className?: string;
 }) {
   return (
     <Band
       id={id}
       className={cn(
-        "px-6 sm:px-10 lg:px-12",
-        pattern || center ? "py-20 lg:py-28" : "pt-14 pb-12 lg:pt-16",
+        "grid gap-6 pt-24 pb-10 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-baseline-last lg:gap-16 lg:pt-36 lg:pb-14",
+        className,
       )}
     >
-      {pattern && (
-        // The banner pattern, over a soft glow of the accent colour.
-        <div className="absolute inset-0 overflow-hidden text-signal">
-          <div className="absolute inset-0 bg-[radial-gradient(55%_90%_at_100%_50%,color-mix(in_oklab,var(--signal)_16%,transparent),transparent_70%)]" />
-          <Pattern {...PATTERNS.banner} />
+      <div>
+        {eyebrow && <Eyebrow className="mb-5">{eyebrow}</Eyebrow>}
+        <Heading className="t-h2 max-w-[20ch] text-balance text-foreground">{title}</Heading>
+      </div>
+      {(line || action) && (
+        <div>
+          {line && <p className="t-lead max-w-[46ch] text-muted-foreground">{line}</p>}
+          {action && <div className={line ? "mt-6" : undefined}>{action}</div>}
         </div>
       )}
-      <div
-        className={cn(
-          "relative max-w-[44rem]",
-          center && "mx-auto flex flex-col items-center text-center",
-        )}
-      >
-        {eyebrow && <Eyebrow className="mb-6">{eyebrow}</Eyebrow>}
-        <h2 className="t-h2 t-regular max-w-[26ch] text-foreground">{title}</h2>
-        {line && <p className="t-lead mt-5 max-w-[48ch] text-muted-foreground">{line}</p>}
-        {action && <div className="mt-8">{action}</div>}
-      </div>
     </Band>
   );
 }
