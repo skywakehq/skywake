@@ -19,19 +19,6 @@ test("a branch is NAME@BRANCH, and may hold slashes", () => {
   assert.deepEqual(parse("/e/prod/d/app@"), { view: "missing" });
 });
 
-test("an index has tabs, and the old documents tab is rows", () => {
-  assert.deepEqual(parse("/e/prod/i/products"), {
-    view: "index",
-    index: "prod/products",
-    tab: "overview",
-  });
-  assert.deepEqual(parse("/e/prod/i/products/documents"), {
-    view: "index",
-    index: "prod/products",
-    tab: "rows",
-  });
-});
-
 test("old addresses still open", () => {
   assert.deepEqual(parse("/n/prod%2Fapp/b/agents/1"), {
     view: "branch",
@@ -39,13 +26,15 @@ test("old addresses still open", () => {
     branch: "agents/1",
   });
   assert.deepEqual(parse("/n/prod%2Fapp/history"), { view: "history", ns: "prod/app" });
-  assert.deepEqual(parse("/i/prod%2Fproducts/query"), {
-    view: "index",
-    index: "prod/products",
-    tab: "query",
-  });
 });
 
 test("the sign-in page for the CLI takes its code", () => {
   assert.deepEqual(parse("/cli/ABCD-2345"), { view: "cli", code: "ABCD-2345" });
+});
+
+test("settings has a page for each part", () => {
+  assert.deepEqual(parse("/settings"), { view: "settings", tab: "general" });
+  assert.deepEqual(parse("/settings/keys"), { view: "settings", tab: "keys" });
+  assert.deepEqual(parse("/settings/general"), { view: "missing" });
+  assert.deepEqual(parse("/settings/keys/x"), { view: "missing" });
 });

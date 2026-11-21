@@ -13,6 +13,7 @@ export const protect = named.extend({ protected: z.boolean() });
 export const merge = z.object({ ns: z.string(), into: z.string(), from: z.string() });
 export const newNamespace = z.object({ name: z.string(), region: z.string() });
 export const newEnvironment = z.object({ name: z.string() });
+export const oneNamespace = z.object({ name: z.string() });
 
 // What the browser shows at once, before the server answers. The server
 // does the real work through skywake-api (see server-mutators.ts); Zero then
@@ -48,12 +49,26 @@ export const mutators = defineMutators({
   },
   namespace: {
     create: defineMutator(newNamespace, async ({ tx, args, ctx }) => {
+      const now = Date.now();
       await tx.mutate.namespace.insert({
         org: ctx.org,
         name: args.name,
         region: args.region,
-        created: Date.now(),
+        created: now,
       });
+      await tx.mutate.branch.insert({
+        org: ctx.org,
+        namespace: args.name,
+        name: "main",
+        forkedFrom: null,
+        protected: false,
+        head: null,
+        created: now,
+        updated: now,
+      });
+    }),
+    remove: defineMutator(oneNamespace, async ({ tx, args, ctx }) => {
+      await tx.mutate.namespace.delete({ org: ctx.org, name: args.name });
     }),
   },
   environment: {

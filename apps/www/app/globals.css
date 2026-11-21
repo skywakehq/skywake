@@ -34,21 +34,32 @@
 
 @theme inline {
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --container-6xl: min(72rem, calc(100% - 1.5rem));
+  --container-6xl: min(84rem, calc(100% - 1.5rem));
 }
 
 :root {
-  --signal: #2f5bea;
+  --signal: #b86e00;
   --love: #e5484d;
+  --sun: #ffc53d;
+  --sun-deep: #e59a12;
+  --sun-ink: #2b1d00;
+  --paper: #ffffff;
+  --paper-ink: #1c1b18;
+  --lift: 0 1px 2px rgb(0 0 0 / 0.05), 0 14px 32px -14px rgb(0 0 0 / 0.2);
   --card: #efeee9;
+  --panel: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+  --panel-hover: color-mix(in oklab, var(--foreground) 6%, transparent);
   --soft: color-mix(in oklab, var(--foreground) 4.5%, transparent);
   --hairline: color-mix(in oklab, var(--foreground) 8%, transparent);
 }
 
 /* Dark, the default: a near-black page with soft grey text. Light uses the shared tokens. */
 .dark {
-  --signal: #7b8cff;
+  --signal: #ffc53d;
   --love: #ff6369;
+  --paper: #f6f1e4;
+  --paper-ink: #1c1a14;
+  --lift: 0 20px 40px -18px rgb(0 0 0 / 0.75);
   --background: #08090a;
   --foreground: #f7f8f8;
   --card: #0f1011;
@@ -89,6 +100,13 @@ html {
 }
 
 @layer components {
+  .t-hero {
+    font-size: clamp(2.5rem, 1rem + 3.8vw, 5.25rem);
+    line-height: 0.98;
+    font-weight: 500;
+    letter-spacing: -0.055em;
+    text-wrap: balance;
+  }
   .t-display {
     font-size: clamp(2.35rem, 1.45rem + 2.6vw, 3.65rem);
     line-height: 1.05;
@@ -234,17 +252,6 @@ html {
 .oss-love {
   fill: var(--love);
 }
-.oss-glow {
-  background: radial-gradient(
-    closest-side,
-    color-mix(in oklab, var(--love) 22%, transparent),
-    transparent
-  );
-  animation: oss-breathe 1.6s ease-in-out infinite;
-}
-.oss-warm {
-  animation: oss-warm 6.6s ease-in-out infinite;
-}
 .beat {
   animation: beat 1.6s ease-in-out infinite;
   transform-box: fill-box;
@@ -254,23 +261,6 @@ html {
   animation: echo 1.6s ease-out infinite;
   transform-box: fill-box;
   transform-origin: center;
-}
-@keyframes oss-breathe {
-  10% {
-    opacity: 0.6;
-  }
-}
-@keyframes oss-warm {
-  0%,
-  30%,
-  100% {
-    color: color-mix(in oklab, var(--muted-foreground) 45%, transparent);
-  }
-  12% {
-    color: var(--love);
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--love) 50%, transparent);
-    background: color-mix(in oklab, var(--love) 8%, var(--background));
-  }
 }
 @keyframes beat {
   0%,
@@ -352,8 +342,7 @@ html {
   .reveal,
   .dash-flow,
   .shimmer-text,
-  .oss-glow,
-  .oss-warm,
+  .caret,
   .beat,
   .echo {
     animation: none;
@@ -363,58 +352,90 @@ html {
   }
 }
 
-/* Stage lighting for the product shot: a soft light from above, and a bottom
-   edge that fades into the dark page. */
-.stage {
+/* The site's surfaces. A panel is a soft tray, a tile is a raised card on it,
+   a sheet is a piece of paper, and a sun panel is tinted with the folder's yellow. */
+.panel {
   position: relative;
-  isolation: isolate;
+  overflow: hidden;
+  border-radius: 2rem;
+  background: var(--panel);
 }
-.stage::before {
-  content: "";
+.panel-sun {
+  background: color-mix(in oklab, var(--sun) 9%, var(--panel));
+}
+.tile {
+  border-radius: 1.25rem;
+  background: var(--background);
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    var(--lift);
+}
+.sheet {
+  border-radius: 1.25rem;
+  background: var(--paper);
+  color: var(--paper-ink);
+  box-shadow: var(--lift);
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 1px;
+  translate: 0 0.2em;
+  border-radius: 1px;
+  background: var(--sun-deep);
+  animation: caret 1s steps(2) infinite;
+}
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* The hero folder's light: a spot behind it and a soft pool on the floor. */
+.folder-spot {
   position: absolute;
-  inset: -45% -25% 25%;
-  z-index: -1;
+  inset: -40% -45% -20%;
   pointer-events: none;
-  background: radial-gradient(40% 45% at 50% 40%, var(--stage-light), transparent 75%);
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, #ffb52e 26%, transparent),
+    transparent
+  );
+  filter: blur(30px);
 }
-/* The glow is for the dark page only. On the light page it looks like a smudge. */
+.folder-floor {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: 1.5rem;
+  height: 2.5rem;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 0.35), transparent);
+  filter: blur(8px);
+}
+
 :root {
-  --stage-light: transparent;
   /* Code colours in guides: strings and numbers. Keywords use the accent. */
   --code-string: #2f8a5f;
   --code-number: #b26a12;
 }
 .dark {
-  --stage-light: color-mix(in oklab, var(--foreground) 10%, transparent);
   --code-string: #5cc495;
   --code-number: #e3a857;
 }
-/* A console screenshot's frame: a bright top edge catches the light. The edge sits
-   on top, or the image would hide it. With a shadow, fade it out with a mask on its
-   parent, so the mask doesn't cut off the shadow. */
-.screen-frame {
-  position: relative;
-  border-color: color-mix(in oklab, var(--foreground) 14%, transparent);
-}
-/* The shadow, only where the frame has room around it for the shadow to fall. */
-.screen-lift {
-  box-shadow: -12px -12px 40px -20px color-mix(in oklab, var(--foreground) 30%, transparent);
-}
-.dark .screen-lift {
-  box-shadow: -12px -12px 40px -20px rgb(0 0 0 / 0.9);
-}
-.screen-frame::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: inset 1px 1px 0 0 rgb(255 255 255 / 0.9);
-}
-.dark .screen-frame::after {
-  box-shadow: inset 1px 1px 0 0 color-mix(in oklab, var(--foreground) 10%, transparent);
-}
 
-.stage-screen {
-  mask-image: linear-gradient(to bottom, #000 55%, transparent 98%);
+.wire {
+  animation: wire 0.6s linear infinite;
+}
+@keyframes wire {
+  to {
+    stroke-dashoffset: -8.1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wire {
+    animation: none;
+  }
 }

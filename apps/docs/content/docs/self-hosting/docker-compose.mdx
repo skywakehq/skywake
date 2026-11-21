@@ -13,7 +13,7 @@ scripts/start.sh
 
 It installs Docker if it is missing (asking first), writes `.env` with every secret filled in, builds the images, starts everything and waits until it answers: the console on `http://localhost:3100`, the API on `:8080`. Docker needs about 6 GB of memory to build; on a Mac with Colima, the script offers to give it that. `scripts/start.sh stop` stops it and keeps the data. If a port is taken, set `CONSOLE_PORT`, `API_PORT` or `ZERO_PORT` in `.env` and run it again.
 
-The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key, as `SKYWAKE_URL` and `SKYWAKE_API_KEY`. Disks and indexes are created by the first write.
+The first start builds the images, which takes 10 to 20 minutes. Then open `http://localhost:3100`, sign up, and create an organization. Organization names are unique across the whole server, so you can't use a name that is already taken. In the console, create an environment, then an [API key](../security/api-keys.mdx) on the API keys page. Agents call the [API](/reference/api) at `http://localhost:8080` with that key, as `SKYWAKE_URL` and `SKYWAKE_API_KEY`. Disks are created by the first write.
 
 To use the CLI with this server, sign in on a profile of its own:
 
@@ -74,12 +74,12 @@ Put the console, the API and zero-cache behind HTTPS, and set `CONSOLE_URL`, `AP
 
 Set these only when you need the feature.
 
-| Variable                                               | What it does                                                                                                                            |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                                                      |
-| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, so `query("words")` searches indexes and disks by [meaning](../indexes/embeddings-and-rerank.mdx). |
-| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                                              |
-| `SKYWAKE_API_PROVIDERS`                                | Keys for the [catalog models' vendors](../indexes/embeddings-and-rerank.mdx#providers), as JSON.                                        |
+| Variable                                               | What it does                                                                                                    |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `SKYWAKE_API_STS_ROLE_ARN`, `SKYWAKE_API_STS_ENDPOINT` | Hand out [scoped credentials](../security/scoped-credentials.mdx).                                              |
+| `SKYWAKE_API_EMBED_URL`, `SKYWAKE_API_EMBED_KEY`       | An OpenAI-compatible embeddings API, so a disk's [search](../filesystem/search.mdx) finds files by meaning too. |
+| `SKYWAKE_API_RERANK_URL`, `SKYWAKE_API_RERANK_KEY`     | A Cohere-style rerank API.                                                                                      |
+| `SKYWAKE_API_PROVIDERS`                                | Keys for the embedding models' vendors, as JSON.                                                                |
 
 ## Health and metrics
 
@@ -105,5 +105,5 @@ For more traffic, run several API copies behind a load balancer, or use [Kuberne
   <Card href="./kubernetes.mdx" />
   <Card href="./what-to-run.mdx" />
   <Card href="./local-api.mdx" />
-  <Card href="../getting-started/first-index.mdx" />
+  <Card href="../filesystem/search.mdx" />
 </Cards>

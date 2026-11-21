@@ -33,7 +33,7 @@ public class ClientTests
         var sky = api.Client(new SkywakeOptions { Retries = 0 });
         await Assert.ThrowsAsync<AuthException>(() => sky.WhoamiAsync());
         await Assert.ThrowsAsync<PermissionException>(() => sky.WhoamiAsync());
-        var missing = await Assert.ThrowsAsync<NotFoundException>(() => sky.Index("prodcts").InfoAsync());
+        var missing = await Assert.ThrowsAsync<NotFoundException>(() => sky.Disk("prodcts").InfoAsync());
         Assert.Equal("did you mean `products`?", missing.Hint);
         Assert.Equal("nope; did you mean `products`?", missing.Message);
         Assert.Equal("req-1", missing.RequestId);
@@ -66,7 +66,7 @@ public class ClientTests
     public async Task ADeleteThatMayHaveLandedAndThenFindsNothingIsDone()
     {
         var api = new FakeApi((_, count) => count == 1 ? Failure(502, "bad_gateway") : Failure(404, "not_found"));
-        await api.Client().Index("products").DestroyAsync();
+        await api.Client().Disk("app").DestroyAsync();
         Assert.Equal(2, api.Seen.Count);
     }
 
@@ -96,66 +96,17 @@ public class ClientTests
     }
 
     [Fact]
-    public async Task UpsertTakesAnyNumberOfRowsAndSendsThemInBatches()
+    public async Task QueryOnADiskSendsTheTextOptionsAndBranch()
     {
-        var api = new FakeApi((seen, _) =>
+        var api = new FakeApi((_, _) => new Reply(Body: new
         {
-            var rows = seen.Json!.AsArray();
-            return new Reply(Body: new { ids = rows.Select(row => row!["id"]!.GetValue<int>()), count = rows.Count });
-        });
-        var rows = Enumerable.Range(0, 25_000).Select(id => new { id, text = $"row {id}" });
-        var done = await api.Client().Index("products").UpsertAsync(rows);
-        Assert.Equal(25_000, done.Count);
-        Assert.Equal(25_000, done.Ids.Count);
-        Assert.Equal(new[] { 10_000, 10_000, 5_000 }, api.Seen.Select(seen => seen.Json!.AsArray().Count));
-        Assert.Equal("main", api.Seen[0].Query["branch"]);
-    }
-
-    [Fact]
-    public async Task UpdateAndDeleteTakeAnIdIdsOrAFilter()
-    {
-        var api = new FakeApi((_, _) => new Reply(Body: new { count = 1 }));
-        var products = api.Client().Index("products");
-        Assert.Equal(1, await products.UpdateAsync(7, new { stock = 3 }));
-        await products.UpdateAsync(Target.Where(new { tag = new { eq = "sale" } }), new { stock = 0 });
-        await products.DeleteAsync(new[] { 1, 2 });
-        await products.DeleteAsync(Target.Where(new { stock = new { eq = 0 } }));
-        Assert.Equal(new[] { "PATCH", "PATCH", "POST", "POST" }, api.Seen.Select(seen => seen.Method));
-        Assert.Equal(
-            new[] { "/v2/indexes/products/rows", "/v2/indexes/products/rows", "/v2/indexes/products/rows/delete", "/v2/indexes/products/rows/delete" },
-            api.Seen.Select(seen => seen.Path));
-        Same(new { id = 7, fields = new { stock = 3 } }, api.Seen[0].Json);
-        Same(new { filter = new { tag = new { eq = "sale" } }, fields = new { stock = 0 } }, api.Seen[1].Json);
-        Same(new { ids = new[] { 1, 2 } }, api.Seen[2].Json);
-        Same(new { filter = new { stock = new { eq = 0 } } }, api.Seen[3].Json);
-    }
-
-    [Fact]
-    public async Task GetGivesNullForAMissingRowButThrowsForAMissingIndex()
-    {
-        var api = new FakeApi((seen, _) => seen.Path.Contains("/rows/")
-            ? Failure(404, "not_found", new { path = "id" })
-            : Failure(404, "not_found", new { hint = "did you mean `products`?" }));
-        var sky = api.Client();
-        Assert.Null(await sky.Index("products").GetAsync("a b"));
-        Assert.Equal("/v2/indexes/products/rows/a%20b", api.Seen[0].Path);
-        await Assert.ThrowsAsync<NotFoundException>(() => sky.Index("prodcts").InfoAsync());
-    }
-
-    [Fact]
-    public async Task QueryTakesTextFirstAndOptionsOnTheirOwn()
-    {
-        var api = new FakeApi((_, _) => new Reply(Body: new { data = new[] { new { id = 1, score = 0.9, title = "mug" } }, next = (string?)null }));
-        var products = api.Client().Index("products", "draft");
-        var hits = await products.QueryAsync("coffee", new QueryOptions { Limit = 3, Mode = QueryMode.Keywords });
-        Assert.Equal("mug", (string?)hits[0]["title"]);
-        await products.QueryAsync(new QueryOptions
-        {
-            Filter = new { price = new { lt = 10 } },
-            Sort = new Dictionary<string, SortOrder> { ["price"] = SortOrder.Asc },
-        });
-        Same(new { text = "coffee", limit = 3, mode = "keywords", branch = "draft" }, api.Seen[0].Json);
-        Same(new { filter = new { price = new { lt = 10 } }, sort = new { price = "asc" }, branch = "draft" }, api.Seen[1].Json);
+            data = new[] { new { path = "docs/coffee.md", score = 0.9, snippet = "brew coffee" } },
+            next = (string?)null,
+        }));
+        var hits = await api.Client().Disk("app", "draft").QueryAsync("coffee", new DiskQueryOptions { Limit = 3, Path = "docs" });
+        Assert.Equal("docs/coffee.md", hits[0].Path);
+        Assert.Equal("/v2/disks/app/query", api.Seen[0].Path);
+        Same(new { text = "coffee", limit = 3, path = "docs", branch = "draft" }, api.Seen[0].Json);
     }
 
     [Fact]

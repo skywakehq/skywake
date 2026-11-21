@@ -7,7 +7,6 @@ require "skywake/batches"
 require "skywake/changes"
 require "skywake/folders"
 require "skywake/handle"
-require "skywake/index"
 require "skywake/disk"
 require "skywake/client"
 

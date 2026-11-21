@@ -3,7 +3,6 @@ package dev.skywake;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -14,7 +13,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
 import org.junit.jupiter.api.Order;
@@ -29,7 +27,6 @@ class ScenarioTest {
     private static String stagingKey;
     private static String readKey;
     private static Skywake sky;
-    private static Index products;
     private static Disk app;
 
     @BeforeAll
@@ -64,70 +61,8 @@ class ScenarioTest {
 
     @Test
     @Order(2)
-    void oneRowUpsertedToANewIndexWithNoSchemaIsFoundByQuery() {
-        products = sky.index("products");
-        products.upsert(Map.of("id", "mug", "text", "a blue coffee mug", "price", 12, "tags", List.of("kitchen")));
-        List<Map<String, Object>> hits = products.query("coffee mug");
-        assertEquals("mug", hits.get(0).get("id"));
-        assertEquals(12, ((Number) hits.get(0).get("price")).intValue());
-        assertTrue(((Number) hits.get(0).get("score")).doubleValue() > 0);
-    }
-
-    @Test
-    @Order(3)
-    void tenThousandRowsUpsertedInOneCallAreAllCounted() {
-        List<Map<String, Object>> rows = IntStream.range(0, 10_000)
-                .mapToObj(i -> Map.<String, Object>of(
-                        "id", "row-" + i,
-                        "text", i % 2 == 1 ? "running shoe number " + i : "invoice " + i,
-                        "price", i % 100,
-                        "tags", List.of(i % 2 == 1 ? "shoes" : "billing")))
-                .toList();
-        Upserted done = sky.index("bulk").upsert(rows);
-        assertEquals(10_000, done.count());
-        assertEquals(10_000, sky.index("bulk").count());
-        assertEquals(5_000, sky.index("bulk").count(Map.of("tags", Map.of("contains", "shoes"))));
-    }
-
-    @Test
-    @Order(4)
-    void aQueryTakesAFilterALimitAndKeywordsMode() {
-        List<Map<String, Object>> hits = sky.index("bulk").query("shoe", new QueryOptions()
-                .mode(Mode.KEYWORDS)
-                .filter(Map.of("price", Map.of("lt", 10)))
-                .limit(3));
-        assertEquals(3, hits.size());
-        for (Map<String, Object> hit : hits) {
-            assertTrue(((Number) hit.get("price")).intValue() < 10);
-            assertTrue(((String) hit.get("text")).contains("shoe"));
-        }
-    }
-
-    @Test
-    @Order(5)
-    void updateShowsInGetAndDeleteMakesGetNull() {
-        assertEquals(1, products.update("mug", Map.of("price", 9)));
-        assertEquals(9, ((Number) products.get("mug").get("price")).intValue());
-        assertEquals(1, products.delete("mug"));
-        assertNull(products.get("mug"));
-    }
-
-    @Test
-    @Order(6)
-    void aForkChangesApartFromMainAndMergingBringsTheChange() {
-        products.upsert(Map.of("id", "cup", "text", "a white coffee cup", "price", 5));
-        Index draft = products.fork("draft");
-        draft.update("cup", Map.of("price", 7));
-        assertEquals(7, price(draft.query("coffee cup").get(0)));
-        assertEquals(5, price(products.query("coffee cup").get(0)));
-        draft.mergeInto("main");
-        assertEquals(7, price(products.get("cup")));
-    }
-
-    @Test
-    @Order(7)
     void aFileWrittenToANewDiskReadsBackAndIsListed() {
-        app = sky.disk("app");
+        app = sky.createDisk("app", new DiskOptions().search(true));
         app.write("README.md", "# App\n");
         assertEquals("# App\n", app.read("README.md"));
         List<List<String>> listed = app.list().stream().map(entry -> List.of(entry.path(), entry.kind())).toList();
@@ -135,7 +70,7 @@ class ScenarioTest {
     }
 
     @Test
-    @Order(8)
+    @Order(3)
     void manyFilesWrittenTogetherAreOneCommit() {
         int before = Pages.all(app.log()).size();
         Map<String, Object> files = new LinkedHashMap<>();
@@ -149,7 +84,7 @@ class ScenarioTest {
     }
 
     @Test
-    @Order(9)
+    @Order(4)
     void bothSidesChangingOneFileMakeTheMergeAMergeConflict() {
         Disk work = app.fork("agent-1");
         work.write("notes.txt", "from the agent");
@@ -162,7 +97,7 @@ class ScenarioTest {
     }
 
     @Test
-    @Order(10)
+    @Order(5)
     void grepFindAndQueryOnADiskFindAFile() throws InterruptedException {
         app.write("docs/coffee.md", "How to brew coffee at home.\n");
         List<Match> lines = app.grep("brew");
@@ -182,7 +117,7 @@ class ScenarioTest {
     }
 
     @Test
-    @Order(11)
+    @Order(6)
     void readWithAtReturnsTheOldContentAfterAChange() {
         String old = app.head();
         app.write("README.md", "# App, changed\n");
@@ -191,41 +126,33 @@ class ScenarioTest {
     }
 
     @Test
-    @Order(12)
+    @Order(7)
     void keysStayInTheirEnvironmentAndTheirRole() {
         Skywake staging = client(stagingKey).environment("prod").build();
-        assertThrows(PermissionException.class, () -> staging.index("products").query("coffee"));
+        assertThrows(PermissionException.class, () -> staging.disk("app").read("README.md"));
         Skywake reader = client(readKey).build();
-        assertEquals(7, price(reader.index("products").get("cup")));
-        assertThrows(PermissionException.class,
-                () -> reader.index("products").upsert(Map.of("id", "x", "text", "nope")));
+        assertEquals("# App, changed\n", reader.disk("app").read("README.md"));
+        assertThrows(PermissionException.class, () -> reader.disk("app").write("x.txt", "nope"));
     }
 
     @Test
-    @Order(13)
+    @Order(8)
     void aWrongNameIsNotFoundWithASuggestion() {
-        NotFoundException index = assertThrows(NotFoundException.class, () -> sky.index("prodcts").query("coffee"));
-        assertTrue(String.valueOf(index.hint()).contains("products"));
         NotFoundException disk = assertThrows(NotFoundException.class, () -> sky.disk("ap").read("README.md"));
         assertTrue(String.valueOf(disk.hint()).contains("`app`"));
     }
 
     @Test
-    @Order(14)
-    void destroyingABranchThenTheIndexAndTheDiskEmptiesTheLists() {
-        products.on("draft").destroy();
-        assertEquals(List.of("main"), products.branches().stream().map(Branch::name).toList());
+    @Order(9)
+    void destroyingABranchThenTheDiskEmptiesTheList() {
         app.on("agent-1").destroy();
-        for (String name : List.of("products", "bulk")) {
-            sky.index(name).destroy();
-        }
+        assertEquals(List.of("main"), app.branches().stream().map(Branch::name).toList());
         app.destroy();
-        assertEquals(List.of(), Pages.all(sky.listIndexes()));
         assertEquals(List.of(), Pages.all(sky.listDisks()));
     }
 
     @Test
-    @Order(15)
+    @Order(10)
     void aFolderGoesUpAsOneCommitAndComesBackTheSame() throws Exception {
         Path dir = Files.createTempDirectory("skywake-up-");
         Files.writeString(dir.resolve("a.txt"), "alpha");
@@ -237,9 +164,5 @@ class ScenarioTest {
         assertEquals("alpha", Files.readString(back.resolve("a.txt")));
         assertArrayEquals(new byte[] {0, 1, 2, (byte) 255}, Files.readAllBytes(back.resolve("b.bin")));
         site.destroy();
-    }
-
-    private static int price(Map<String, Object> row) {
-        return ((Number) row.get("price")).intValue();
     }
 }

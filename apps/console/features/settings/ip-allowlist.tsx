@@ -3,7 +3,7 @@
 import { Globe, Network, Plus } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Button, Field, Input } from "@/components/kit";
-import { act, Actions, FormDialog, Glyph, Lines, Remove, Row, Section } from "./settings";
+import { act, Actions, FormDialog, Glyph, Lines, Remove, Row, Section } from "./parts";
 import { withBase } from "@/lib/zone";
 
 async function save(cidrs: string[]) {

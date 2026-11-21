@@ -6,8 +6,8 @@ import {
   FileImage,
   FileText,
   FileVideo,
-  Folder,
 } from "lucide-react";
+import { FolderIcon } from "@skywake/ui/components/folder-icon";
 import { kindOf } from "@/lib/file-kinds";
 import { cx } from "@/components/kit";
 
@@ -30,8 +30,7 @@ export function FileIcon({
   folder?: boolean;
   className?: string;
 }) {
-  if (folder)
-    return <Folder className={cx("fill-current/15 text-[oklch(0.66_0.1_240)]", className)} />;
+  if (folder) return <FolderIcon className={className} />;
   const [Icon, tone] = ICONS[kindOf(name)];
   return <Icon className={cx(tone, className)} />;
 }

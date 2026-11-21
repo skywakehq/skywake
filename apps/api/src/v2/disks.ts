@@ -4,12 +4,17 @@ import * as links from "../features/links/queries.ts";
 import type { V2, V2Ctx } from "./app.ts";
 import { Failure, invalid } from "./errors.ts";
 import { segment } from "./forward.ts";
-import { branchOf } from "./indexes.ts";
 import { pageAfter, pageOf, whole } from "./pages.ts";
 import { orMissing, type Scope } from "./scope.ts";
 
 const routes = v2.disks;
 const MAIN = "main";
+
+const branchOf = (branch: { name: string; forked_from: string | null; created: string }) => ({
+  name: branch.name,
+  from: branch.forked_from,
+  created: branch.created,
+});
 const SNIPPET = 300;
 
 type Namespace = {

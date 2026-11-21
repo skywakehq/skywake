@@ -273,7 +273,7 @@ export function RlGuide({ locale, title }: { locale: Locale; t: HomeMessages; ti
 /** The cover: many runs from the same start, the best one standing out. */
 function RlCover() {
   const Runs = SNIPPETS[4]!;
-  return <Runs tone="blue" />;
+  return <Runs />;
 }
 
 /** One shared folder that each run leaves things in, next to one fixed start and a copy per run. */

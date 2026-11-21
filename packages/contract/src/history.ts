@@ -9,7 +9,6 @@ export const CommitInfo = z
     hash: z.string(),
     message: z.string(),
     time: z.number().int().openapi({ description: "Seconds since the Unix epoch." }),
-    session: z.string().nullable(),
     merged: z
       .string()
       .nullable()
@@ -113,10 +112,6 @@ export const diffBranches = createRoute({
 
 const commitOptions = {
   message: z.string().min(1).max(10_000).optional(),
-  session: z
-    .string()
-    .optional()
-    .openapi({ description: "The session making the change. The commit records it." }),
 };
 
 export const NewRevert = z
@@ -217,10 +212,6 @@ export const NewMerge = z
     from: Name.openapi({ description: "The branch to merge in." }),
     into: Name.openapi({ description: "The branch that receives the merge. It may be protected." }),
     message: z.string().min(1).max(10_000).optional(),
-    session: z
-      .string()
-      .optional()
-      .openapi({ description: "The session doing the merge. The merge commit records it." }),
     dry_run: orDefault(z.boolean(), false).openapi({
       description: "Only report the conflicts a merge would have now, less those `resolve` covers.",
     }),

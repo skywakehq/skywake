@@ -4,7 +4,7 @@ import { useQuery } from "@rocicorp/zero/react";
 import { useMemo, useState } from "react";
 import { envOf, nameInEnv } from "@/lib/names";
 import { queries } from "@/zero/queries";
-import { cx, Glide, Orb, Page, Panel, plural, Stat, Stats } from "@/components/kit";
+import { cx, DiskMark, Glide, Page, Panel, plural, Stat, Stats } from "@/components/kit";
 
 const DAYS = 14;
 const DAY = 24 * 60 * 60 * 1000;
@@ -123,7 +123,7 @@ export function Usage() {
               </div>
             ))}
           </div>
-          <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs text-faint">
+          <div className="mt-2 flex items-center justify-between pt-2 text-xs text-faint">
             <span>{label(days[0].day)}</span>
             <span className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
@@ -142,7 +142,7 @@ export function Usage() {
         <Glide>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
-              <tr className="border-b">
+              <tr>
                 <th className="px-4 py-2.5 font-normal">Disk</th>
                 <th className="py-2.5 font-normal max-md:hidden">Share of commits</th>
                 <th className="py-2.5 text-right font-normal">Branches</th>
@@ -154,9 +154,9 @@ export function Usage() {
               {perNamespace
                 .sort((a, b) => b.commits - a.commits)
                 .map((row) => (
-                  <tr key={row.name} data-glide className="border-b border-line/60 last:border-0">
+                  <tr key={row.name} data-glide >
                     <td className="flex items-center gap-2.5 px-4 py-3">
-                      <Orb name={row.name} className="size-4" />
+                      <DiskMark className="h-4" />
                       <span className="font-medium">{nameInEnv(row.name)}</span>
                       <span className="ml-2 text-xs text-faint">{envOf(row.name)}</span>
                     </td>

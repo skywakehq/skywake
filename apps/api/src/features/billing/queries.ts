@@ -1,9 +1,8 @@
-import { and, asc, count, eq, gte, isNotNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
 import {
   billingAccounts,
-  billingReports,
   billingUsage,
   filesystemSizes,
   indexes,
@@ -108,42 +107,6 @@ export async function usageSince(db: Db, org: string, from: Date) {
     .where(and(eq(billingUsage.org, org), gte(billingUsage.hour, from)))
     .groupBy(billingUsage.meter);
   return new Map(rows.map((row) => [row.meter as Meter, BigInt(row.amount)]));
-}
-
-export async function hourly(db: Db, org: string, meter: Meter, from: Date, until: Date) {
-  const rows = await db
-    .select({ hour: billingUsage.hour, amount: billingUsage.amount })
-    .from(billingUsage)
-    .where(
-      and(
-        eq(billingUsage.org, org),
-        eq(billingUsage.meter, meter),
-        gte(billingUsage.hour, from),
-        lt(billingUsage.hour, until),
-      ),
-    );
-  return new Map(rows.map((row) => [row.hour.getTime(), row.amount]));
-}
-
-export async function cursor(db: Db, org: string, meter: Meter) {
-  const [row] = await db
-    .select()
-    .from(billingReports)
-    .where(and(eq(billingReports.org, org), eq(billingReports.meter, meter)));
-  return row ?? null;
-}
-
-export async function moveCursor(
-  db: Db,
-  row: { org: string; meter: Meter; subscription: string; next: Date; remainder: bigint },
-) {
-  await db
-    .insert(billingReports)
-    .values(row)
-    .onConflictDoUpdate({
-      target: [billingReports.org, billingReports.meter],
-      set: { subscription: row.subscription, next: row.next, remainder: row.remainder },
-    });
 }
 
 export async function storedBytes(db: Db, org: string) {

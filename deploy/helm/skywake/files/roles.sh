@@ -66,12 +66,12 @@ BEGIN
   -- The same grants as the API's migration 0005_roles.sql, which ran before the role existed.
   IF to_regclass('api.audit') IS NOT NULL THEN
     GRANT USAGE ON SCHEMA api TO skywake_zero;
-    GRANT SELECT ON api.environments, api.namespaces, api.branches, api.commits, api.sessions,
-      api.claims, api.audit TO skywake_zero;
+    GRANT SELECT ON api.environments, api.namespaces, api.branches, api.commits, api.audit
+      TO skywake_zero;
     -- The API's migration 0022: Zero checks the console's mutations against these.
     GRANT USAGE ON SCHEMA api TO skywake_console;
-    GRANT SELECT ON api.environments, api.namespaces, api.branches, api.commits, api.sessions,
-      api.claims, api.audit TO skywake_console;
+    GRANT SELECT ON api.environments, api.namespaces, api.branches, api.commits, api.audit
+      TO skywake_console;
   END IF;
 END $$;
 SQL

@@ -1,5 +1,5 @@
 import type { Engine } from "@skywake/engine";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
 import { branches, commits } from "../../db/schema.ts";
@@ -27,7 +27,6 @@ export async function record(
         ),
       );
     if (!commit) return;
-    const session = commit.commit.session ?? null;
     await tx
       .insert(commits)
       .values({
@@ -37,10 +36,8 @@ export async function record(
         hash: head,
         parent: commit.commit.parent ?? null,
         message: commit.commit.message,
-        session,
         merged: commit.commit.merged ?? null,
         actor,
-        agent: session && sql`(SELECT label FROM api.sessions WHERE id = ${session})`,
         changes: commit.changes,
       })
       .onConflictDoNothing();

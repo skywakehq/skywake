@@ -3,19 +3,9 @@ import type { HomeMessages } from "./types";
 export const fr: HomeMessages = {
   pages: {
     "/": {
-      title: "Skywake : filesystem et recherche rapides sur S3 pour agents IA",
+      title: "Skywake : un disque partagé pour agents IA, recherche incluse",
       description:
-        "Filesystem et recherche open source sur votre bucket S3. Montez comme un disque local, donnez à chaque agent IA sa copie en 10 ms et cherchez.",
-    },
-    "/filesystem": {
-      title: "Filesystem S3 pour agents IA : monter, copier, fusionner",
-      description:
-        "Montez S3 ou tout stockage objet comme un disque local rapide. 20 000 fichiers copiés pour chaque agent en 10 ms, puis diff et merge comme avec Git.",
-    },
-    "/search": {
-      title: "Recherche vectorielle et full-text sur S3",
-      description:
-        "Recherche vectorielle, full-text et hybride directement sur votre stockage objet. 10 ms à chaud sur 10M de vecteurs, sans base de données à gérer.",
+        "Un disque partagé open source pour agents IA. Montez-le sur n'importe quelle machine, tous les agents lisent et écrivent les mêmes fichiers, et tout se recherche. Sur votre propre bucket S3.",
     },
     "/use-cases": {
       title: "Cas d'usage : bases de connaissances, mémoire d'agents, agents de code",
@@ -35,16 +25,8 @@ export const fr: HomeMessages = {
       title: "Conditions",
       description: "Les conditions d'utilisation de ce site et du logiciel Skywake.",
     },
-    "/benchmarks": {
-      title: "Benchmarks",
-      description:
-        "Mesuré sur AWS, bucket dans la même région : copies d'agents, uploads, builds et recherche sur 10M de vecteurs.",
-    },
   },
   nav: {
-    filesystem: "Filesystem",
-    search: "Recherche",
-    benchmarks: "Benchmarks",
     pricing: "Tarifs",
     docs: "Docs",
     github: "GitHub",
@@ -57,7 +39,7 @@ export const fr: HomeMessages = {
   },
   footer: {
     blurb:
-      "Votre bucket comme disque rapide et moteur de recherche. Open source, sur votre propre stockage objet.",
+      "Un disque partagé pour agents IA, recherche incluse. Open source, sur votre propre bucket.",
     product: "Produit",
     project: "Projet",
     legal: "Mentions légales",
@@ -69,102 +51,126 @@ export const fr: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud arrive. Rejoignez la liste d'attente",
-    titleBefore: "Le filesystem et moteur de recherche évolutifs",
-    titleAccent: "pour agents IA.",
-    screenshotAlt:
-      "La console Skywake, avec les disques d'une équipe et les agents qui y travaillent",
+    titleBefore: "Des disques infinis",
+    titleAccent: "pour les agents IA.",
     getStartedCta: "Commencer",
+    waitlistCta: "Rejoindre la liste d’attente",
+    docsCta: "Lire la documentation",
+    worksWith: "Fonctionne avec vos agents préférés",
+  },
+
+  shared: {
+    label: "Disque partagé",
+    line: "Montez un dossier sur chaque machine. Ce qu'un agent écrit, les autres peuvent le lire.",
+    titleBefore: "Un disque.",
+    titleAccent: "Tous les agents.",
+    write: "Écrire",
+    read: "Lire",
+    mounted: "Monté sur 4 machines",
+    machines: ["Votre portable", "Sandbox cloud", "Le Mac d'un collègue", "Runner CI"],
+  },
+  searchDemo: {
+    label: "Recherche",
+    line: "Chaque fichier est indexé dès l'enregistrement. Cherchez par sens, par mots exacts, ou les deux.",
+    titleBefore: "Nos disques sont",
+    titleAccent: "cherchables par le sens !",
+    modes: ["Sens", "Mots exacts", "Les deux"],
+    queries: [
+      "réinitialiser un mot de passe perdu",
+      "ECONNRESET",
+      "chiffre d'affaires T3 par région",
+    ],
+    snippets: [
+      "[Récupération de compte] : nous envoyons un lien de connexion, puis vous [choisissez un nouveau mot de passe].",
+      "14:02:11 upstream closed the socket ([ECONNRESET]), retry 2 of 5",
+      "Le [chiffre d'affaires du T3] progresse dans chaque [région], EMEA en tête.",
+    ],
+  },
+  bento: {
+    label: "Fonctionnalités",
+    line: "Vos outils y marchent comme dans n'importe quel dossier. Et il fait ce qu'un dossier ne sait pas faire.",
+    titleBefore: "On dirait un dossier.",
+    titleAccent: "Ça fait bien plus.",
+    items: [
+      "Vos outils marchent déjà",
+      "Résiste aux pannes",
+      "Branches et fusions",
+      "Tourne sur votre bucket",
+      "Recherche sémantique",
+    ],
+    crash: ["pertes au kill -9", "pour basculer"],
   },
   useCases: {
     label: "Cas d'usage",
-    heading: ["Vous construisez les agents.", "Skywake gère les fichiers et la recherche."],
+    line: "Bases de connaissances, mémoire d'agents, stockage partagé, agents de code et rollouts RL.",
+    heading: ["Ce que vous pouvez construire", "avec Skywake."],
     more: "Voir tous les cas d'usage",
     cta: "En savoir plus",
     items: [
       {
         name: "Base de connaissances",
         title: "Une base de connaissances pour vos agents.",
-        line: "Vos documents et fichiers au même endroit, recherche incluse. Les agents trouvent toujours la dernière version, jamais une vieille copie.",
       },
       {
         name: "Couche de contexte",
-        title: "Une mémoire et une couche de contexte centrales pour vos agents.",
-        line: "Les agents notent ce qu'ils apprennent dans de simples fichiers. La fois suivante, ils reprennent là où ils s'étaient arrêtés, et les autres agents peuvent les lire aussi.",
+        title: "Une mémoire partagée pour les agents.",
       },
       {
         name: "Stockage d'agents",
         title: "Un filesystem partagé pour vos agents.",
-        line: "Les agents lisent et écrivent les mêmes fichiers, comme sur un disque partagé. Le travail enregistré survit même si une machine tombe.",
       },
       {
         name: "Agents de code dans le cloud",
-        title: "Une copie de votre repo pour chaque agent.",
-        line: "Chaque agent reçoit sa propre copie de votre projet en 10 ms. Lancez-en plusieurs à la fois, gardez le meilleur résultat et jetez le reste.",
+        title: "Un repo, plusieurs agents de code.",
       },
       {
         name: "Évals et RL",
-        title: "Un environnement neuf à chaque run.",
-        line: "Chaque run part de la même configuration, sur sa propre copie. Lancez-en des milliers en parallèle sans qu'un run n'en modifie un autre.",
+        title: "Chaque rollout de RL part du même disque.",
       },
-    ],
-  },
-  git: {
-    label: "Git",
-    titleBefore: "Fonctionne avec",
-    titleAccent: "Git.",
-    line: "Git garde votre code. Skywake garde tout le dossier : paquets, données et caches.",
-    works: "Git fonctionne comme d'habitude dans chaque copie.",
-    note: "Continuez à pousser votre code sur Git. Skywake garde tout le reste.",
-  },
-  products: {
-    items: [
-      {
-        name: "Filesystem",
-        href: "/filesystem",
-        icon: "files",
-        before: "Donnez à chaque agent ",
-        highlight: "sa propre copie de vos fichiers",
-        after:
-          ". Prête en 10 ms, ouverte comme un dossier normal, fusionnée une fois le travail fini.",
-        points: [
-          "20 000 fichiers copiés en 10 ms",
-          "Ouverte sans tout télécharger",
-          "Changements relus et fusionnés comme avec Git",
-        ],
-      },
-      {
-        name: "Recherche",
-        href: "/search",
-        icon: "search",
-        before: "Cherchez ",
-        highlight: "par le sens, par mots exacts, ou les deux",
-        after: ". Un seul index, copié pour chaque agent comme vos fichiers.",
-        points: [
-          "10 ms à chaud sur 10M de vecteurs",
-          "Compatible avec tout modèle d'embedding",
-          "Copiez un index sans toucher à main",
-        ],
-      },
-    ],
-  },
-  architecture: {
-    label: "Fonctionnement",
-    titleBefore: "Aussi rapide que",
-    titleAccent: "votre propre disque.",
-    line: "Les fichiers sont servis par un cache NVMe partagé, juste à côté de vos agents.",
-    stats: [
-      "pour écrire un petit fichier",
-      "pour lire un petit fichier",
-      "plus lent qu'un disque local sur un build complet",
     ],
   },
   benchmarks: {
     label: "Benchmarks",
+    line: "Mesuré sur AWS, avec le bucket dans la même région. Chaque exécution est publiée avec la commande pour la refaire.",
     title: "La vitesse d'un disque local, mesurée depuis votre bucket.",
+    claims: [
+      {
+        title: "Ça plante ? Rien de perdu.",
+        line: "Chaque écriture synchronisée est dans votre bucket, même après kill -9.",
+        label: "écritures synchronisées perdues",
+      },
+      {
+        title: "Déplacez vos agents d'une machine à l'autre.",
+        line: "Démontez sur une machine, montez sur une autre, continuez.",
+        label: "pour déplacer un disque vers une autre machine",
+      },
+      {
+        title: "Cherchable dès l'enregistrement.",
+        line: "Les nouveaux fichiers apparaissent dans la recherche presque aussitôt.",
+        label: "entre l'écriture et la recherche",
+      },
+    ],
+    races: [
+      {
+        title: "Enregistrement plus rapide",
+        proof: "1 Go de fichiers vers votre bucket",
+        labels: ["Skywake", "aws s3 cp"],
+      },
+      {
+        title: "Recherche en cache",
+        proof: "10M vecteurs",
+        labels: ["En cache", "Depuis votre bucket"],
+      },
+      {
+        title: "Aucun ralentissement",
+        proof: "cargo build et tests, projet Rust",
+        labels: ["Skywake", "Disque local"],
+      },
+    ],
   },
   cost: {
     label: "Coût",
-    chartTitle: "Stockage pour {agents} agents",
+    chartTitle: "Pour {agents} agents qui travaillent sur le même projet de {workspaceGb} Go.",
     chart: {
       without: "Sans Skywake",
       with: "Avec Skywake",
@@ -176,7 +182,6 @@ export const fr: HomeMessages = {
     headline: {
       storage: "de stockage en moins",
       cost: "moins cher",
-      starts: "plus rapide pour lancer un agent",
       and: "et",
     },
   },
@@ -193,8 +198,7 @@ export const fr: HomeMessages = {
     selfHost: "Self-hoster avec la documentation",
     star: "Étoiler sur GitHub",
     openTitle: "Commencez à construire avec Skywake.",
-    openLine:
-      "Offrez à chaque agent un workspace branché et un index interrogeable sur votre propre stockage objet.",
+    openLine: "Un disque partagé pour tous vos agents, recherche incluse, sur votre propre bucket.",
     openCta: "Commencer",
     form: {
       email: "E-mail",
@@ -205,140 +209,6 @@ export const fr: HomeMessages = {
       off: "La liste d'attente n'est pas encore ouverte. Réessayez bientôt.",
       error: "Un problème est survenu de notre côté. Réessayez.",
     },
-  },
-  layers: {
-    alt: "Les agents et les apps utilisent un filesystem et un index de recherche. Les deux lisent votre stockage objet via un cache partagé. Seuls les changements sont réécrits, toutes les 2 secondes.",
-    agents: ["Agents", "et vos apps"],
-    filesystem: ["Filesystem", "montage · fork · merge"],
-    index: ["Index", "vectoriel · full-text"],
-    cache: ["Cache", "NVMe + partagé"],
-    storage: ["Stockage objet", "votre bucket"],
-  },
-  productPages: {
-    getStarted: "Commencer",
-    star: "Étoiler sur GitHub",
-    filesystem: {
-      label: "Filesystem",
-      title: "Votre bucket, comme un",
-      accent: "disque local rapide.",
-      line: "Montez votre stockage objet comme un dossier normal. Donnez à chaque agent sa copie en 10 ms, puis fusionnez les changements.",
-      features: [
-        {
-          name: "Chaque agent a sa propre copie",
-          line: "Une copie complète de vos fichiers en 10 ms, quelle que soit leur taille. Rien n'est dupliqué.",
-          art: "fork",
-        },
-        {
-          name: "Comme un dossier normal",
-          line: "Montez-le sur n'importe quelle machine. Vos outils, scripts et Git fonctionnent tels quels.",
-          art: "mount",
-        },
-        {
-          name: "Sauvegarde automatique",
-          line: "Les changements arrivent dans votre bucket toutes les 2 secondes, sans rien à committer.",
-          art: "autosave",
-        },
-        {
-          name: "Résiste aux crashs",
-          line: "Coupez la machine en pleine écriture. Chaque changement enregistré est toujours là.",
-          art: "recover",
-        },
-        {
-          name: "Ce que chaque agent a changé",
-          line: "Chaque fichier créé, modifié ou supprimé, comparé à main.",
-          art: "diff",
-        },
-        {
-          name: "Ne gardez que le bon travail",
-          line: "Fusionnez les changements d'un agent dans main, fichier par fichier.",
-          art: "merge",
-        },
-        {
-          name: "Main reste protégé",
-          line: "Les agents ne peuvent pas écrire sur main. Il ne change que quand vous fusionnez.",
-          art: "protect",
-        },
-      ],
-    },
-    search: {
-      label: "Recherche",
-      title: "Cherchez dans tout",
-      accent: "votre bucket.",
-      line: "Recherche vectorielle, full-text et hybride sur votre stockage objet, servie par un cache NVMe rapide.",
-      features: [
-        {
-          name: "Trouver par le sens",
-          line: "Cherchez « réinitialiser un mot de passe perdu » et trouvez la page « Récupération du compte ».",
-          art: "vector",
-        },
-        {
-          name: "Trouver les mots exacts",
-          line: "Noms, codes d'erreur et expressions, même avec une faute de frappe.",
-          art: "fullText",
-        },
-        {
-          name: "Les deux en une recherche",
-          line: "Sens et mots exacts classés ensemble : le meilleur résultat arrive en premier.",
-          art: "hybrid",
-        },
-        {
-          name: "Compter et regrouper",
-          line: "Totaux, sommes et regroupements sur vos données, dans la même requête.",
-          art: "analytics",
-        },
-        {
-          name: "Tester sur une copie",
-          line: "Forkez un index, essayez de nouvelles données, sans toucher à la production.",
-          art: "branches",
-        },
-        {
-          name: "Annuler n'importe quel changement",
-          line: "Revenez à n'importe quelle version antérieure de l'index.",
-          art: "timeTravel",
-        },
-      ],
-    },
-  },
-  benchmarkPage: {
-    line: "Mesuré sur AWS, avec le bucket dans la même région.",
-    filesTitle: "Aussi rapide qu'un disque local.",
-    searchTitle: "10M de vecteurs, cherchés en 10 ms.",
-    filesNote: "AWS m7i-flex.large, stockage objet dans la même région",
-    searchNote: "10M vecteurs × 768 sur stockage objet, AWS i4i.4xlarge dans la même région",
-    files: [
-      {
-        title: "Donner à un agent sa copie de 1 Go",
-        verdict: "300× plus rapide",
-        labels: ["Skywake", "Copie des fichiers"],
-      },
-      {
-        title: "Enregistrer 1 Go dans votre bucket",
-        verdict: "4,5× plus rapide",
-        labels: ["Skywake", "Upload classique"],
-      },
-      {
-        title: "Compiler et tester un projet Rust",
-        verdict: "Comme un disque local",
-        labels: ["Skywake", "Disque local"],
-      },
-    ],
-    search: [
-      {
-        title: "Chercher dans 10M de vecteurs",
-        verdict: "10 ms une fois en cache",
-        labels: ["Recherche répétée", "Première recherche, depuis votre bucket"],
-      },
-      {
-        title: "Chercher avec un filtre",
-        verdict: "Toujours sous les 25 ms",
-        labels: ["Filtré à 1 % des lignes", "Sans filtre"],
-      },
-      {
-        title: "Trouver les bonnes réponses",
-        verdict: "95 % de recall",
-        labels: ["Sans filtre", "Filtré à 1 % des lignes"],
-      },
-    ],
   },
   plans: {
     eyebrow: "Tarifs",
@@ -600,7 +470,6 @@ export const fr: HomeMessages = {
     title: "Partez de votre problème.",
     accent: "On vous montre comment Skywake s’y prête.",
     onThisPage: "Sur cette page",
-    read: "Lire le guide",
     related: {
       eyebrow: "À lire aussi",
       title: "Découvrez d'autres cas d'usage.",
@@ -625,7 +494,7 @@ export const fr: HomeMessages = {
       "coding-agents": {
         name: "Agents de code dans le cloud",
         title: "Comment donner à chaque agent de code sa copie de votre repo",
-        lead: "Enregistrez votre repo une fois, avec ses paquets et son cache de build. Chaque agent a sa copie en 10 ms, et vous fusionnez le correctif qui vous plaît.",
+        lead: "Enregistrez votre repo une fois, avec ses paquets et son cache de build. Chaque agent a sa copie, et vous fusionnez le correctif qui vous plaît.",
       },
       "document-agents": {
         name: "Agents de documents",
@@ -635,7 +504,7 @@ export const fr: HomeMessages = {
       rl: {
         name: "Environnements RL et évals",
         title: "Comment donner à chaque run RL une copie neuve de son environnement",
-        lead: "Enregistrez l'environnement une fois. Chaque run a sa propre copie propre en 10 ms : des résultats équitables, et tout run bizarre peut être rouvert plus tard.",
+        lead: "Enregistrez l'environnement une fois. Chaque run a sa propre copie propre : des résultats équitables, et tout run bizarre peut être rouvert plus tard.",
       },
       ci: {
         name: "CI et builds",

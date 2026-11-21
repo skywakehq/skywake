@@ -17,13 +17,11 @@ import { CountryPicker, guessCountry } from "./country";
 export type CheckoutPlan = {
   plan: "launch" | "scale";
   name: string;
-  minimumCents: number;
+  priceCents: number;
   features: string[];
   clientSecret: string;
   publishableKey: string;
 };
-
-export type Rate = { name: string; price: string };
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString(undefined, {
@@ -74,12 +72,10 @@ function appearance(): Appearance {
 /** The console's own checkout: the order on the left, Stripe's card form on the right. */
 export function Checkout({
   choice,
-  rates,
   onClose,
   onPaid,
 }: {
   choice: CheckoutPlan | null;
-  rates: Rate[];
   onClose: () => void;
   onPaid: () => void;
 }) {
@@ -89,7 +85,7 @@ export function Checkout({
         className="max-h-[calc(100dvh-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-[880px]"
         showCloseButton={false}
       >
-        {choice && <Order choice={choice} rates={rates} onClose={onClose} onPaid={onPaid} />}
+        {choice && <Order choice={choice} onClose={onClose} onPaid={onPaid} />}
       </DialogContent>
     </Dialog>
   );
@@ -97,12 +93,10 @@ export function Checkout({
 
 function Order({
   choice,
-  rates,
   onClose,
   onPaid,
 }: {
   choice: CheckoutPlan;
-  rates: Rate[];
   onClose: () => void;
   onPaid: () => void;
 }) {
@@ -154,7 +148,7 @@ function Order({
     if (actions && session && !session.email && email) void actions.updateEmail(email);
   }, [actions, session, email]);
 
-  const due = session?.total.total.amount ?? money(choice.minimumCents);
+  const due = session?.total.total.amount ?? money(choice.priceCents);
 
   const pay = async () => {
     if (!actions) return;
@@ -177,13 +171,12 @@ function Order({
         </p>
         <DialogTitle className="mt-3 flex items-baseline gap-2 font-normal">
           <span className="text-[34px] leading-none font-medium tracking-[-0.03em] tabular-nums">
-            {money(choice.minimumCents)}
+            {money(choice.priceCents)}
           </span>
-          <span className="text-sm text-muted-foreground">minimum a month</span>
+          <span className="text-sm text-muted-foreground">a month</span>
         </DialogTitle>
         <p className="mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          The minimum is credited back against your usage. You pay more only in a month when usage
-          costs more than {money(choice.minimumCents)}.
+          One flat price. Nothing is metered.
         </p>
 
         {choice.features.length > 0 && (
@@ -196,20 +189,6 @@ function Order({
             ))}
           </ul>
         )}
-
-        <div className="mt-7">
-          <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
-            Usage rates
-          </p>
-          <dl className="mt-3 divide-y divide-border/60 border-y border-border/60">
-            {rates.map((rate) => (
-              <div key={rate.name} className="flex justify-between gap-4 py-2 text-[13px]">
-                <dt className="text-muted-foreground">{rate.name}</dt>
-                <dd className="tabular-nums">{rate.price}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
 
         <div className="mt-auto flex items-baseline justify-between pt-8">
           <span className="text-sm">Due today</span>

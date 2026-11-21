@@ -3,7 +3,6 @@ package dev.skywake;
 import static dev.skywake.FakeApi.Reply.failure;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,7 +14,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 
 class ClientTest {
@@ -45,7 +43,7 @@ class ClientTest {
             Skywake sky = api.builder().retries(0).build();
             assertThrows(AuthException.class, sky::whoami);
             assertThrows(PermissionException.class, sky::whoami);
-            NotFoundException missing = assertThrows(NotFoundException.class, () -> sky.index("prodcts").info());
+            NotFoundException missing = assertThrows(NotFoundException.class, () -> sky.disk("prodcts").info());
             assertEquals("did you mean `products`?", missing.hint());
             assertTrue(missing.getMessage().contains("did you mean `products`?"));
             assertEquals("req-1", missing.requestId());
@@ -70,7 +68,7 @@ class ClientTest {
             Skywake sky = api.builder().retries(2).build();
             assertThrows(ServerException.class, sky::whoami);
             assertEquals(3, api.seen.size());
-            assertThrows(ServerException.class, () -> sky.index("products").count());
+            assertThrows(ServerException.class, () -> sky.disk("app").query("coffee"));
             assertEquals(4, api.seen.size());
         }
     }
@@ -101,69 +99,14 @@ class ClientTest {
     }
 
     @Test
-    void upsertTakesAnyNumberOfRowsAndSendsThemInBatches() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> {
-            List<Object> ids = new ArrayList<>();
-            seen.json().forEach(row -> ids.add(row.path("id").asInt()));
-            return Reply.json(Map.of("ids", ids, "count", ids.size()));
-        })) {
-            List<Map<String, Object>> rows = IntStream.range(0, 25_000)
-                    .mapToObj(id -> Map.<String, Object>of("id", id, "text", "row " + id))
-                    .toList();
-            Upserted done = api.sky().index("products").upsert(rows);
-            assertEquals(25_000, done.count());
-            assertEquals(25_000, done.ids().size());
-            assertEquals(List.of(10_000, 10_000, 5_000), api.seen.stream().map(seen -> seen.json().size()).toList());
-            assertEquals("main", api.at(0).query().get("branch"));
-        }
-    }
-
-    @Test
-    void updateAndDeleteTakeAnIdIdsOrAFilter() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> Reply.json(Map.of("count", 1)))) {
-            Index products = api.sky().index("products");
-            assertEquals(1, products.update(7, Map.of("stock", 3)));
-            products.update(Map.of("tag", Map.of("eq", "sale")), Map.of("stock", 0));
-            products.delete(List.of(1, 2));
-            products.delete(Map.of("filter", Map.of("stock", Map.of("eq", 0))));
-            List<List<Object>> want = List.of(
-                    List.of("PATCH", "/v2/indexes/products/rows", Map.of("id", 7, "fields", Map.of("stock", 3))),
-                    List.of("PATCH", "/v2/indexes/products/rows",
-                            Map.of("filter", Map.of("tag", Map.of("eq", "sale")), "fields", Map.of("stock", 0))),
-                    List.of("POST", "/v2/indexes/products/rows/delete", Map.of("ids", List.of(1, 2))),
-                    List.of("POST", "/v2/indexes/products/rows/delete",
-                            Map.of("filter", Map.of("stock", Map.of("eq", 0)))));
-            for (int i = 0; i < want.size(); i++) {
-                assertEquals(want.get(i).get(0), api.at(i).method());
-                assertEquals(want.get(i).get(1), api.at(i).path());
-                same(want.get(i).get(2), api.at(i).json());
-            }
-        }
-    }
-
-    @Test
-    void getGivesNullForAMissingRowButThrowsForAMissingIndex() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) -> seen.path().contains("/rows/")
-                ? failure(404, "not_found", Map.of("path", "id"))
-                : failure(404, "not_found", Map.of("hint", "did you mean `products`?")))) {
-            Skywake sky = api.sky();
-            assertNull(sky.index("products").get("a b"));
-            assertEquals("/v2/indexes/products/rows/a%20b", api.at(0).path());
-            assertThrows(NotFoundException.class, () -> sky.index("prodcts").info());
-        }
-    }
-
-    @Test
-    void queryTakesTextFirstAndOptionsOnTheirOwn() throws Exception {
-        try (FakeApi api = new FakeApi((seen, count) ->
-                Reply.json(page(List.of(Map.of("id", 1, "score", 0.9, "title", "mug")), null)))) {
-            Index products = api.sky().index("products", "draft");
-            List<Map<String, Object>> hits = products.query("coffee", new QueryOptions().limit(3).mode(Mode.KEYWORDS));
-            assertEquals("mug", hits.get(0).get("title"));
-            products.query(new QueryOptions().filter(Map.of("price", Map.of("lt", 10))).sort("price", "asc"));
-            same(Map.of("text", "coffee", "limit", 3, "mode", "keywords", "branch", "draft"), api.at(0).json());
-            same(Map.of("filter", Map.of("price", Map.of("lt", 10)), "sort", Map.of("price", "asc"), "branch", "draft"),
-                    api.at(1).json());
+    void queryOnADiskSendsTheTextOptionsAndBranch() throws Exception {
+        try (FakeApi api = new FakeApi((seen, count) -> Reply.json(page(
+                List.of(Map.of("path", "docs/coffee.md", "score", 0.9, "snippet", "brew coffee")), null)))) {
+            List<FileHit> hits = api.sky().disk("app", "draft")
+                    .query("coffee", new FileQueryOptions().limit(3).path("docs"));
+            assertEquals("docs/coffee.md", hits.get(0).path());
+            assertEquals("/v2/disks/app/query", api.at(0).path());
+            same(Map.of("text", "coffee", "limit", 3, "path", "docs", "branch", "draft"), api.at(0).json());
         }
     }
 

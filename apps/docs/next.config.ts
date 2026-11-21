@@ -16,7 +16,7 @@ const config: NextConfig = {
   assetPrefix: process.env.DOCS_ASSET_PREFIX ?? (basePath ? `${basePath}-static` : undefined),
   // Inlined, so the browser sees the same base path as the server.
   env: { DOCS_BASE_PATH: basePath, SITE_URL: process.env.SITE_URL ?? "https://skywake.dev" },
-  // Any page as Markdown: `/indexes/write.md`.
+  // Any page as Markdown: `/filesystem/branches.md`.
   async rewrites() {
     return [{ source: "/:path*.md", destination: "/llms.mdx/:path*" }];
   },

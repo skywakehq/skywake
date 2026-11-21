@@ -6,9 +6,6 @@ export const en: HomeMessages = {
   // The English titles are content/pages, which llms.txt and the share images also use.
   pages,
   nav: {
-    filesystem: "Filesystem",
-    search: "Search",
-    benchmarks: "Benchmarks",
     pricing: "Pricing",
     docs: "Docs",
     github: "GitHub",
@@ -20,8 +17,7 @@ export const en: HomeMessages = {
     theme: "Switch between light and dark",
   },
   footer: {
-    blurb:
-      "Your bucket as a fast disk and a search engine. Open source, on your own object storage.",
+    blurb: "A shared disk for AI agents, with search built in. Open source, on your own bucket.",
     product: "Product",
     project: "Project",
     legal: "Legal",
@@ -33,100 +29,118 @@ export const en: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud is on the way. Join the waitlist",
-    titleBefore: "The scalable filesystem and search engine",
+    titleBefore: "Infinite disks",
     titleAccent: "for AI agents.",
-    screenshotAlt: "The Skywake console, showing a team's disks and the agents working on them",
     getStartedCta: "Get started",
+    waitlistCta: "Join the waitlist",
+    docsCta: "Read the docs",
+    worksWith: "Works with your favorite agents",
+  },
+
+  shared: {
+    label: "Shared disk",
+    line: "Mount one folder on every machine. What one agent writes, the others can read.",
+    titleBefore: "One disk.",
+    titleAccent: "Every agent.",
+    write: "Write",
+    read: "Read",
+    mounted: "Mounted on 4 machines",
+    machines: ["Your laptop", "Cloud sandbox", "A teammate's Mac", "CI runner"],
+  },
+  searchDemo: {
+    label: "Search",
+    line: "Every file is indexed as it's saved. Search by meaning, exact words, or both.",
+    titleBefore: "Our disks are",
+    titleAccent: "semantically searchable!",
+    modes: ["Meaning", "Exact words", "Both"],
+    queries: ["reset a lost password", "ECONNRESET", "Q3 revenue by region"],
+    snippets: [
+      "[Account recovery]: we email a sign-in link, and you [choose a new password].",
+      "14:02:11 upstream closed the socket ([ECONNRESET]), retry 2 of 5",
+      "[Q3 revenue] grew in every [region], led by EMEA.",
+    ],
+  },
+  bento: {
+    label: "Features",
+    line: "Your tools work on it like any folder. Then it does what a folder can't.",
+    titleBefore: "Feels like a folder.",
+    titleAccent: "Does a lot more.",
+    items: [
+      "Your tools already work",
+      "Survives crashes",
+      "Branch and merge",
+      "Runs on your bucket",
+      "Semantic search",
+    ],
+    crash: ["lost on kill -9", "to fail over"],
   },
   useCases: {
     label: "Use cases",
-    heading: ["You build the agents.", "Skywake handles files and search."],
+    line: "Knowledge bases, agent memory, shared storage, coding agents and RL rollouts.",
+    heading: ["What you can build", "with Skywake."],
     more: "Explore all use cases",
     cta: "Learn more",
     items: [
       {
         name: "Knowledge base",
         title: "A knowledge base for your agents.",
-        line: "Keep your docs and files in one place, with search built in. Agents always find the latest version, never an old copy.",
       },
       {
         name: "Context layer",
-        title: "A central memory and context layer for agents.",
-        line: "Agents save what they learn as plain files. Next time they pick up where they left off, and other agents can read it too.",
+        title: "Shared memory for agents.",
       },
       {
         name: "Agent storage",
         title: "A shared filesystem for agents.",
-        line: "Agents read and write the same files, like a shared drive. Saved work survives even if a machine dies.",
       },
       {
         name: "Cloud coding agents",
-        title: "A copy of your repo for every agent.",
-        line: "Each agent gets its own copy of your project in 10 ms. Run many at once, keep the best result and throw away the rest.",
+        title: "One repo, many coding agents.",
       },
       {
         name: "Evals and RL",
-        title: "A fresh environment for every run.",
-        line: "Every run starts from the same setup, on its own copy. Run thousands side by side without one run changing another.",
+        title: "Every RL rollout starts from the same disk.",
       },
-    ],
-  },
-  git: {
-    label: "Git",
-    titleBefore: "Works with",
-    titleAccent: "Git.",
-    line: "Git keeps your code. Skywake keeps the whole folder: packages, data and caches.",
-    works: "Git runs as usual inside every copy.",
-    note: "Keep pushing code to Git. Skywake keeps everything else.",
-  },
-  products: {
-    items: [
-      {
-        name: "Filesystem",
-        href: "/filesystem",
-        icon: "files",
-        before: "Give every agent ",
-        highlight: "its own copy of your files",
-        after: ". Ready in 10 ms, opened like a normal folder, merged back when the work is done.",
-        points: [
-          "Copy 20,000 files in 10 ms",
-          "Open it without downloading everything",
-          "Review and merge changes like Git",
-        ],
-      },
-      {
-        name: "Search",
-        href: "/search",
-        icon: "search",
-        before: "Search ",
-        highlight: "by meaning, by exact words, or both",
-        after: ". One index, copied for each agent like your files.",
-        points: [
-          "10 ms warm search over 10M vectors",
-          "Works with any embedding model",
-          "Copy an index without touching main",
-        ],
-      },
-    ],
-  },
-  architecture: {
-    label: "How it works",
-    titleBefore: "As fast as",
-    titleAccent: "your own disk.",
-    line: "Files are served from a shared NVMe cache, right next to your agents.",
-    stats: [
-      "to write a small file",
-      "to read a small file",
-      "slower than a local disk on a full build",
     ],
   },
   benchmarks: {
     label: "Benchmarks",
+    line: "Measured on AWS, with the bucket in the same region. Every run is published with the command to repeat it.",
     title: "Local-disk speed, measured from your bucket.",
+    claims: [
+      {
+        title: "Crash it. Lose nothing.",
+        line: "Every synced write is in your bucket, even after kill -9.",
+        label: "synced writes lost",
+      },
+      {
+        title: "Move agents between machines.",
+        line: "Unmount on one machine, mount on another, keep working.",
+        label: "to move a disk to another machine",
+      },
+      {
+        title: "Searchable the moment you save.",
+        line: "New files show up in search almost at once.",
+        label: "from write to searchable",
+      },
+    ],
+    races: [
+      {
+        title: "Faster saves",
+        proof: "1 GB of files, to your bucket",
+        labels: ["Skywake", "aws s3 cp"],
+      },
+      { title: "Cached search", proof: "10M vectors", labels: ["Cached", "From your bucket"] },
+      {
+        title: "No slowdown",
+        proof: "cargo build and tests, Rust project",
+        labels: ["Skywake", "Local disk"],
+      },
+    ],
   },
   cost: {
     label: "Cost",
-    chartTitle: "Storage for {agents} agents",
+    chartTitle: "For {agents} agents working on the same {workspaceGb} GB project.",
     chart: {
       without: "Without Skywake",
       with: "With Skywake",
@@ -138,7 +152,6 @@ export const en: HomeMessages = {
     headline: {
       storage: "less storage",
       cost: "lower cost",
-      starts: "faster agent starts",
       and: "and",
     },
   },
@@ -155,8 +168,7 @@ export const en: HomeMessages = {
     selfHost: "Self-host with the docs",
     star: "Star on GitHub",
     openTitle: "Start building with Skywake.",
-    openLine:
-      "Give every agent a branched workspace and a searchable index on your own object storage.",
+    openLine: "One shared disk for all your agents, with search built in, on your own bucket.",
     openCta: "Get started",
     form: {
       email: "Email",
@@ -167,140 +179,6 @@ export const en: HomeMessages = {
       off: "The waitlist isn't open yet. Try again soon.",
       error: "Something went wrong on our side. Try again.",
     },
-  },
-  layers: {
-    alt: "Agents and apps use a filesystem and a search index. Both read through a shared cache from your object storage. Only changes are written back, every 2 seconds.",
-    agents: ["Agents", "and your apps"],
-    filesystem: ["Filesystem", "mount · fork · merge"],
-    index: ["Index", "vector · full text"],
-    cache: ["Cache", "NVMe + shared"],
-    storage: ["Object storage", "your bucket"],
-  },
-  productPages: {
-    getStarted: "Get started",
-    star: "Star on GitHub",
-    filesystem: {
-      label: "Filesystem",
-      title: "Your bucket, as a",
-      accent: "fast local disk.",
-      line: "Mount your object storage as a normal folder. Give each agent its own copy in 10 ms, then merge the changes back.",
-      features: [
-        {
-          name: "Every agent gets its own copy",
-          line: "A full copy of your files in 10 ms, whatever the size. Nothing is duplicated.",
-          art: "fork",
-        },
-        {
-          name: "Works like a normal folder",
-          line: "Mount it on any machine. Your tools, scripts and Git just work.",
-          art: "mount",
-        },
-        {
-          name: "Saves on its own",
-          line: "Changes reach your bucket every 2 seconds, with nothing to commit.",
-          art: "autosave",
-        },
-        {
-          name: "Survives crashes",
-          line: "Kill the machine mid-write. Every saved change is still there.",
-          art: "recover",
-        },
-        {
-          name: "See what each agent changed",
-          line: "Every file it created, edited or deleted, compared with main.",
-          art: "diff",
-        },
-        {
-          name: "Keep only the good work",
-          line: "Merge an agent's changes back into main, file by file.",
-          art: "merge",
-        },
-        {
-          name: "Main stays safe",
-          line: "Agents can't write to main. It only changes when you merge.",
-          art: "protect",
-        },
-      ],
-    },
-    search: {
-      label: "Search",
-      title: "Search everything in",
-      accent: "your bucket.",
-      line: "Vector, full-text and hybrid search over your object storage, served from a fast NVMe cache.",
-      features: [
-        {
-          name: "Find by meaning",
-          line: "Search “reset a lost password” and find the page called “Account recovery”.",
-          art: "vector",
-        },
-        {
-          name: "Find exact words",
-          line: "Names, error codes and phrases, even with a typo.",
-          art: "fullText",
-        },
-        {
-          name: "Both in one search",
-          line: "Meaning and exact words ranked together, so the best match comes first.",
-          art: "hybrid",
-        },
-        {
-          name: "Count and group results",
-          line: "Totals, sums and groups over your data, in the same query.",
-          art: "analytics",
-        },
-        {
-          name: "Test on a copy",
-          line: "Fork an index, try new data, and leave production untouched.",
-          art: "branches",
-        },
-        {
-          name: "Undo any change",
-          line: "Go back to any earlier version of the index.",
-          art: "timeTravel",
-        },
-      ],
-    },
-  },
-  benchmarkPage: {
-    line: "Measured on AWS, with the bucket in the same region.",
-    filesTitle: "As fast as a local disk.",
-    searchTitle: "10M vectors, searched in 10 ms.",
-    filesNote: "AWS m7i-flex.large, object storage in the same region",
-    searchNote: "10M vectors × 768 on object storage, AWS i4i.4xlarge in the same region",
-    files: [
-      {
-        title: "Give an agent its own copy of 1 GB",
-        verdict: "300× faster",
-        labels: ["Skywake", "Copying the files"],
-      },
-      {
-        title: "Save 1 GB to your bucket",
-        verdict: "4.5× faster",
-        labels: ["Skywake", "A plain upload"],
-      },
-      {
-        title: "Build and test a Rust project",
-        verdict: "Same as local disk",
-        labels: ["Skywake", "Local disk"],
-      },
-    ],
-    search: [
-      {
-        title: "Search 10M vectors",
-        verdict: "10 ms once cached",
-        labels: ["Repeat search", "First search, from your bucket"],
-      },
-      {
-        title: "Search with a filter",
-        verdict: "Still under 25 ms",
-        labels: ["Filtered to 1% of rows", "No filter"],
-      },
-      {
-        title: "Find the right answers",
-        verdict: "95% recall",
-        labels: ["No filter", "Filtered to 1% of rows"],
-      },
-    ],
   },
   plans: {
     eyebrow: "Pricing",
@@ -562,7 +440,6 @@ export const en: HomeMessages = {
     title: "Start from the problem you have.",
     accent: "We show how Skywake fits.",
     onThisPage: "On this page",
-    read: "Read the guide",
     related: { eyebrow: "Related", title: "Explore more use cases.", all: "All use cases" },
     items: {
       "knowledge-base": {
@@ -583,7 +460,7 @@ export const en: HomeMessages = {
       "coding-agents": {
         name: "Cloud coding agents",
         title: "How to give each coding agent its own copy of your repo",
-        lead: "Save your repo once, with its packages and build cache. Each agent gets its own copy in 10 ms, and you merge the fix you like.",
+        lead: "Save your repo once, with its packages and build cache. Each agent gets its own copy, and you merge the fix you like.",
       },
       "document-agents": {
         name: "Document agents",
@@ -593,7 +470,7 @@ export const en: HomeMessages = {
       rl: {
         name: "RL environments and evals",
         title: "How to give every RL run a fresh copy of its environment",
-        lead: "Save the environment once. Each run gets its own clean copy in 10 ms, so results are fair and any odd run can be opened later.",
+        lead: "Save the environment once. Each run gets its own clean copy, so results are fair and any odd run can be opened later.",
       },
       ci: {
         name: "CI and builds",

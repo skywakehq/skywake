@@ -1,6 +1,8 @@
 "use client";
 
-import { ChevronRight, File, Folder } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { FolderIcon } from "@skywake/ui/components/folder-icon";
+import { FileIcon } from "@/features/files/file-icon";
 import { asJSON, asText, useFetch } from "@/lib/fetch-text";
 import { apiPath } from "@/lib/paths";
 import { Note } from "./diff";
@@ -31,7 +33,7 @@ export function FileBrowser({
 
   return (
     <div>
-      <nav className="flex h-9 items-center gap-1 border-b px-5 text-xs text-muted-foreground">
+      <nav className="flex h-9 items-center gap-1 px-3 text-xs text-muted-foreground">
         <button onClick={() => onOpen("")} className="hover:text-fg">
           {branch}
         </button>
@@ -55,12 +57,12 @@ export function FileBrowser({
             <li key={entry.name}>
               <button
                 onClick={() => onOpen(path ? `${path}/${entry.name}` : entry.name)}
-                className="flex h-8 w-full items-center gap-2 border-b border-line/60 px-5 text-left text-sm hover:bg-hover"
+                className="flex h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-sm transition-colors hover:bg-hover"
               >
                 {entry.kind === "folder" ? (
-                  <Folder className="size-3.5 text-muted-foreground" />
+                  <FolderIcon className="h-4 w-auto" />
                 ) : (
-                  <File className="size-3.5 text-faint" />
+                  <FileIcon name={entry.name} className="size-4" />
                 )}
                 {entry.name}
                 {entry.kind === "file" && (
@@ -79,7 +81,7 @@ export function FileBrowser({
         (text.value.includes("\0") ? (
           <Note>A binary file.</Note>
         ) : (
-          <pre className="overflow-x-auto px-5 py-3 font-mono text-xs leading-[19px]">
+          <pre className="overflow-x-auto rounded-xl bg-background py-3 font-mono text-xs leading-[19px]">
             {text.value.split("\n").map((line, i) => (
               <div key={i} className="flex">
                 <span className="w-10 shrink-0 select-none pr-3 text-right text-faint">

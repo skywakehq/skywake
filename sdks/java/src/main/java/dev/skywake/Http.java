@@ -13,7 +13,6 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 
 final class Http {
@@ -27,21 +26,11 @@ final class Http {
     private final Duration timeout;
 
     Http(String base, Map<String, String> headers, Retry retry, Duration timeout) {
-        this(HttpClient.newBuilder().connectTimeout(timeout).build(), base, headers, retry, timeout);
-    }
-
-    private Http(HttpClient client, String base, Map<String, String> headers, Retry retry, Duration timeout) {
-        this.client = client;
+        this.client = HttpClient.newBuilder().connectTimeout(timeout).build();
         this.base = base;
         this.headers = Map.copyOf(headers);
         this.retry = retry;
         this.timeout = timeout;
-    }
-
-    Http in(String environment) {
-        Map<String, String> changed = new HashMap<>(headers);
-        changed.put("skywake-environment", environment);
-        return new Http(client, base, changed, retry, timeout);
     }
 
     JsonNode get(String path, Map<String, ?> query) {
@@ -50,10 +39,6 @@ final class Http {
 
     JsonNode post(String path, Object json) {
         return call("POST", path, null, json);
-    }
-
-    JsonNode post(String path, Object json, Map<String, ?> query) {
-        return call("POST", path, query, json);
     }
 
     JsonNode patch(String path, Object json, Map<String, ?> query) {

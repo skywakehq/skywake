@@ -50,8 +50,8 @@ module Skywake
       @http.call("POST", "#{base}#{path}", query: query, json: body)
     end
 
-    def patch(path, body, query = nil)
-      @http.call("PATCH", "#{base}#{path}", query: query, json: body)
+    def patch(path, body)
+      @http.call("PATCH", "#{base}#{path}", json: body)
     end
   end
 end

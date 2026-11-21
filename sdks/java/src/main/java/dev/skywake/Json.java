@@ -1,7 +1,6 @@
 package dev.skywake;
 
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
@@ -14,11 +13,8 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Locale;
-import java.util.Map;
 
 final class Json {
-    private static final TypeReference<Map<String, Object>> MAP = new TypeReference<>() {};
-
     static final ObjectMapper MAPPER = JsonMapper.builder()
             .propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -49,10 +45,6 @@ final class Json {
 
     static <T> T as(JsonNode node, Class<T> type) {
         return MAPPER.convertValue(node, type);
-    }
-
-    static Map<String, Object> map(JsonNode node) {
-        return MAPPER.convertValue(node, MAP);
     }
 
     @SuppressWarnings("unchecked")

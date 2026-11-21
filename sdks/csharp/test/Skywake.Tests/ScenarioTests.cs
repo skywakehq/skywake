@@ -1,4 +1,3 @@
-using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Skywake.Tests;
@@ -12,8 +11,6 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
 
     private SkywakeClient Sky => _fixture.Sky;
 
-    private IndexHandle Products => Sky.Index("products");
-
     private DiskHandle App => Sky.Disk("app");
 
     [ScenarioFact]
@@ -25,72 +22,9 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S02_OneRowUpsertedToANewIndexWithNoSchemaIsFoundByQuery()
+    public async Task S02_AFileWrittenToANewDiskReadsBackAndIsListed()
     {
-        await Products.UpsertAsync(new { id = "mug", text = "a blue coffee mug", price = 12, tags = new[] { "kitchen" } });
-        var hits = await Products.QueryAsync("coffee mug");
-        Assert.Equal("mug", (string?)hits[0]["id"]);
-        Assert.Equal(12, (double)hits[0]["price"]!);
-        Assert.True((double)hits[0]["score"]! > 0);
-    }
-
-    [ScenarioFact]
-    public async Task S03_TenThousandRowsUpsertedInOneCallAreAllCounted()
-    {
-        var rows = Enumerable.Range(0, 10_000).Select(i => new
-        {
-            id = $"row-{i}",
-            text = i % 2 == 1 ? $"running shoe number {i}" : $"invoice {i}",
-            price = i % 100,
-            tags = new[] { i % 2 == 1 ? "shoes" : "billing" },
-        });
-        var bulk = Sky.Index("bulk");
-        Assert.Equal(10_000, (await bulk.UpsertAsync(rows)).Count);
-        Assert.Equal(10_000, await bulk.CountAsync());
-        Assert.Equal(5_000, await bulk.CountAsync(new { tags = new { contains = "shoes" } }));
-    }
-
-    [ScenarioFact]
-    public async Task S04_AQueryTakesAFilterALimitAndKeywordsMode()
-    {
-        var hits = await Sky.Index("bulk").QueryAsync("shoe", new QueryOptions
-        {
-            Mode = QueryMode.Keywords,
-            Filter = new { price = new { lt = 10 } },
-            Limit = 3,
-        });
-        Assert.Equal(3, hits.Count);
-        foreach (var hit in hits)
-        {
-            Assert.True((double)hit["price"]! < 10);
-            Assert.Contains("shoe", (string?)hit["text"]);
-        }
-    }
-
-    [ScenarioFact]
-    public async Task S05_UpdateShowsInGetAndDeleteMakesGetNull()
-    {
-        Assert.Equal(1, await Products.UpdateAsync("mug", new { price = 9 }));
-        Assert.Equal(9, (double)(await Products.GetAsync("mug"))!["price"]!);
-        Assert.Equal(1, await Products.DeleteAsync("mug"));
-        Assert.Null(await Products.GetAsync("mug"));
-    }
-
-    [ScenarioFact]
-    public async Task S06_AForkChangesApartFromMainAndMergingBringsTheChange()
-    {
-        await Products.UpsertAsync(new { id = "cup", text = "a white coffee cup", price = 5 });
-        var draft = await Products.ForkAsync("draft");
-        await draft.UpdateAsync("cup", new { price = 7 });
-        Assert.Equal(7, Price(await draft.QueryAsync("coffee cup")));
-        Assert.Equal(5, Price(await Products.QueryAsync("coffee cup")));
-        await draft.MergeIntoAsync("main");
-        Assert.Equal(7, (double)(await Products.GetAsync("cup"))!["price"]!);
-    }
-
-    [ScenarioFact]
-    public async Task S07_AFileWrittenToANewDiskReadsBackAndIsListed()
-    {
+        await Sky.CreateDiskAsync("app", new NewDiskOptions { Search = true });
         await App.WriteAsync("README.md", "# App\n");
         Assert.Equal("# App\n", await App.ReadAsync("README.md"));
         var listed = await App.ListAsync();
@@ -98,7 +32,7 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S08_ManyFilesWrittenTogetherAreOneCommit()
+    public async Task S03_ManyFilesWrittenTogetherAreOneCommit()
     {
         var before = (await App.LogAsync().ToListAsync()).Count;
         await App.WriteAsync(
@@ -115,7 +49,7 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S09_BothSidesChangingOneFileMakeTheMergeAMergeConflict()
+    public async Task S04_BothSidesChangingOneFileMakeTheMergeAMergeConflict()
     {
         var work = await App.ForkAsync("agent-1");
         await work.WriteAsync("notes.txt", "from the agent");
@@ -128,7 +62,7 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S10_GrepFindAndQueryOnADiskFindAFile()
+    public async Task S05_GrepFindAndQueryOnADiskFindAFile()
     {
         await App.WriteAsync("docs/coffee.md", "How to brew coffee at home.\n");
         var lines = await App.GrepAsync("brew");
@@ -144,7 +78,7 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S11_ReadWithAtReturnsTheOldContentAfterAChange()
+    public async Task S06_ReadWithAtReturnsTheOldContentAfterAChange()
     {
         var old = await App.HeadAsync();
         await App.WriteAsync("README.md", "# App, changed\n");
@@ -153,41 +87,33 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
     }
 
     [ScenarioFact]
-    public async Task S12_KeysStayInTheirEnvironmentAndTheirRole()
+    public async Task S07_KeysStayInTheirEnvironmentAndTheirRole()
     {
         using var staging = new SkywakeClient(new SkywakeOptions { Key = _fixture.StagingKey, Environment = "prod" });
-        await Assert.ThrowsAsync<PermissionException>(() => staging.Index("products").QueryAsync("coffee"));
+        await Assert.ThrowsAsync<PermissionException>(() => staging.Disk("app").ReadAsync("README.md"));
         using var reader = new SkywakeClient(new SkywakeOptions { Key = _fixture.ReadKey });
-        Assert.Equal(7, (double)(await reader.Index("products").GetAsync("cup"))!["price"]!);
-        await Assert.ThrowsAsync<PermissionException>(() => reader.Index("products").UpsertAsync(new { id = "x", text = "nope" }));
+        Assert.Equal("# App, changed\n", await reader.Disk("app").ReadAsync("README.md"));
+        await Assert.ThrowsAsync<PermissionException>(() => reader.Disk("app").WriteAsync("x.txt", "nope"));
     }
 
     [ScenarioFact]
-    public async Task S13_AWrongNameIsNotFoundWithASuggestion()
+    public async Task S08_AWrongNameIsNotFoundWithASuggestion()
     {
-        var index = await Assert.ThrowsAsync<NotFoundException>(() => Sky.Index("prodcts").QueryAsync("coffee"));
-        Assert.Contains("products", index.Hint ?? "");
         var disk = await Assert.ThrowsAsync<NotFoundException>(() => Sky.Disk("ap").ReadAsync("README.md"));
         Assert.Contains("`app`", disk.Hint ?? "");
     }
 
     [ScenarioFact]
-    public async Task S14_DestroyingABranchThenTheIndexAndTheDiskEmptiesTheLists()
+    public async Task S09_DestroyingABranchThenTheDiskEmptiesTheList()
     {
-        await Products.On("draft").DestroyAsync();
-        Assert.Equal(new[] { "main" }, (await Products.BranchesAsync()).Select(branch => branch.Name));
         await App.On("agent-1").DestroyAsync();
-        foreach (var name in new[] { "products", "bulk" })
-        {
-            await Sky.Index(name).DestroyAsync();
-        }
+        Assert.Equal(new[] { "main" }, (await App.BranchesAsync()).Select(branch => branch.Name));
         await App.DestroyAsync();
-        Assert.Empty(await Sky.ListIndexesAsync().ToListAsync());
         Assert.Empty(await Sky.ListDisksAsync().ToListAsync());
     }
 
     [ScenarioFact]
-    public async Task S15_AFolderGoesUpAsOneCommitAndComesBackTheSame()
+    public async Task S10_AFolderGoesUpAsOneCommitAndComesBackTheSame()
     {
         var dir = Directory.CreateTempSubdirectory("skywake-up-").FullName;
         File.WriteAllText(Path.Combine(dir, "a.txt"), "alpha");
@@ -200,8 +126,6 @@ public sealed class ScenarioTests : IClassFixture<ScenarioFixture>
         Assert.Equal(new byte[] { 0, 1, 2, 255 }, File.ReadAllBytes(Path.Combine(back, "b.bin")));
         await site.DestroyAsync();
     }
-
-    private static double Price(IReadOnlyList<JsonObject> hits) => (double)hits[0]["price"]!;
 
     private static async Task<T?> Eventually<T>(Func<Task<T?>> check)
         where T : class

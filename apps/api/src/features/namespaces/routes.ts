@@ -6,8 +6,10 @@ import { allow, mayUse } from "../../auth/roles.ts";
 import type { Feature } from "../../http/context.ts";
 import { conflict, notFound } from "../../http/errors.ts";
 import { changeable, readable, signedIn } from "../../http/request.ts";
-import { admitsFilesystem } from "../billing/require.ts";
 import { removeAndDelete } from "../deletions/queries.ts";
+import { deleteIndex } from "../indexes/lifecycle.ts";
+import * as indexes from "../indexes/queries.ts";
+import * as links from "../links/queries.ts";
 import { bucketFolder } from "../environments/buckets.ts";
 import * as environments from "../environments/queries.ts";
 import * as namespaces from "./queries.ts";
@@ -24,7 +26,6 @@ export const namespacesFeature: Feature = {
       const caller = await signedIn(c);
       const { name, region: asked, visibility = "private" } = c.req.valid("json");
       allow(caller, "admin", name);
-      await admitsFilesystem(c, caller.org);
       const { db, stores } = c.var.services;
       const { region, own } = await environments.place(db, stores, caller.org, name, asked);
       // In a customer's bucket the org folder is left out: the whole bucket is theirs.
@@ -59,10 +60,14 @@ export const namespacesFeature: Feature = {
     api.openapi(routes.deleteNamespace, async (c) => {
       const { ns } = await changeable(c, c.req.valid("param").namespace, "admin");
       const { db, stores } = c.var.services;
+      const link = await links.find(db, ns.org, ns.name);
       if (!(await removeAndDelete(db, "namespace", ns.org, ns.name))) {
         throw notFound(`namespace \`${ns.name}\``);
       }
       stores.close(ns.folder);
+      if (link) await links.remove(db, ns.org, ns.name);
+      const made = link?.made && (await indexes.find(db, ns.org, link.index));
+      if (made) await deleteIndex(c, made);
       note(c, { details: { namespace: ns.name } });
       return c.body(null, 204);
     });

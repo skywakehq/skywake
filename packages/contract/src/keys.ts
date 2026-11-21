@@ -13,7 +13,7 @@ export const Key = z
     }),
     only: z.array(z.string()).openapi({
       description:
-        "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+        "Which disks in its environment it reaches: names, prefixes ending in `*`, " +
         "or `*` for all.",
     }),
     namespaces: z.string().openapi({
@@ -55,7 +55,7 @@ export const NewKey = z
       .optional()
       .openapi({
         description:
-          "Which disks and indexes in its environment it reaches: names, prefixes ending in `*`, " +
+          "Which disks in its environment it reaches: names, prefixes ending in `*`, " +
           "or `*` for all, the default.",
       }),
     namespaces: NamespacePattern.optional().openapi({

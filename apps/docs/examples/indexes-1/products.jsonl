@@ -1,6 +1,0 @@
-{"id": 1, "text": "red running shoes", "category": "shoes", "price": 89, "tags": ["sale", "running"], "in_stock": true}
-{"id": 2, "text": "trail running shoes", "category": "shoes", "price": 120, "tags": ["running"], "in_stock": true}
-{"id": 3, "text": "waterproof hiking boots", "category": "shoes", "price": 140, "tags": ["hiking"], "in_stock": false}
-{"id": 4, "text": "cotton sun hat", "category": "hats", "price": 25, "tags": ["sale"], "in_stock": true}
-{"id": 5, "text": "wool beanie", "category": "hats", "price": 30, "tags": ["winter"], "in_stock": true}
-{"id": 6, "text": "light rain jacket", "category": "jackets", "price": 95, "tags": ["hiking", "sale"], "in_stock": true}

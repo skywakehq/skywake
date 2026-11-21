@@ -35,6 +35,16 @@ const nextConfig: NextConfig = {
     // Skywake Cloud: off shows the waitlist, on (`1`) links to the console.
     CLOUD_OPEN: process.env.CLOUD_OPEN ?? "",
   },
+  async redirects() {
+    return [
+      {
+        source: "/:locale(en|de|es|fr|it)/:page(filesystem|search|benchmarks)",
+        destination: "/:locale",
+        permanent: true,
+      },
+      { source: "/:page(filesystem|search|benchmarks)", destination: "/", permanent: true },
+    ];
+  },
   async rewrites() {
     return [docs, dashboard].flatMap((zone) => (zone.url ? zoneRewrites(zone.path, zone.url) : []));
   },

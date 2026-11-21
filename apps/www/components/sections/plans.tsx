@@ -1,36 +1,37 @@
-// Pricing while the cloud is in private beta: self-hosting is free today,
-// and the cloud's prices come at launch. Two open cells split by a hairline.
 import { ArrowRight, ArrowUpRight, Check } from "lucide-react";
 
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
+import { FolderIcon } from "@/components/ui/folder-icon";
 import { Band } from "@/components/ui/frame";
 import { Head } from "@/components/ui/statement";
+import { cn } from "@/lib/utils";
 
-// Words come from messages.plans.options, in this order.
 const LINKS = [
   { href: site.docsUrl, featured: false },
   { href: "#waitlist", featured: true },
 ];
 
+/** Pricing while the cloud is in private beta: free self-hosting, and the cloud to come. */
 export function Plans({ t }: { t: HomeMessages }) {
   const p = t.plans;
   const options = p.options.map((option, i) => ({ ...option, ...LINKS[i]! }));
   return (
     <>
-      <Head id="pricing" eyebrow={p.eyebrow} title={p.title} line={p.line} center />
+      <Head as="h1" id="pricing" eyebrow={p.eyebrow} title={p.title} line={p.line} />
       <Band>
-        <ol className="grid gap-px bg-border md:grid-cols-2">
+        <ol className="grid gap-4 md:grid-cols-2">
           {options.map((option) => (
             <li
               key={option.name}
-              className="flex flex-col bg-background px-6 py-10 sm:px-10 lg:px-12"
+              className={cn(
+                "panel flex flex-col px-6 py-10 sm:px-10 lg:px-12",
+                option.featured && "panel-sun",
+              )}
             >
-              <p className="t-body flex items-center gap-2 font-medium text-foreground">
+              <p className="t-body flex items-center gap-2.5 font-medium text-foreground">
+                {option.featured && <FolderIcon className="h-5 w-auto -rotate-6" />}
                 {option.name}
-                {option.featured && (
-                  <span aria-hidden className="size-1.5 rounded-full bg-signal" />
-                )}
               </p>
               <p className="mt-6 flex items-baseline gap-2">
                 <span className="t-num text-foreground">{option.price}</span>

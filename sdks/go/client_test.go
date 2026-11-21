@@ -27,7 +27,7 @@ func TestEachStatusBecomesItsOwnErrorWithTheHintInTheMessage(t *testing.T) {
 	replies := []reply{
 		failure(401, "unauthorized", nil),
 		failure(403, "forbidden", nil),
-		failure(404, "not_found", map[string]any{"hint": "did you mean `products`?"}),
+		failure(404, "not_found", map[string]any{"hint": "did you mean `app`?"}),
 		failure(500, "internal", nil),
 	}
 	a := fake(t, func(_ seen, count int) reply { return replies[min(count, 4)-1] })
@@ -42,15 +42,15 @@ func TestEachStatusBecomesItsOwnErrorWithTheHintInTheMessage(t *testing.T) {
 	if !errors.As(err, &forbidden) {
 		t.Fatalf("want PermissionError, got %v", err)
 	}
-	_, err = sky.Index("prodcts").Info(ctx)
+	_, err = sky.Disk("ap").Info(ctx)
 	var missing *skywake.NotFound
 	if !errors.As(err, &missing) {
 		t.Fatalf("want NotFound, got %v", err)
 	}
-	if missing.Hint != "did you mean `products`?" || missing.RequestID != "req-1" || missing.Status != 404 {
+	if missing.Hint != "did you mean `app`?" || missing.RequestID != "req-1" || missing.Status != 404 {
 		t.Fatalf("fields: %+v", missing)
 	}
-	if !strings.Contains(err.Error(), "did you mean `products`?") {
+	if !strings.Contains(err.Error(), "did you mean `app`?") {
 		t.Fatalf("message: %s", err)
 	}
 	_, err = sky.Whoami(ctx)
@@ -124,89 +124,15 @@ func TestListsFollowNextUntilTheLastPage(t *testing.T) {
 	same(t, names, []string{"a", "b", "c"})
 }
 
-func TestUpsertTakesAnyNumberOfRowsAndSendsThemInBatches(t *testing.T) {
-	a := fake(t, func(s seen, _ int) reply {
-		rows := s.json(t).([]any)
-		ids := make([]any, len(rows))
-		for i, row := range rows {
-			ids[i] = row.(map[string]any)["id"]
-		}
-		return reply{body: map[string]any{"ids": ids, "count": len(rows)}}
-	})
-	rows := make([]skywake.Row, 25_000)
-	for i := range rows {
-		rows[i] = skywake.Row{"id": i, "text": fmt.Sprintf("row %d", i)}
-	}
-	done := must(a.sky(t).Index("products").Upsert(ctx, rows...))
-	if done.Count != 25_000 || len(done.IDs) != 25_000 {
-		t.Fatalf("done: %d, %d ids", done.Count, len(done.IDs))
-	}
-	var sizes []int
-	for _, s := range a.requests() {
-		sizes = append(sizes, len(s.json(t).([]any)))
-	}
-	same(t, sizes, []int{10_000, 10_000, 5_000})
-	same(t, a.requests()[0].query.Get("branch"), "main")
-}
-
-func TestUpdateAndDeleteTakeAnIdIdsOrAFilter(t *testing.T) {
-	a := fake(t, func(seen, int) reply { return reply{body: map[string]any{"count": 1}} })
-	products := a.sky(t).Index("products")
-	must(products.Update(ctx, 7, skywake.Row{"stock": 3}))
-	must(products.Update(ctx, skywake.Filter{"tag": skywake.Filter{"eq": "sale"}}, skywake.Row{"stock": 0}))
-	must(products.Delete(ctx, []int{1, 2}))
-	must(products.Delete(ctx, skywake.Filter{"filter": skywake.Filter{"stock": skywake.Filter{"eq": 0}}}))
-	var got []any
-	for _, s := range a.requests() {
-		got = append(got, []any{s.method, s.path, s.json(t)})
-	}
-	same(t, got, []any{
-		[]any{"PATCH", "/v2/indexes/products/rows", map[string]any{"id": 7, "fields": map[string]any{"stock": 3}}},
-		[]any{"PATCH", "/v2/indexes/products/rows", map[string]any{
-			"filter": map[string]any{"tag": map[string]any{"eq": "sale"}}, "fields": map[string]any{"stock": 0},
-		}},
-		[]any{"POST", "/v2/indexes/products/rows/delete", map[string]any{"ids": []int{1, 2}}},
-		[]any{"POST", "/v2/indexes/products/rows/delete", map[string]any{"filter": map[string]any{"stock": map[string]any{"eq": 0}}}},
-	})
-}
-
-func TestGetGivesNilForAMissingRowButFailsForAMissingIndex(t *testing.T) {
-	a := fake(t, func(s seen, _ int) reply {
-		if strings.Contains(s.path, "/rows/") {
-			return failure(404, "not_found", map[string]any{"path": "id"})
-		}
-		return failure(404, "not_found", map[string]any{"hint": "did you mean `products`?"})
-	})
-	sky := a.sky(t)
-	row, err := sky.Index("products").Get(ctx, "a b")
-	if row != nil || err != nil {
-		t.Fatalf("want nil, nil; got %v, %v", row, err)
-	}
-	same(t, a.requests()[0].path, "/v2/indexes/products/rows/a%20b")
-	_, err = sky.Index("prodcts").Info(ctx)
-	var missing *skywake.NotFound
-	if !errors.As(err, &missing) {
-		t.Fatalf("want NotFound, got %v", err)
-	}
-}
-
 func TestQueryTakesTextFirstAndOptionsOnTheirOwn(t *testing.T) {
 	a := fake(t, func(seen, int) reply {
-		return reply{body: map[string]any{"data": []any{map[string]any{"id": 1, "score": 0.9, "title": "mug"}}, "next": nil}}
+		return reply{body: map[string]any{"data": []any{map[string]any{"path": "docs/coffee.md", "score": 0.9}}, "next": nil}}
 	})
-	products := a.sky(t).Index("products", "draft")
-	hits := must(products.Query(ctx, "coffee", skywake.QueryOptions{Limit: 3, Mode: "keywords"}))
-	same(t, hits[0]["title"], "mug")
-	must(products.Query(ctx, "", skywake.QueryOptions{
-		Filter: skywake.Filter{"price": skywake.Filter{"lt": 10}},
-		Sort:   map[string]string{"price": "asc"},
-	}))
-	same(t, a.requests()[0].json(t), map[string]any{"text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft"})
-	same(t, a.requests()[1].json(t), map[string]any{
-		"filter": map[string]any{"price": map[string]any{"lt": 10}},
-		"sort":   map[string]any{"price": "asc"},
-		"branch": "draft",
-	})
+	app := a.sky(t).Disk("app", "draft")
+	hits := must(app.Query(ctx, "coffee", skywake.SearchOptions{Limit: 3, Path: "docs"}))
+	same(t, hits[0].Path, "docs/coffee.md")
+	same(t, a.requests()[0].path, "/v2/disks/app/query")
+	same(t, a.requests()[0].json(t), map[string]any{"text": "coffee", "limit": 3, "path": "docs", "branch": "draft"})
 }
 
 func TestFilesAreReadAndWrittenByPathEachPartOfItEncoded(t *testing.T) {

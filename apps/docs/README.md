@@ -38,7 +38,6 @@ All paths are under the base path.
 | `/`                          | `content/docs/index.mdx`                              |
 | `/getting-started/*`         | `content/docs/getting-started/`                       |
 | `/filesystem/*`              | `content/docs/filesystem/`                            |
-| `/indexes/*`                 | `content/docs/indexes/`                               |
 | `/agents/*`                  | `content/docs/agents/`                                |
 | `/self-hosting/*`            | `content/docs/self-hosting/`                          |
 | `/security/*`                | `content/docs/security/`                              |
@@ -90,7 +89,7 @@ Every guide and folder names a [Lucide](https://lucide.dev/icons) icon in
 its frontmatter or `meta.json` (`icon: GitFork`); the sidebar, page headers
 and cards draw it. Guides end with `## Next` and a few `<Card href="..." />`.
 
-Guides link to each other by file (`../indexes/filters.mdx`) and to the
+Guides link to each other by file (`../filesystem/branches.mdx`) and to the
 references by route (`/reference/cli/mount`), never with `/docs`.
 
 ## Reference
@@ -98,7 +97,8 @@ references by route (`/reference/cli/mount`), never with `/docs`.
 Never hand-written.
 
 - **HTTP API.** `build` first rewrites `openapi.json` from the contract
-  (`packages/contract/emit.ts`), so the pages can't drift.
+  (`packages/contract/emit.ts`), so the pages can't drift. `lib/openapi.ts`
+  leaves out the routes tagged `indexes` and `links`.
 - **CLI.** `skywake __docs-spec > apps/docs/generated/cli.json`. The CLI's
   tests fail when the file differs from clap's command tree; run
   `UPDATE_DOCS_SPEC=1 cargo test -p skywake-cli docs_spec` to rewrite it.

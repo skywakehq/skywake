@@ -14,26 +14,13 @@ module Skywake
       Disk.new(@http, name, branch || MAIN)
     end
 
-    def index(name, branch: nil)
-      Index.new(@http, name, branch || MAIN)
-    end
-
     def create_disk(name, region: nil, search: nil, visibility: nil)
       @http.call("POST", "/disks", json: { name: name, region: region, search: search, visibility: visibility }.compact)
       disk(name)
     end
 
-    def create_index(name, schema: nil, region: nil, embed: nil)
-      @http.call("POST", "/indexes", json: { name: name, schema: schema, region: region, embed: embed }.compact)
-      index(name)
-    end
-
     def list_disks
       @http.pages("/disks")
-    end
-
-    def list_indexes
-      @http.pages("/indexes")
     end
 
     def create_key(name, role, environment: nil, only: nil, expires_in_days: nil)

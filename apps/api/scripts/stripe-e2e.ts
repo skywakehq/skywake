@@ -3,7 +3,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import Stripe from "stripe";
 
-import { METERS, meterKey, PAID, planKey } from "../src/features/billing/catalog.ts";
+import { PAID, PLAN, planKey } from "../src/features/billing/catalog.ts";
 import { StripePayments } from "../src/features/billing/stripe.ts";
 
 const key = process.env.STRIPE_SECRET_KEY ?? "";
@@ -13,7 +13,6 @@ if (!key.startsWith("sk_test_") && !key.startsWith("rk_test_")) {
 
 const stripe = new Stripe(key);
 const payments = new StripePayments(key, "whsec_unused", "pk_test_unused", stripe);
-const DAY = 24 * 60 * 60;
 const step = (text: string) => console.log(`- ${text}`);
 
 async function advance(clock: string, to: number) {
@@ -27,7 +26,7 @@ async function advance(clock: string, to: number) {
 }
 
 const prices = await stripe.prices.list({
-  lookup_keys: [...PAID.map(planKey), ...METERS.map(meterKey)],
+  lookup_keys: PAID.map(planKey),
   active: true,
   limit: 100,
 });
@@ -54,7 +53,7 @@ try {
     org: "org_e2e",
     customer: customer.id,
     plan: "launch",
-    returnUrl: "https://console.example.com/settings#billing",
+    returnUrl: "https://console.example.com/settings/billing",
     ui: "custom",
   });
   assert.ok(started.ui === "custom");
@@ -63,7 +62,7 @@ try {
     org: "org_e2e",
     customer: customer.id,
     plan: "launch",
-    returnUrl: "https://console.example.com/settings#billing",
+    returnUrl: "https://console.example.com/settings/billing",
     ui: "hosted",
   });
   assert.ok(hosted.ui === "hosted");
@@ -76,72 +75,23 @@ try {
   step("a Launch subscription starts and its first invoice is paid");
   const created = await stripe.subscriptions.create({
     customer: customer.id,
-    items: [
-      { price: price(planKey("launch")), quantity: 1 },
-      ...METERS.map((m) => ({ price: price(meterKey(m)) })),
-    ],
+    items: [{ price: price(planKey("launch")), quantity: 1 }],
     metadata: { org: "org_e2e" },
   });
   const sub = (await payments.subscription(created.id))!;
   assert.equal(sub.plan, "launch");
   assert.equal(sub.status, "active");
   assert.equal(sub.nextPlan, null);
-  const first = (await payments.invoice(idOf(created.latest_invoice)))!;
+  const first = await stripe.invoices.retrieve(idOf(created.latest_invoice));
   assert.equal(first.status, "paid");
-  assert.equal(first.planCents, 1600);
+  assert.equal(first.total, PLAN.launch.priceCents);
 
-  step("the first invoice credits the minimum once");
-  const grantOf = (invoice: {
-    id: string;
-    planCents: number;
-    planStart: Date | null;
-    planEnd: Date | null;
-  }) =>
-    payments.grant({
-      customer: customer.id,
-      invoice: invoice.id,
-      cents: invoice.planCents,
-      effectiveAt: new Date(Math.max(start * 1000, invoice.planStart!.getTime() + 1000)),
-      expiresAt: new Date(invoice.planEnd!.getTime() + 4 * DAY * 1000),
-    });
-  await grantOf(first);
-  await grantOf(first);
-  const grants = (await payments.grants(customer.id)).filter((g) => g.invoice === first.id);
-  assert.equal(grants.length, 1);
-
-  step("usage reaches the meters, and a repeated event is dropped");
-  const at = new Date(start * 1000);
-  const usage = {
-    meter: "writes" as const,
-    customer: customer.id,
-    value: 2000n,
-    at,
-    identifier: `${created.id}:writes:e2e`,
-  };
-  await payments.report(usage);
-  await payments.report(usage);
-  await payments.report({
-    ...usage,
-    meter: "queries",
-    value: 1000n,
-    identifier: `${created.id}:queries:e2e`,
-  });
-
-  step("renewal bills the usage against the credited minimum");
-  await sleep(5000);
+  step("renewal bills the plan's price and nothing else");
   await advance(clock.id, Math.floor(sub.periodEnd.getTime() / 1000) + 2 * 3600);
   const invoices = await stripe.invoices.list({ subscription: created.id, limit: 10 });
   const cycle = invoices.data.find((i) => i.billing_reason === "subscription_cycle");
   assert.ok(cycle, "a renewal invoice exists");
-  const lines = await stripe.invoices.listLineItems(cycle.id!, { limit: 100 });
-  const usageCents = lines.data
-    .filter((line) => idOf(line.pricing?.price_details?.price) !== price(planKey("launch")))
-    .reduce((sum, line) => sum + line.amount, 0);
-  const credited = (cycle.total_pretax_credit_amounts ?? []).reduce((sum, c) => sum + c.amount, 0);
-  console.log(`  usage ${usageCents} cents, credited ${credited}, total ${cycle.total}`);
-  assert.equal(usageCents, 293 + 0);
-  assert.equal(credited, usageCents);
-  assert.equal(cycle.total, 1600);
+  assert.equal(cycle.total, PLAN.launch.priceCents);
   const renewed = (await payments.subscription(created.id))!;
   assert.ok(renewed.periodStart.getTime() >= sub.periodEnd.getTime());
 
@@ -153,9 +103,8 @@ try {
     (i) => i.billing_reason === "subscription_update",
   );
   assert.ok(upgrade);
-  const prorated = (await payments.invoice(upgrade.id!))!;
-  console.log(`  prorated plan lines ${prorated.planCents} cents`);
-  assert.ok(prorated.planCents > 0 && prorated.planCents <= 12_800 - 1600);
+  console.log(`  prorated difference ${upgrade.total} cents`);
+  assert.ok(upgrade.total > 0 && upgrade.total <= PLAN.scale.priceCents! - PLAN.launch.priceCents!);
 
   step("a downgrade waits for the period's end, and can be taken back");
   await payments.changePlan(created.id, "launch", "period_end");

@@ -1,19 +1,11 @@
 "use client";
 
-import { ArrowUpRight, ScanSearch } from "lucide-react";
-import {
-  animate,
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-} from "motion/react";
+import { ArrowUpRight } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type ComponentProps,
   type MouseEvent,
   type ReactNode,
-  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -22,11 +14,11 @@ import { Button as UIButton } from "@skywake/ui/components/button";
 import { Tabs, TabsItem } from "@skywake/ui/components/tabs";
 import type { IconComponent } from "@skywake/ui/lib/icon-context";
 import { Input } from "@skywake/ui/components/input";
-import { Skeleton } from "@skywake/ui/components/skeleton";
 import { meshOf } from "@skywake/ui/lib/mesh";
+import { Skeleton } from "@skywake/ui/components/skeleton";
+import { FolderIcon } from "@skywake/ui/components/folder-icon";
 import { cn } from "@skywake/ui/lib/utils";
 import { Link } from "@/components/shell/router";
-import { nameInEnv } from "@/lib/names";
 
 export { Input };
 export const cx = cn;
@@ -83,7 +75,7 @@ export function Kbd({ children, className }: { children: ReactNode; className?: 
   return (
     <kbd
       className={cn(
-        "inline-flex h-[18px] min-w-[18px] items-center justify-center border border-line-strong bg-background px-1 font-sans text-[10.5px] text-muted-foreground",
+        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-[5px] bg-tint px-1 font-sans text-[10.5px] text-muted-foreground",
         className,
       )}
     >
@@ -148,9 +140,19 @@ export function Hash({ value, className }: { value?: string | null; className?: 
   );
 }
 
+/** The small label above a heading, marked with a small folder. */
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-3 flex w-fit items-center gap-2 text-sm font-medium text-muted-foreground">
+      <FolderIcon className="h-3.5 w-auto shrink-0 -rotate-6" />
+      {children}
+    </div>
+  );
+}
+
 /**
- * A console page: a small line naming where you are, a large title, then
- * the content. Every page uses it, so they line up.
+ * A console page: a label and a title on the left, a line and the actions on
+ * the right, then the content. Every page uses it, so they line up.
  */
 export function Page({
   eyebrow,
@@ -171,98 +173,30 @@ export function Page({
     <div className="flex-1 overflow-y-auto">
       <div
         className={cn(
-          "mx-auto grid gap-8 px-8 pt-10 pb-16 max-sm:px-4 max-sm:pt-6",
+          "mx-auto grid gap-10 px-8 pt-10 pb-16 max-sm:px-4 max-sm:pt-6",
           narrow ? "max-w-2xl" : "max-w-6xl",
         )}
       >
-        <div className="flex flex-wrap items-end gap-4">
+        <div
+          className={cn(
+            "grid gap-5",
+            !narrow && "lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-end lg:gap-12",
+          )}
+        >
           <div className="min-w-0">
-            {eyebrow && (
-              <div className="mb-2 text-micro font-medium tracking-wide text-faint uppercase">
-                {eyebrow}
-              </div>
-            )}
-            <h1 className="text-xl leading-7 font-semibold tracking-[-0.015em]">{title}</h1>
-            {description && (
-              <div className="mt-1.5 text-sm text-muted-foreground">{description}</div>
-            )}
+            {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+            <h1 className="text-[28px] leading-8 font-medium tracking-[-0.03em]">{title}</h1>
           </div>
-          {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-/**
- * A disk's or an index's page: its mark and name, a line of facts, tabs,
- * then the open tab. Disks and indexes share it, so both read the same.
- */
-export function ResourcePage({
-  name,
-  mark,
-  facts,
-  actions,
-  tabs,
-  tools,
-  children,
-}: {
-  name: string;
-  /** The orb for a disk, the square mark for an index. */
-  mark: ReactNode;
-  /** Short facts, shown in a row with dots between them. */
-  facts: ReactNode[];
-  actions?: ReactNode;
-  tabs: { href: string; label: string; active: boolean }[];
-  tools?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto grid max-w-6xl gap-8 px-8 pt-10 pb-16 max-sm:px-4 max-sm:pt-6">
-        <div className="grid gap-6">
-          <div className="flex flex-wrap items-center gap-3.5">
-            {mark}
-            <div className="min-w-0">
-              <h1 className="truncate text-[22px] leading-7 font-semibold tracking-[-0.02em]">
-                {nameInEnv(name)}
-              </h1>
-              <p className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[13px] text-muted-foreground">
-                {facts.map((fact, i) => (
-                  <span key={i} className="flex items-baseline gap-x-1.5">
-                    {i > 0 && <span className="text-faint">·</span>}
-                    {fact}
-                  </span>
-                ))}
-              </p>
+          {(description || actions) && (
+            <div className="grid gap-4">
+              {description && (
+                <div className="max-w-[46ch] text-sm leading-6 text-muted-foreground">
+                  {description}
+                </div>
+              )}
+              {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
             </div>
-            {actions && <div className="ml-auto flex items-center gap-2">{actions}</div>}
-          </div>
-          <nav className="flex items-center gap-6 overflow-x-auto border-b">
-            {tabs.map((tab) => (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className={cn(
-                  "relative shrink-0 pb-3 text-sm transition-colors",
-                  tab.active
-                    ? "font-medium text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab.label}
-                {tab.active && (
-                  <motion.span
-                    layoutId={`tabs-${name}`}
-                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                    className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground"
-                  />
-                )}
-              </Link>
-            ))}
-            {tools && <div className="ml-auto flex items-center gap-2 pb-2">{tools}</div>}
-          </nav>
+          )}
         </div>
         {children}
       </div>
@@ -270,13 +204,41 @@ export function ResourcePage({
   );
 }
 
-/** A row of headline numbers, open on the page with a hairline under them. */
-export function Stats({ children }: { children: ReactNode }) {
+export type Tab = { href: string; label: string; active: boolean };
+
+/** A row of tabs as pills, with a fill that slides to the open one. `tools` sit at its end. */
+export function TabNav({ id, tabs, tools }: { id: string; tabs: Tab[]; tools?: ReactNode }) {
   return (
-    <div className="grid grid-cols-2 gap-x-10 gap-y-6 border-b pb-8 md:auto-cols-fr md:grid-flow-col">
-      {children}
-    </div>
+    <nav className="flex items-center gap-1 overflow-x-auto">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.href}
+          href={tab.href}
+          className={cn(
+            "relative isolate flex h-8 shrink-0 items-center rounded-full px-3.5 text-sm transition-colors",
+            tab.active
+              ? "font-medium text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {tab.active && (
+            <motion.span
+              layoutId={`tabs-${id}`}
+              transition={{ type: "spring", stiffness: 500, damping: 40 }}
+              className="absolute inset-0 -z-10 rounded-full bg-active"
+            />
+          )}
+          {tab.label}
+        </Link>
+      ))}
+      {tools && <div className="ml-auto flex items-center gap-2">{tools}</div>}
+    </nav>
   );
+}
+
+/** A row of headline numbers, each on its own soft tray. */
+export function Stats({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2 gap-3 md:auto-cols-fr md:grid-flow-col">{children}</div>;
 }
 
 export function Stat({
@@ -298,7 +260,7 @@ export function Stat({
 }) {
   const Box = href ? Link : "div";
   return (
-    <Box href={href!} className={cn("group relative flex flex-col gap-1")}>
+    <Box href={href!} className="group panel relative flex flex-col gap-1 p-5">
       <span
         className={cn(
           "flex items-center gap-1 text-xs text-muted-foreground",
@@ -319,14 +281,14 @@ export function Stat({
       />
       {note && <span className="text-xs text-faint">{note}</span>}
       {trend && (
-        <Spark values={trend} className="absolute right-0 bottom-0 h-6 w-20 max-sm:hidden" />
+        <Spark values={trend} className="absolute right-5 bottom-5 h-6 w-20 max-sm:hidden" />
       )}
     </Box>
   );
 }
 
 /** Small bars, one per day, the last one darker: how busy something has been. */
-export function Spark({ values, className }: { values: number[]; className?: string }) {
+function Spark({ values, className }: { values: number[]; className?: string }) {
   const most = Math.max(1, ...values);
   return (
     <div className={cn("flex items-end gap-[3px]", className)} aria-hidden>
@@ -357,57 +319,22 @@ export function perDay(times: number[], days: number, current = Date.now()) {
   return counts;
 }
 
-/** A round mark for an agent or a person: their initial on a colour of their own. */
+/** A person's or a key's mark: a round orb of colour, the same for the same name. */
 export function Avatar({ name, className }: { name: string; className?: string }) {
-  let hue = 0;
-  for (const char of name) hue = (hue * 31 + char.charCodeAt(0)) % 360;
   return (
     <span
       title={name}
-      className={cn(
-        "grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-white uppercase ring-2 ring-background",
-        className,
-      )}
-      style={{
-        backgroundImage: `linear-gradient(140deg, oklch(0.74 0.09 ${hue}), oklch(0.56 0.11 ${hue + 50}))`,
-      }}
-    >
-      {name.replace(/^agents?[-/]/, "")[0]}
-    </span>
-  );
-}
-
-/** A disk's mark: a round gradient mesh made from its name. */
-export function Orb({ name, className }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn("inline-block size-5 shrink-0 rounded-full", className)}
+      role="img"
+      aria-label={name}
       style={{ background: meshOf(name) }}
+      className={cn("block size-6 shrink-0 rounded-full", className)}
     />
   );
 }
 
-/**
- * An index's mark: its own mesh, but square, with the search glyph on it,
- * so an index never reads as a disk.
- */
-export function IndexMark({ name, className }: { name: string; className?: string }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "inline-grid size-5 shrink-0 place-items-center rounded-[30%] text-white",
-        className,
-      )}
-      style={{ background: meshOf(name) }}
-    >
-      <ScanSearch
-        className="size-[55%] drop-shadow-[0_1px_1px_rgb(0_0_0/0.25)]"
-        strokeWidth={2.25}
-      />
-    </span>
-  );
+/** A disk's mark: the yellow folder. */
+export function DiskMark({ className }: { className?: string }) {
+  return <FolderIcon className={cn("h-5 w-auto shrink-0", className)} />;
 }
 
 type Box = { x: number; y: number; width: number; height: number };
@@ -484,23 +411,6 @@ export function Glide({
   );
 }
 
-/** A few avatars, overlapping, then "+n". */
-export function Avatars({ names, max = 3 }: { names: string[]; max?: number }) {
-  if (!names.length) return null;
-  return (
-    <span className="flex items-center -space-x-1.5">
-      {names.slice(0, max).map((name) => (
-        <Avatar key={name} name={name} className="size-5" />
-      ))}
-      {names.length > max && (
-        <span className="grid size-5 place-items-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground ring-2 ring-background">
-          +{names.length - max}
-        </span>
-      )}
-    </span>
-  );
-}
-
 /**
  * A titled section with no box: a header line, then its rows. Rows keep their
  * own padding, so the section bleeds out by that much and the text lines up
@@ -521,7 +431,7 @@ export function Panel({
 }) {
   return (
     <section className={cn("-mx-4", className)}>
-      <header className="flex h-10 items-center gap-2 border-b px-4">
+      <header className="flex h-10 items-center gap-2 px-4">
         <h2 className="text-sm font-medium">{title}</h2>
         {count !== undefined && <span className="text-xs tabular-nums text-faint">{count}</span>}
         {action && <div className="ml-auto flex items-center gap-2">{action}</div>}
@@ -531,73 +441,16 @@ export function Panel({
   );
 }
 
-export function Header({ title, children }: { title: ReactNode; children?: ReactNode }) {
+/** A list with nothing in it yet: a folder, what goes here, and how to add the first one. */
+export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b px-5">
-      <h1 className="min-w-0 truncate text-base font-medium">{title}</h1>
-      <div className="ml-auto flex items-center gap-2">{children}</div>
-    </header>
-  );
-}
-
-/**
- * A list with nothing in it yet: its own columns drawn faintly, then what
- * goes here and how to add the first one.
- */
-export function Empty({
-  title,
-  columns = [],
-  children,
-}: {
-  title: string;
-  columns?: string[];
-  children?: ReactNode;
-}) {
-  const cells = Math.max(columns.length, 2);
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <div aria-hidden className="select-none">
-        {columns.length > 0 && (
-          <div className="flex h-9 items-center gap-6 border-b border-border/60 px-5 text-xs text-muted-foreground">
-            {columns.map((column, i) => (
-              <span key={column} className={i === 0 ? "flex-1" : "w-16 text-right"}>
-                {column}
-              </span>
-            ))}
-          </div>
-        )}
-        {[0.9, 0.6, 0.3].map((opacity, row) => (
-          <div
-            key={row}
-            style={{ opacity }}
-            className="flex h-10 items-center gap-6 border-b border-border/60 px-5"
-          >
-            {Array.from({ length: cells }, (_, i) =>
-              i === 0 ? (
-                <span key={i} className="flex-1">
-                  <span
-                    className="rounded-sm block h-2 bg-foreground/[0.07]"
-                    style={{ width: `${[38, 26, 32][row]}%` }}
-                  />
-                </span>
-              ) : (
-                <span key={i} className="flex w-16 justify-end">
-                  <span className="rounded-sm block h-2 w-10 bg-foreground/[0.07]" />
-                </span>
-              ),
-            )}
-          </div>
-        ))}
-      </div>
-      <div className="max-w-md px-5 py-8">
-        <p className="text-base font-medium">{title}</p>
+    <div className="panel grid justify-items-start gap-5 p-8 sm:p-10">
+      <FolderIcon className="h-12 w-auto" />
+      <div className="max-w-md">
+        <p className="text-lg font-medium tracking-[-0.015em]">{title}</p>
         {children && <div className="mt-1.5 text-sm text-muted-foreground">{children}</div>}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -616,14 +469,8 @@ export function Rows({ count = 6, className }: { count?: number; className?: str
 }
 
 /** A number that rolls to its new value instead of jumping. */
-export function Count({ value, className }: { value: number; className?: string }) {
-  const motionValue = useMotionValue(value);
-  const shown = useTransform(motionValue, (v) => Math.round(v).toLocaleString());
-  useEffect(() => {
-    const controls = animate(motionValue, value, { duration: 0.6, ease: [0.22, 1, 0.36, 1] });
-    return () => controls.stop();
-  }, [motionValue, value]);
-  return <motion.span className={cn("tabular-nums", className)}>{shown}</motion.span>;
+function Count({ value, className }: { value: number; className?: string }) {
+  return <span className={cn("tabular-nums", className)}>{value.toLocaleString()}</span>;
 }
 
 // One clock for every "3m ago" on the page, so they tick together.

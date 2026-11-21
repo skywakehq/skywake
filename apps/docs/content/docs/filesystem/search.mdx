@@ -1,0 +1,58 @@
+---
+title: Search
+icon: Search
+description: Turn on a disk's search switch, then query its files by meaning and keywords, on every branch.
+---
+
+Search is a switch on a disk. Turn it on and call `query` on the disk. There is nothing else to make or sync.
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/filesystem/search.ts
+</include>
+
+<include lang="py" meta='tab="Python"'>
+  ../../../examples/filesystem/search.py
+</include>
+
+<include lang="bash" meta='tab="CLI"'>
+  ../../../examples/filesystem/search.sh
+</include>
+
+Each hit is `{ path, score, snippet }`, best first, one per file. `query` takes `limit` (10 by default) and `path` to search one folder, and searches the handle's branch. Agents get the same search as the `query` tool of the [MCP server](../agents/mcp.mdx).
+
+## Turn it on or off
+
+`search` is on by default when the environment has an embedding model, so a disk made by its first write is usually searchable already. Set it yourself when you make the disk, or change it later:
+
+| Do                | TypeScript                                | Python                                | CLI or HTTP                         |
+| ----------------- | ----------------------------------------- | ------------------------------------- | ----------------------------------- |
+| On when making it | `sky.createDisk("app", { search: true })` | `sky.create_disk("app", search=True)` | `skywake create disk app --search`  |
+| Change it         | `app.configure({ search: false })`        | `app.configure(search=False)`         | `PATCH /v2/disks/app {"search": …}` |
+| See it            | `(await app.info()).search`               | `app.info()["search"]`                | `GET /v2/disks/app`                 |
+
+With search off, `query` fails with `Conflict` and a hint to turn it on. `grep` and `find` work either way. Turning search off deletes the disk's search data.
+
+## Branches
+
+Every branch of the disk has its own search. A fork is searchable at once, and what an agent writes on its branch is found only there. After a merge, `main` catches up on its own.
+
+<include lang="ts" meta='tab="TypeScript"'>
+  ../../../examples/filesystem/search-fork.ts
+</include>
+
+## What gets searched, and when
+
+- Text files, PDFs, and Word, PowerPoint and Excel files (`.docx`, `.pptx`, `.xlsx`), up to 16 MiB of text each. Long files are split into passages, and a file is returned once, at its best passage.
+- Binary files, old `.doc`, `.ppt` and `.xls` files, and PDFs without a text layer are skipped.
+- A commit is searchable within seconds, not at once, so poll briefly in scripts as the examples do. Saves from a [mount](./mount.mdx) are batched for about 30 seconds.
+- Only what changed is processed again, and an edit embeds only the passages it changed. Embeddings are [billed](../pricing.mdx) as usual.
+
+There is no setting for which paths are searched and no sync status yet: every file the rules above accept is searched.
+
+## Next
+
+<Cards>
+  <Card href="./branches.mdx" />
+  <Card href="../agents/mcp.mdx" />
+  <Card href="/reference/cli/query" />
+</Cards>

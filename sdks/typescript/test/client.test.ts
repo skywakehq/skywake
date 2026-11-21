@@ -80,7 +80,7 @@ test("each status becomes its own error, with the hint in the message", async (t
   const replies = [
     failure(401, "unauthorized"),
     failure(403, "forbidden"),
-    failure(404, "not_found", { hint: "did you mean `products`?" }),
+    failure(404, "not_found", { hint: "did you mean `app`?" }),
     failure(500, "internal"),
   ];
   const api = await fake((_, count) => replies[Math.min(count, 4) - 1]!);
@@ -88,10 +88,10 @@ test("each status becomes its own error, with the hint in the message", async (t
   const sky = api.sky({ retries: 0 });
   await assert.rejects(sky.whoami(), AuthError);
   await assert.rejects(sky.whoami(), PermissionError);
-  await assert.rejects(sky.index("prodcts").info(), (error: NotFound) => {
+  await assert.rejects(sky.disk("ap").info(), (error: NotFound) => {
     assert.ok(error instanceof NotFound);
-    assert.equal(error.hint, "did you mean `products`?");
-    assert.match(error.message, /did you mean `products`\?/);
+    assert.equal(error.hint, "did you mean `app`?");
+    assert.match(error.message, /did you mean `app`\?/);
     assert.equal(error.requestId, "req-1");
     return true;
   });
@@ -132,81 +132,6 @@ test("lists follow next until the last page", async (t) => {
   const names = [];
   for await (const disk of api.sky().listDisks()) names.push(disk.name);
   assert.deepEqual(names, ["a", "b", "c"]);
-});
-
-test("upsert takes any number of rows and sends them in batches", async (t) => {
-  const api = await fake((seen) => {
-    const rows = json(seen) as { id: number }[];
-    return { body: { ids: rows.map((row) => row.id), count: rows.length } };
-  });
-  t.after(api.close);
-  const rows = Array.from({ length: 25_000 }, (_, id) => ({ id, text: `row ${id}` }));
-  const done = await api.sky().index("products").upsert(rows);
-  assert.equal(done.count, 25_000);
-  assert.equal(done.ids.length, 25_000);
-  assert.deepEqual(
-    api.seen.map((seen) => (json(seen) as unknown[]).length),
-    [10_000, 10_000, 5_000],
-  );
-  assert.equal(api.seen[0]!.query.get("branch"), "main");
-});
-
-test("update and delete take an id, ids, or a filter", async (t) => {
-  const api = await fake(() => ({ body: { count: 1 } }));
-  t.after(api.close);
-  const products = api.sky().index("products");
-  await products.update(7, { stock: 3 });
-  await products.update({ tag: { eq: "sale" } }, { stock: 0 });
-  await products.delete([1, 2]);
-  await products.delete({ filter: { stock: { eq: 0 } } });
-  assert.deepEqual(
-    api.seen.map((seen) => [seen.method, seen.path, json(seen)]),
-    [
-      ["PATCH", "/v2/indexes/products/rows", { id: 7, fields: { stock: 3 } }],
-      [
-        "PATCH",
-        "/v2/indexes/products/rows",
-        { filter: { tag: { eq: "sale" } }, fields: { stock: 0 } },
-      ],
-      ["POST", "/v2/indexes/products/rows/delete", { ids: [1, 2] }],
-      ["POST", "/v2/indexes/products/rows/delete", { filter: { stock: { eq: 0 } } }],
-    ],
-  );
-});
-
-test("get gives null for a missing row but throws for a missing index", async (t) => {
-  const api = await fake((seen) =>
-    seen.path.includes("/rows/")
-      ? failure(404, "not_found", { path: "id" })
-      : failure(404, "not_found", { hint: "did you mean `products`?" }),
-  );
-  t.after(api.close);
-  const sky = api.sky();
-  assert.equal(await sky.index("products").get("a b"), null);
-  assert.equal(api.seen[0]!.path, "/v2/indexes/products/rows/a%20b");
-  await assert.rejects(sky.index("prodcts").info(), NotFound);
-});
-
-test("query takes text first, and options on their own", async (t) => {
-  const api = await fake(() => ({
-    body: { data: [{ id: 1, score: 0.9, title: "mug" }], next: null },
-  }));
-  t.after(api.close);
-  const products = api.sky().index("products", { branch: "draft" });
-  const [hit] = await products.query("coffee", { limit: 3, mode: "keywords" });
-  assert.equal(hit!.title, "mug");
-  await products.query({ filter: { price: { lt: 10 } }, sort: { price: "asc" } });
-  assert.deepEqual(json(api.seen[0]!), {
-    text: "coffee",
-    limit: 3,
-    mode: "keywords",
-    branch: "draft",
-  });
-  assert.deepEqual(json(api.seen[1]!), {
-    filter: { price: { lt: 10 } },
-    sort: { price: "asc" },
-    branch: "draft",
-  });
 });
 
 test("files are read and written by path, each part of it encoded", async (t) => {

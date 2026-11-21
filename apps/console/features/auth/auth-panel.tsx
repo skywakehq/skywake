@@ -3,8 +3,8 @@ import { AuthGrid } from "./auth-grid";
 
 // The landing page's numbers. The console can't import the site, so they are copied.
 const STATS = [
-  { figure: "300×", line: "faster than copying 1 GB" },
-  { figure: "411 ms", line: "cold search, 10M vectors" },
+  { figure: "0.5 ms", line: "synced 4 KiB write" },
+  { figure: "79 ms", line: "to fail over to another machine" },
 ];
 
 export function Wordmark() {

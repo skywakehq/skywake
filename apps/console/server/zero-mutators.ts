@@ -10,6 +10,7 @@ import {
   named,
   newEnvironment,
   newNamespace,
+  oneNamespace,
   protect,
 } from "@/zero/mutators";
 
@@ -44,6 +45,10 @@ export function serverMutators(caller: Caller) {
     namespace: {
       create: defineMutator(newNamespace, async ({ args }) => {
         await skywakeJSON(caller, "/namespaces", "POST", args);
+        await skywakeJSON(caller, branches(args.name), "POST", { name: "main" });
+      }),
+      remove: defineMutator(oneNamespace, async ({ args }) => {
+        await skywakeJSON(caller, `/namespaces/${part(args.name)}`, "DELETE");
       }),
     },
     environment: {

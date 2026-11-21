@@ -3,20 +3,29 @@
 import { useQuery } from "@rocicorp/zero/react";
 import { GitFork } from "lucide-react";
 import type { ReactNode } from "react";
-import { useRoute } from "@/components/shell/router";
-import { envOf } from "@/lib/names";
+import { Link, useRoute } from "@/components/shell/router";
+import { nameInEnv } from "@/lib/names";
 import { nsPath } from "@/lib/paths";
-import { Button, Hash, Orb, ResourcePage, plural } from "@/components/kit";
-import { city } from "@/features/environments/regions";
+import { Button, DiskMark, Hash, TabNav, plural } from "@/components/kit";
+import { ForkDialog, useForkDialog } from "@/features/branches/branch-actions";
+import { useFleet } from "@/features/fleet/fleet";
 import { queries } from "@/zero/queries";
+import { DeleteNamespace } from "./delete-namespace";
+import { BucketBadge, MountLine, useSearchOn } from "./disk-facts";
 
-/** A disk's pages: its name, its main branch, four views, then the view. */
+const TABS = [
+  ["files", "Files"],
+  ["branches", "Branches"],
+  ["history", "History"],
+  ["search", "Search"],
+] as const;
+
+/** A disk's page: its folder and name, four views, the open view, and the disk's details beside it. */
 export function NamespacePage({
   ns,
   main,
   head,
   commits,
-  onFork,
   tools,
   children,
 }: {
@@ -24,47 +33,110 @@ export function NamespacePage({
   main?: string;
   head?: string | null;
   commits: number;
-  onFork?: () => void;
   tools?: ReactNode;
   children: ReactNode;
 }) {
   const { view } = useRoute();
+  const { fork, openFork, closeFork } = useForkDialog();
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="grid gap-6 px-8 pt-8 pb-16 max-sm:px-4 max-sm:pt-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <DiskMark className="h-8" />
+          <h1 className="min-w-0 truncate text-[22px] leading-8 font-medium tracking-[-0.025em]">
+            {nameInEnv(ns)}
+          </h1>
+          <div className="ml-auto flex gap-2">
+            {main && (
+              <Button size="default" onClick={() => openFork(main)} leadingIcon={GitFork}>
+                Fork {main}
+              </Button>
+            )}
+            <DeleteNamespace ns={ns} />
+          </div>
+        </div>
+        <TabNav
+          id={ns}
+          tabs={TABS.map(([page, label]) => ({
+            href: nsPath(ns, page),
+            label,
+            active: view === page,
+          }))}
+          tools={tools}
+        />
+        <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="grid min-w-0 gap-8">{children}</div>
+          <Details ns={ns} main={main} head={head} commits={commits} />
+        </div>
+      </div>
+      {fork && <ForkDialog ns={ns} from={fork.from} at={fork.at} open onOpenChange={closeFork} />}
+    </div>
+  );
+}
+
+function Details({
+  ns,
+  main,
+  head,
+  commits,
+}: {
+  ns: string;
+  main?: string;
+  head?: string | null;
+  commits: number;
+}) {
+  const fleet = useFleet({ ns });
   const [namespaces] = useQuery(queries.namespaces());
+  const searchOn = useSearchOn(ns);
   const region = namespaces.find((n) => n.name === ns)?.region;
-  const facts: ReactNode[] = [envOf(ns)];
-  if (region) facts.push(<span title={region}>{city(region)}</span>);
-  if (main) {
-    facts.push(
-      <span className="flex items-baseline gap-1.5">
-        <span className="text-xs text-foreground">{main}</span>
-        <Hash value={head} />
-      </span>,
-      <span className="tabular-nums">{plural(commits, "commit")}</span>,
-    );
-  } else facts.push(<span className="text-faint">no branches yet</span>);
+  const open = fleet.reviews.filter((review) => review.state === "open").length;
 
   return (
-    <ResourcePage
-      name={ns}
-      mark={<Orb name={ns} className="size-10" />}
-      facts={facts}
-      actions={
-        main &&
-        onFork && (
-          <Button variant="primary" size="default" onClick={onFork} leadingIcon={GitFork}>
-            Fork {main}
-          </Button>
-        )
-      }
-      tabs={[
-        { href: nsPath(ns), label: "Files", active: view === "files" },
-        { href: nsPath(ns, "branches"), label: "Branches", active: view === "branches" },
-        { href: nsPath(ns, "history"), label: "History", active: view === "history" },
-        { href: nsPath(ns, "search"), label: "Search", active: view === "search" },
-      ]}
-      tools={tools}
-    >
-      {children}
-    </ResourcePage>
+    <aside className="panel grid gap-6 p-6 text-sm">
+      {main && (
+        <Fact label="Mount">
+          <MountLine ns={ns} branch={main} />
+        </Fact>
+      )}
+      {region && (
+        <Fact label="Bucket">
+          <BucketBadge region={region} />
+        </Fact>
+      )}
+      <Fact label="Branches" href={nsPath(ns, "branches")}>
+        {open ? `${open} open` : plural(fleet.branches.length, "branch")}
+      </Fact>
+      <Fact label="History" href={nsPath(ns, "history")}>
+        {main ? (
+          <span className="flex items-baseline gap-1.5">
+            {plural(commits, "commit")}
+            <Hash value={head} />
+          </span>
+        ) : (
+          "Nothing written yet"
+        )}
+      </Fact>
+      <Fact label="Search" href={nsPath(ns, "search")}>
+        {searchOn ? "On" : "Off"}
+      </Fact>
+    </aside>
+  );
+}
+
+function Fact({ label, href, children }: { label: string; href?: string; children: ReactNode }) {
+  return (
+    <div className="grid min-w-0 gap-1.5">
+      {href ? (
+        <Link
+          href={href}
+          className="w-fit text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+        >
+          {label}
+        </Link>
+      ) : (
+        <span className="text-xs text-muted-foreground">{label}</span>
+      )}
+      <div className="min-w-0">{children}</div>
+    </div>
   );
 }

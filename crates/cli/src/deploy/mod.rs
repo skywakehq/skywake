@@ -474,8 +474,8 @@ fn done(ui: &Ui, settings: &Settings, result: &Value) {
         format!("{}     {}", dim("cost"), "$0/mo, runs on this machine"),
         String::new(),
         dim("try it"),
-        format!("  skywake --profile {profile} indexes"),
-        format!("  skywake --profile {profile} create index products"),
+        format!("  skywake --profile {profile} create disk app --search"),
+        format!("  skywake --profile {profile} disks"),
         dim("look after it"),
         "  skywake deploy status · logs · doctor · stop".to_string(),
     ];

@@ -27,8 +27,6 @@ public sealed class SkywakeClient : IDisposable
 
     public DiskHandle Disk(string name, string branch = DiskHandle.Main) => new(_http, name, branch);
 
-    public IndexHandle Index(string name, string branch = IndexHandle.Main) => new(_http, name, branch);
-
     public async Task<DiskHandle> CreateDiskAsync(string name, NewDiskOptions? options = null, CancellationToken ct = default)
     {
         options ??= new NewDiskOptions();
@@ -37,17 +35,7 @@ public sealed class SkywakeClient : IDisposable
         return Disk(name);
     }
 
-    public async Task<IndexHandle> CreateIndexAsync(string name, NewIndexOptions? options = null, CancellationToken ct = default)
-    {
-        options ??= new NewIndexOptions();
-        var body = Json.Object(("name", name), ("schema", options.Schema), ("region", options.Region), ("embed", options.Embed));
-        await _http.PostAsync<IndexSummary>("/indexes", body, ct).ConfigureAwait(false);
-        return Index(name);
-    }
-
     public IAsyncEnumerable<DiskSummary> ListDisksAsync(CancellationToken ct = default) => List<DiskSummary>("/disks", ct);
-
-    public IAsyncEnumerable<IndexSummary> ListIndexesAsync(CancellationToken ct = default) => List<IndexSummary>("/indexes", ct);
 
     public Task<CreatedKey> CreateKeyAsync(NewKey key, CancellationToken ct = default)
     {

@@ -265,7 +265,7 @@ export function KnowledgeBaseGuide({
 /** La portada: la búsqueda que el lector está a punto de construir. */
 function KnowledgeCover() {
   const Search = SNIPPETS[0]!;
-  return <Search tone="blue" />;
+  return <Search />;
 }
 
 /** El sistema habitual junto al de Skywake: un proceso de sincronización que puede fallar, y luego ninguno. */

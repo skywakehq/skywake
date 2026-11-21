@@ -4,6 +4,7 @@ import { useZero, ZeroProvider } from "@rocicorp/zero/react";
 import { createContext, type ReactNode, use, useEffect, useSyncExternalStore } from "react";
 import { AppShell } from "@skywake/ui/components/app-shell";
 import { UploadTray } from "@/features/files/upload-tray";
+import { AccountDialog } from "@/features/settings/account";
 import { since } from "@/features/usage/usage";
 import { mutators } from "@/zero/mutators";
 import { queries } from "@/zero/queries";
@@ -66,11 +67,13 @@ export function Console({
             topBar={<TopBar />}
             sidebarOpen={sidebarOpen}
             scroll={false}
+            flat
           >
             {children}
           </AppShell>
           <CommandMenu />
           <UploadTray />
+          <AccountDialog />
         </UrlsContext>
       </RoleContext>
     </ZeroProvider>
@@ -87,7 +90,6 @@ function Preload() {
       zero.preload(queries.namespaces()),
       zero.preload(queries.orgBranches()),
       zero.preload(queries.orgCommits({ limit: 10_000 })),
-      zero.preload(queries.orgSessions()),
       zero.preload(queries.activity({ limit: 1000 })),
       zero.preload(queries.usage({ since: since() })),
     ];

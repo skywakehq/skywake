@@ -65,11 +65,11 @@ def test_each_status_becomes_its_own_error_with_the_hint_in_the_message():
     with pytest.raises(ServerError):
         sky.whoami()
 
-    seen, transport = fake(lambda *_: failure(404, "not_found", hint="did you mean `products`?"))
+    seen, transport = fake(lambda *_: failure(404, "not_found", hint="did you mean `app`?"))
     with pytest.raises(NotFound) as raised:
-        client(transport).index("prodcts").info()
-    assert raised.value.hint == "did you mean `products`?"
-    assert "did you mean `products`?" in str(raised.value)
+        client(transport).disk("ap").info()
+    assert raised.value.hint == "did you mean `app`?"
+    assert "did you mean `app`?" in str(raised.value)
     assert raised.value.request_id == "req-1"
 
 
@@ -116,53 +116,12 @@ def test_lists_follow_next_until_the_last_page():
     assert [disk["name"] for disk in client(transport).list_disks()] == ["a", "b", "c"]
 
 
-def test_upsert_takes_any_number_of_rows_in_batches():
-    def reply(request, _):
-        rows = body(request)
-        return ok({"ids": [row["id"] for row in rows], "count": len(rows)})
-
-    seen, transport = fake(reply)
-    rows = [{"id": i, "text": f"row {i}"} for i in range(25_000)]
-    done = client(transport).index("products").upsert(rows)
-    assert done["count"] == 25_000
-    assert [len(body(request)) for request in seen] == [10_000, 10_000, 5_000]
-    assert seen[0].url.params["branch"] == "main"
-
-
-def test_update_and_delete_take_an_id_ids_or_a_filter():
-    seen, transport = fake(lambda *_: ok({"count": 1}))
-    products = client(transport).index("products")
-    products.update(7, {"stock": 3})
-    products.update({"tag": {"eq": "sale"}}, {"stock": 0})
-    products.delete([1, 2])
-    products.delete({"filter": {"stock": {"eq": 0}}})
-    assert [(r.method, r.url.path, body(r)) for r in seen] == [
-        ("PATCH", "/v2/indexes/products/rows", {"id": 7, "fields": {"stock": 3}}),
-        ("PATCH", "/v2/indexes/products/rows", {"filter": {"tag": {"eq": "sale"}}, "fields": {"stock": 0}}),
-        ("POST", "/v2/indexes/products/rows/delete", {"ids": [1, 2]}),
-        ("POST", "/v2/indexes/products/rows/delete", {"filter": {"stock": {"eq": 0}}}),
-    ]
-
-
-def test_get_gives_none_for_a_missing_row_but_raises_for_a_missing_index():
-    def reply(request, _):
-        if "/rows/" in request.url.path:
-            return failure(404, "not_found", path="id")
-        return failure(404, "not_found", hint="did you mean `products`?")
-
-    seen, transport = fake(reply)
-    sky = client(transport)
-    assert sky.index("products").get("a b") is None
-    assert seen[0].url.raw_path.decode().startswith("/v2/indexes/products/rows/a%20b")
-    with pytest.raises(NotFound):
-        sky.index("prodcts").info()
-
-
 def test_query_takes_text_first_and_options_by_keyword():
-    seen, transport = fake(lambda *_: ok({"data": [{"id": 1, "score": 0.9, "title": "mug"}], "next": None}))
-    products = client(transport).index("products", branch="draft")
-    assert products.query("coffee", limit=3, mode="keywords")[0]["title"] == "mug"
-    assert body(seen[0]) == {"text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft"}
+    seen, transport = fake(lambda *_: ok({"data": [{"path": "docs/coffee.md", "score": 0.9}], "next": None}))
+    app = client(transport).disk("app", branch="draft")
+    assert app.query("coffee", limit=3, path="docs")[0]["path"] == "docs/coffee.md"
+    assert seen[0].url.path == "/v2/disks/app/query"
+    assert body(seen[0]) == {"text": "coffee", "limit": 3, "path": "docs", "branch": "draft"}
 
 
 def test_files_are_read_and_written_by_path():
@@ -228,15 +187,15 @@ def test_restore_to_a_time_picks_the_newest_commit_at_or_before_it():
 
 def test_the_async_client_has_the_same_handles():
     def reply(request, _):
-        if request.url.path.endswith("/rows/delete"):
-            return ok({"count": 2})
+        if request.url.path.endswith("/query"):
+            return ok({"data": [{"path": "a.md"}], "next": None})
         return ok({"data": [{"name": "a"}], "next": None})
 
     seen, transport = fake(reply)
 
     async def main():
         async with AsyncSkywake(url="http://api", key="sw_key", transport=transport) as sky:
-            assert await sky.index("products").delete([1, 2]) == 2
+            assert (await sky.disk("app").query("a"))[0]["path"] == "a.md"
             return [disk["name"] async for disk in sky.list_disks()]
 
     assert asyncio.run(main()) == ["a"]

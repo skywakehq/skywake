@@ -1,6 +1,4 @@
 export type StatIcon =
-  | "fork"
-  | "branch"
   | "write"
   | "read"
   | "package"
@@ -23,23 +21,9 @@ export type StatGroup = { claim: string; line: string; href?: string; stats: Sta
 /** One measured result: the takeaway in words, then the bars that back it up, drawn to one scale. */
 type Bar = { value: number; figure: string; lit?: boolean };
 
-export type Comparison = {
-  title: string;
-  verdict: string;
-  rows: (Bar & { label: string })[];
-};
-
 export const files = {
-  setup: "Fork, branch and synced writes with the cache tier",
+  setup: "Reads, synced writes and builds with the cache tier",
   groups: [
-    {
-      claim: "A workspace for every agent, instantly.",
-      line: "Forks and branches cost nothing, however big the folder.",
-      stats: [
-        { figure: "10 ms", label: "fork 20,000 files", icon: "fork" },
-        { figure: "13 ms", label: "create a branch", icon: "branch" },
-      ],
-    },
     {
       claim: "As fast as a local disk.",
       line: "Your tools run on it as they do on your laptop.",
@@ -55,7 +39,7 @@ export const files = {
       line: "Kill the machine, and another takes over in a blink.",
       stats: [
         { figure: "0", label: "synced writes lost to kill -9", icon: "safe" },
-        { figure: "64 ms", label: "to fail over to another machine", icon: "failover" },
+        { figure: "79 ms", label: "to fail over to another machine", icon: "failover" },
       ],
     },
     {
@@ -68,23 +52,6 @@ export const files = {
     },
   ] satisfies StatGroup[],
 };
-
-// Pairs from the AWS run in docs/benchmarks.md. The words for each pair are in
-// messages.benchmarkPage, in the same order.
-export const filesBars: Bar[][] = [
-  [
-    { value: 0.095, figure: "95 ms", lit: true },
-    { value: 28.7, figure: "28.7 s" },
-  ],
-  [
-    { value: 6.4, figure: "6.4 s", lit: true },
-    { value: 28.7, figure: "28.7 s" },
-  ],
-  [
-    { value: 85.0, figure: "85.0 s", lit: true },
-    { value: 84.5, figure: "84.5 s" },
-  ],
-];
 
 export const search = {
   setup: "10M vectors × 768 on S3, AWS i4i.4xlarge in the same region",
@@ -124,17 +91,29 @@ export const search = {
   ] satisfies StatGroup[],
 };
 
-export const searchBars: Bar[][] = [
-  [
-    { value: 10, figure: "10 ms", lit: true },
-    { value: 411, figure: "411 ms" },
-  ],
-  [
-    { value: 24, figure: "24 ms", lit: true },
-    { value: 10, figure: "10 ms" },
-  ],
-  [
-    { value: 95, figure: "95%", lit: true },
-    { value: 97, figure: "97%", lit: true },
-  ],
+/** The home page benchmarks, all from the published runs in benchmarks/published. */
+export const homeClaims = ["0", "166 ms", "288 ms"];
+
+export const homeRaces: { verdict: string; bars: Bar[] }[] = [
+  {
+    verdict: "4.5×",
+    bars: [
+      { value: 6.4, figure: "6.4 s", lit: true },
+      { value: 28.7, figure: "28.7 s" },
+    ],
+  },
+  {
+    verdict: "40×",
+    bars: [
+      { value: 10, figure: "10 ms", lit: true },
+      { value: 411, figure: "411 ms" },
+    ],
+  },
+  {
+    verdict: "1×",
+    bars: [
+      { value: 85.0, figure: "85.0 s", lit: true },
+      { value: 84.5, figure: "84.5 s" },
+    ],
+  },
 ];

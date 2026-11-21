@@ -41,7 +41,7 @@ export function UploadTray() {
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed right-4 bottom-4 z-50 w-[360px] overflow-hidden rounded-xl border border-line-strong bg-popover text-sm max-sm:inset-x-3 max-sm:w-auto"
+      className="fixed right-4 bottom-4 z-50 w-[360px] overflow-hidden rounded-xl bg-popover shadow-[0_0_0_1px_var(--hairline),var(--lift)] text-sm max-sm:inset-x-3 max-sm:w-auto"
     >
       <header className="flex h-11 items-center gap-2 pr-1.5 pl-4">
         <span className="min-w-0 flex-1 truncate font-medium">{title}</span>
@@ -82,7 +82,7 @@ export function UploadTray() {
             animate={{ height: "auto" }}
             exit={{ height: 0 }}
             transition={{ type: "spring", duration: 0.24, bounce: 0 }}
-            className="max-h-72 overflow-y-auto border-t"
+            className="max-h-72 overflow-y-auto"
           >
             {uploads.map((upload) => (
               <Row key={upload.id} upload={upload} />

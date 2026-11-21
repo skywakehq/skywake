@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(absoluteUrl("/")),
   title: { template: "%s · Skywake docs", default: "Skywake docs" },
   description:
-    "Guides and reference for Skywake: a filesystem with branches, and vector and full-text search, on your own object storage.",
+    "Guides and reference for Skywake: shared disks of files with branches and search, on your own object storage.",
   applicationName: "Skywake",
   openGraph: { type: "website", siteName: "Skywake docs", locale: "en_US" },
   twitter: { card: "summary_large_image" },

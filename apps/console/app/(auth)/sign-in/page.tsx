@@ -143,22 +143,28 @@ function SignIn() {
         />
         {failed && <p className="text-[13px] text-red">{failed}</p>}
       </AuthForm>
-      <div className="mt-3 grid gap-3">
-        {sso.sso && (
-          <AuthButton type="button" onClick={withSso}>
-            Continue with SSO
-          </AuthButton>
-        )}
-        <AuthButton type="button" variant="quiet" onClick={withPasskey}>
-          <Fingerprint className="size-4" />
-          Sign in with a passkey
+      {sso.sso && (
+        <AuthButton type="button" onClick={withSso} className="mt-3">
+          Continue with SSO
         </AuthButton>
-      </div>
+      )}
       <AuthFooter>
-        New here?{" "}
-        <Link href={keepNext("/sign-up")} className={authLink}>
-          Create an account
-        </Link>
+        <span className="flex items-center justify-between gap-4">
+          <span>
+            New here?{" "}
+            <Link href={keepNext("/sign-up")} className={authLink}>
+              Create an account
+            </Link>
+          </span>
+          <button
+            type="button"
+            onClick={withPasskey}
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
+            <Fingerprint className="size-3.5" />
+            Passkey
+          </button>
+        </span>
       </AuthFooter>
     </>
   );

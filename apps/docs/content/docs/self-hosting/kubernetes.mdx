@@ -17,7 +17,7 @@ helm install skywake oci://ghcr.io/skywakehq/charts/skywake \
 
 The chart and its images are published with every release, on `ghcr.io/skywakehq`. On AWS, the [Terraform module](./deploy-aws.mdx) makes the bucket, Postgres and the IAM role, and installs the chart for you.
 
-Your data never leaves your account. [Branches](../filesystem/branches.mdx) and [indexes](../indexes/index.mdx) stay in your bucket, and the control plane stays in your Postgres.
+Your data never leaves your account. [Disks](../filesystem/branches.mdx) and their search data stay in your bucket, and the control plane stays in your Postgres.
 
 The chart runs these in the cluster:
 
@@ -58,7 +58,7 @@ kubectl create secret generic skywake \
   --from-literal=peer-token="$(openssl rand -hex 32)"
 ```
 
-Every key is required except these: the AWS keys, which are read only when `aws.keysFromSecret: true`, and `peer-token`, which is used by [pinned indexes](../indexes/pinning-and-replicas.mdx#self-hosting) and [read leases](../indexes/consistency-and-limits.mdx#consistency).
+Every key is required except these: the AWS keys, which are read only when `aws.keysFromSecret: true`, and `peer-token`, which API copies use to reach each other.
 
 </Step>
 <Step>
@@ -91,7 +91,7 @@ The role needs read, write, list and delete access on the bucket. For a bucket o
 | `images.registry`                                  | `ghcr.io/skywakehq`           | Where the images come from. Point it at your own mirror if you keep one.            |
 | `images.tag`                                       | the chart's version           | Each component's `image` replaces both with a full reference.                       |
 | `bootstrap.enabled`                                | `false`                       | Make the database roles before each install and upgrade.                            |
-| `store`                                            | `s3://skywake`                | Where branches and indexes live.                                                    |
+| `store`                                            | `s3://skywake`                | Where disks and their search data live.                                             |
 | `aws.region`                                       | `us-east-1`                   | The bucket's region. Run the cluster and Postgres there too.                        |
 | `aws.endpoint`                                     | empty                         | Empty for AWS.                                                                      |
 | `aws.keysFromSecret`                               | `false`                       | Read access keys from the Secret instead of the pods' identity.                     |
@@ -99,7 +99,7 @@ The role needs read, write, list and delete access on the bucket. For a bucket o
 | `api.databasePool`                                 | `10`                          | Keep max copies × pool under Postgres's `max_connections`.                          |
 | `api.trustProxy`                                   | `1`                           | Proxies in front of the API. See [IP allowlist](../security/ip-allowlist.mdx).      |
 | `console.trustedProxies`                           | `""`                          | The ingress's addresses or CIDRs. See [IP allowlist](../security/ip-allowlist.mdx). |
-| `api.indexCache.gb`                                | `10`                          | Local disk for the index blobs each copy reads. Misses go to the cache nodes.       |
+| `api.indexCache.gb`                                | `10`                          | Local disk for the search data each copy reads. Misses go to the cache nodes.       |
 | `api.env`                                          |                               | More API settings, as environment variables, such as `SKYWAKE_API_CONSOLE_URL`.     |
 | `cache.replicas`                                   | `3`                           | Pick once: changing it moves most chunks.                                           |
 | `cache.storage`                                    | `200Gi`                       | Disk per cache node.                                                                |

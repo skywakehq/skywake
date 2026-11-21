@@ -19,12 +19,11 @@ pub use types::{
     Kind, Match, Merged, Prefer, Visibility,
 };
 
-use crate::Result;
-use crate::index::Names;
 use crate::place::{At, Branch, Fork, Place};
 use crate::shared::awaitable;
 use crate::shared::http::{Body, segment};
 use crate::shared::paging::{collect, pages};
+use crate::{Names, Result};
 use changes::FileChange;
 
 #[derive(Clone)]

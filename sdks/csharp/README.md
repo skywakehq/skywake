@@ -1,7 +1,7 @@
 # Skywake for .NET
 
-Disks (files with branches) and search indexes, for AI agents. Runs on .NET 8+,
-no dependencies. Its tests need the .NET 10 SDK.
+Disks: shared, branchable file systems for AI agents, with search as a switch
+on each disk. Runs on .NET 8+, no dependencies. Its tests need the .NET 10 SDK.
 
 ```bash
 dotnet add package Skywake
@@ -12,12 +12,10 @@ using Skywake;
 
 using var sky = new SkywakeClient();
 
-var products = sky.Index("products");
-await products.UpsertAsync(new { id = "mug", text = "a blue coffee mug", price = 12 });
-var hits = await products.QueryAsync("coffee", new QueryOptions { Limit = 5 });
-
-var app = sky.Disk("app");
+var app = await sky.CreateDiskAsync("app", new NewDiskOptions { Search = true });
 await app.WriteAsync("README.md", "# App\n");
+var hits = await app.QueryAsync("app", new DiskQueryOptions { Limit = 5 });
+
 var work = await app.ForkAsync("agent-1");
 await work.WriteAsync("notes.md", "from the agent", new WriteOptions { Message = "notes" });
 await work.MergeIntoAsync("main");
@@ -26,15 +24,12 @@ await work.MergeIntoAsync("main");
 - **Settings.** The key comes from `SkywakeOptions.Key`, then `SKYWAKE_API_KEY`,
   then the profile `skywake login` wrote. The URL and environment work the same
   way (`SKYWAKE_URL`, `SKYWAKE_ENV`, `SKYWAKE_PROFILE`).
-- **Indexes.** `UpsertAsync` takes one row or any number; `UpdateAsync`,
-  `DeleteAsync` (an id, ids, or `Target.Where(filter)`), `GetAsync`,
-  `QueryAsync`, `CountAsync`, `AggregateAsync`, `RowsAsync`, `ForkAsync`,
-  `MergeIntoAsync`, `VersionsAsync`, `RestoreAsync`, `CopyAsync`.
 - **Disks.** `ReadAsync`, `WriteAsync` (one file or many, one commit),
   `DeleteAsync`, `MoveAsync`, `ListAsync`, `GrepAsync`, `FindAsync`,
-  `QueryAsync`, `LogAsync`, `DiffAsync`, `RevertAsync`, `RestoreAsync`,
-  `DownloadAsync` and `UploadAsync` for a whole folder.
-- **Lists** are `IAsyncEnumerable<T>`; rows and hits are `JsonObject`.
+  `QueryAsync` (when search is on), `ForkAsync`, `MergeIntoAsync`, `LogAsync`,
+  `DiffAsync`, `RevertAsync`, `RestoreAsync`, `DownloadAsync` and `UploadAsync`
+  for a whole folder.
+- **Lists** are `IAsyncEnumerable<T>`.
 - **Errors** are `SkywakeException`: `AuthException`, `PermissionException`,
   `NotFoundException`, `ConflictException`, `MergeConflictException`,
   `RateLimitedException`, `ServerException` and `InvalidRequestException`.

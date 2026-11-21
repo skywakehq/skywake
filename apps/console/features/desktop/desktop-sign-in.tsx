@@ -5,8 +5,8 @@ import { type FormEvent, useEffect, useMemo, useState, useSyncExternalStore } fr
 import { Button, Choice, Field, Page } from "@/components/kit";
 import { authClient } from "@/features/auth/auth-client";
 import { useEnvironments } from "@/features/environments/use-environments";
-import { Select } from "@/features/indexes/fields";
-import { act } from "@/features/settings/settings";
+import { Select } from "@/components/fields";
+import { act } from "@/features/settings/parts";
 import { useEnvironment } from "@/hooks/use-ns";
 import { withBase } from "@/lib/zone";
 
@@ -158,7 +158,7 @@ function Asking({ request }: { request: Asked }) {
       description={`Skywake on ${request.device} asks to use your disks. It gets a key of its own that you can remove in Settings at any time.`}
     >
       <form onSubmit={allow} className="grid max-w-md gap-6">
-        <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-lg bg-muted px-4 py-3">
           <Laptop className="size-4 text-muted-foreground" />
           <span className="text-sm">{request.device}</span>
         </div>

@@ -53,7 +53,7 @@ function Body({ page }: { page: Page }) {
         >
           <MDX
             components={getMDXComponents({
-              // Guides link to each other by file, `../indexes/filters.mdx`.
+              // Guides link to each other by file, `../filesystem/branches.mdx`.
               a: createRelativeLink(source, page),
               Card: (props: Omit<React.ComponentProps<typeof PageCard>, "from">) => (
                 <PageCard {...props} from={page} />

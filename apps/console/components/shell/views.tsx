@@ -10,8 +10,6 @@ import { History } from "@/features/namespaces/history";
 import { Namespaces } from "@/features/namespaces/namespaces";
 import { NamespaceSearch } from "@/features/namespaces/search";
 import { Home } from "@/features/environments/home";
-import { IndexPage } from "@/features/indexes/index-page";
-import { Indexes } from "@/features/indexes/indexes";
 import { SettingsPage } from "@/features/settings/settings";
 import { Usage } from "@/features/usage/usage";
 import { useRoute } from "./router";
@@ -23,7 +21,7 @@ export function Views() {
     case "home":
       return <Home />;
     case "settings":
-      return <SettingsPage />;
+      return <SettingsPage tab={route.tab} />;
     case "usage":
       return <Usage />;
     case "cli":
@@ -34,10 +32,6 @@ export function Views() {
       return <Namespaces key={route.env} env={route.env} />;
     case "activity":
       return <Activity key={route.env} env={route.env} />;
-    case "indexes":
-      return <Indexes key={route.env} env={route.env} />;
-    case "index":
-      return <IndexPage key={route.index} index={route.index} tab={route.tab} />;
     case "files":
       return <Files key={route.ns} ns={route.ns} />;
     case "branches":

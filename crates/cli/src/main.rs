@@ -3,7 +3,6 @@ mod commands;
 mod credentials;
 mod deploy;
 mod docs_spec;
-mod input;
 mod local;
 mod new_key;
 mod output;

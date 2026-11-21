@@ -3,12 +3,13 @@
 import { PowerOff, Search as SearchIcon, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Ago, Button, Choice, Empty, Hash, Panel, Rows, cx, plural } from "@/components/kit";
+import { Ago, Button, Choice, Hash, Panel, Rows, cx, plural } from "@/components/kit";
 import { mainOf, useFleet } from "@/features/fleet/fleet";
-import { call, useApi } from "@/features/indexes/api";
-import { Label, TextArea, TextField } from "@/features/indexes/fields";
+import { call, useApi } from "@/lib/api";
+import { Label, TextArea, TextField } from "@/components/fields";
 import { apiPath } from "@/lib/paths";
 import { diskApi, v2 } from "@/lib/v2";
+import { searchChanged } from "./disk-facts";
 import { withBase } from "@/lib/zone";
 import { NamespacePage } from "./namespace-header";
 import { SearchBox } from "./search-box";
@@ -138,6 +139,7 @@ function TurnOn({ ns, onDone }: { ns: string; onDone: () => void }) {
         embed: mode === "words" ? false : model.trim() ? { model: model.trim() } : undefined,
       });
       toast.success("Search is on", { description: "Files on main are searchable in seconds." });
+      searchChanged(ns);
       onDone();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
@@ -147,68 +149,67 @@ function TurnOn({ ns, onDone }: { ns: string; onDone: () => void }) {
   }
 
   return (
-    <Panel title="Search these files">
-      <Empty title="Search is off" columns={["File", "Branch"]}>
-        Turn it on and every commit to <span className="font-mono">main</span> is searchable within
-        seconds; saves follow about 30 seconds later. Branches forked from main get their own.
-      </Empty>
-      <div className="grid max-w-xl gap-4 px-5 pb-6">
-        <label className="grid gap-1.5">
-          <Label>Include</Label>
-          <TextArea
-            value={include}
-            onChange={(e) => setInclude(e.target.value)}
-            placeholder={"src/**\ndocs/**"}
-            className="min-h-16"
-            aria-label="Paths to include"
-          />
-          <span className="text-xs text-muted-foreground">
-            One glob a line. Every file when empty.
-          </span>
-        </label>
-        <label className="grid gap-1.5">
-          <Label>Exclude</Label>
-          <TextArea
-            value={exclude}
-            onChange={(e) => setExclude(e.target.value)}
-            className="min-h-16"
-            aria-label="Paths to exclude"
-          />
-        </label>
-        <div className="grid gap-1.5">
-          <Label>Search by</Label>
-          <Choice value={mode} options={MODES} onChange={setMode} />
-          {mode === "meaning" && (
-            <TextField
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={
-                fallback?.model ?? "Embedding model, such as voyage/voyage-multimodal-3.5"
-              }
-              className="mt-1 font-mono"
-              aria-label="Embedding model"
-            />
-          )}
-          <span className="text-xs text-muted-foreground">
-            {mode === "words"
-              ? "Exact words and parts of words in text, PDFs and Office files."
-              : "Every file is split into passages and each one is embedded, so a question finds " +
-                "the right part of a long file. PDFs and Office files are read for their text, " +
-                "and images are embedded too when the model takes them."}
-          </span>
-        </div>
-        <Button
-          variant="primary"
-          size="default"
-          leadingIcon={SearchIcon}
-          className="w-fit"
-          disabled={busy || needsModel}
-          onClick={save}
-        >
-          Turn on search
-        </Button>
+    <div className="panel grid max-w-2xl gap-6 p-8">
+      <div>
+        <p className="text-lg font-medium tracking-[-0.015em]">Search is off</p>
+        <p className="mt-1.5 text-sm text-muted-foreground">
+          Turn it on and every file on <span className="font-mono">main</span> is searchable seconds
+          after it is saved.
+        </p>
       </div>
-    </Panel>
+      <div className="grid gap-1.5">
+        <Label>Search by</Label>
+        <Choice value={mode} options={MODES} onChange={setMode} />
+        {mode === "meaning" && (
+          <TextField
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={fallback?.model ?? "Embedding model, such as voyage/voyage-multimodal-3.5"}
+            className="mt-1 font-mono"
+            aria-label="Embedding model"
+          />
+        )}
+      </div>
+      <details className="group">
+        <summary className="w-fit cursor-pointer list-none text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline">
+          Choose which files
+        </summary>
+        <div className="mt-4 grid gap-4">
+          <label className="grid gap-1.5">
+            <Label>Include</Label>
+            <TextArea
+              value={include}
+              onChange={(e) => setInclude(e.target.value)}
+              placeholder={"src/**\ndocs/**"}
+              className="min-h-16"
+              aria-label="Paths to include"
+            />
+            <span className="text-xs text-muted-foreground">
+              One glob a line. Every file when empty.
+            </span>
+          </label>
+          <label className="grid gap-1.5">
+            <Label>Exclude</Label>
+            <TextArea
+              value={exclude}
+              onChange={(e) => setExclude(e.target.value)}
+              className="min-h-16"
+              aria-label="Paths to exclude"
+            />
+          </label>
+        </div>
+      </details>
+      <Button
+        variant="primary"
+        size="default"
+        leadingIcon={SearchIcon}
+        className="w-fit"
+        disabled={busy || needsModel}
+        onClick={save}
+      >
+        Turn on search
+      </Button>
+    </div>
   );
 }
 
@@ -241,6 +242,7 @@ function SearchOn({ ns, link, onChange }: { ns: string; link: IndexLink; onChang
       const [env, path] = diskApi(ns);
       await v2(env, "PATCH", path, { search: false });
       toast.success("Search is off", { description: "The files stay; only the search goes." });
+      searchChanged(ns);
       onChange();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
@@ -259,7 +261,7 @@ function SearchOn({ ns, link, onChange }: { ns: string; link: IndexLink; onChang
           </Button>
         }
       >
-        <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 px-4 py-4 text-sm">
+        <dl className="panel mx-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2.5 p-5 text-sm">
           <dt className="text-muted-foreground">Include</dt>
           <dd className="font-mono">
             {link.include.length ? link.include.join("  ") : "every file"}
@@ -287,7 +289,7 @@ function SearchOn({ ns, link, onChange }: { ns: string; link: IndexLink; onChang
         </dl>
       </Panel>
       <Panel title="Branches" count={link.branches.length}>
-        <div className="divide-y divide-border/60">
+        <div>
           {link.branches.map((branch) => (
             <BranchRow key={branch.branch} branch={branch} />
           ))}

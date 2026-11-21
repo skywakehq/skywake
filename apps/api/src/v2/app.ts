@@ -9,7 +9,6 @@ import { registerAccount } from "./account.ts";
 import { registerDisks } from "./disks.ts";
 import { errorBody, errorHandler, Failure } from "./errors.ts";
 import { innerApp } from "./forward.ts";
-import { registerIndexes } from "./indexes.ts";
 import { type Scope, scopeOf } from "./scope.ts";
 
 export type V2Env = { Variables: AppEnv["Variables"] & { scope: () => Promise<Scope> } };
@@ -39,7 +38,6 @@ export function v2App(services: Services, v1: Api) {
   });
   registerAccount(api);
   registerDisks(api);
-  registerIndexes(api);
   v2.describe(api);
   for (const route of UNROUTED) api.openAPIRegistry.registerPath(route);
   api.doc31("/openapi.json", v2.info);

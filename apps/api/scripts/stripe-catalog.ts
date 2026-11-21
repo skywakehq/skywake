@@ -1,15 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import {
-  METER,
-  METERS,
-  meterEvent,
-  meterKey,
-  PAID,
-  PLAN,
-  planKey,
-  unitCents,
-} from "../src/features/billing/catalog.ts";
+import { PAID, PLAN, planKey } from "../src/features/billing/catalog.ts";
 import { PORTAL_TAG } from "../src/features/billing/stripe.ts";
 
 type Json = Record<string, any>;
@@ -57,52 +48,7 @@ function price(lookupKey: string, wanted: Form, same: (found: Json) => boolean) 
   return made.id as string;
 }
 
-function meter(name: string) {
-  const event = meterEvent(name as (typeof METERS)[number]);
-  const found = find(
-    "/v1/billing/meters",
-    { status: "active" },
-    (item) => item.event_name === event,
-  );
-  if (found) return found.id as string;
-  return stripe("post", "/v1/billing/meters", {
-    display_name: `Skywake ${METER[name as (typeof METERS)[number]].name}`,
-    event_name: event,
-    "default_aggregation[formula]": "sum",
-    "customer_mapping[type]": "by_id",
-    "customer_mapping[event_payload_key]": "stripe_customer_id",
-    "value_settings[event_payload_key]": "value",
-  }).id as string;
-}
-
 console.log(`Stripe ${live ? "LIVE" : "test"} mode`);
-console.log("Meters and their prices");
-const meterPrices: string[] = [];
-for (const name of METERS) {
-  const spec = METER[name];
-  const meterId = meter(name);
-  const productId = product(meterKey(name), spec.name, `$${spec.dollars} per ${spec.per}`);
-  const cents = unitCents(name);
-  meterPrices.push(
-    price(
-      meterKey(name),
-      {
-        product: productId,
-        nickname: `${spec.name}, per ${spec.unit}`,
-        "recurring[interval]": "month",
-        "recurring[usage_type]": "metered",
-        "recurring[meter]": meterId,
-        billing_scheme: "per_unit",
-        unit_amount_decimal: cents,
-      },
-      (found) =>
-        found.recurring?.meter === meterId &&
-        Number(found.unit_amount_decimal) === Number(cents) &&
-        found.product === productId,
-    ),
-  );
-}
-
 console.log("Plans");
 const planProducts: { product: string; price: string }[] = [];
 for (const plan of PAID) {
@@ -110,18 +56,18 @@ for (const plan of PAID) {
   const productId = product(
     planKey(plan),
     `Skywake ${spec.name}`,
-    `Monthly minimum of $${spec.minimumCents! / 100}, credited against usage`,
+    `$${spec.priceCents! / 100} a month`,
   );
   const priceId = price(
     planKey(plan),
     {
       product: productId,
-      nickname: `${spec.name} monthly minimum`,
+      nickname: `${spec.name} monthly`,
       "recurring[interval]": "month",
       "recurring[usage_type]": "licensed",
-      unit_amount: spec.minimumCents!,
+      unit_amount: spec.priceCents!,
     },
-    (found) => found.unit_amount === spec.minimumCents && found.product === productId,
+    (found) => found.unit_amount === spec.priceCents && found.product === productId,
   );
   planProducts.push({ product: productId, price: priceId });
 }
@@ -145,4 +91,4 @@ const configuration = portal
   ? stripe("post", `/v1/billing_portal/configurations/${portal.id}`, portalForm)
   : stripe("post", "/v1/billing_portal/configurations", portalForm);
 console.log(`  ${configuration.id}`);
-console.log(`Done: ${meterPrices.length} metered prices, ${planProducts.length} plans`);
+console.log(`Done: ${planProducts.length} plans`);

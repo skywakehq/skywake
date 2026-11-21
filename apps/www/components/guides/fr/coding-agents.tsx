@@ -287,7 +287,7 @@ export function CodingAgentsGuide({
 /** The cover: one fix tried several ways, each on its own branch. */
 function CodingCover() {
   const Branches = SNIPPETS[3]!;
-  return <Branches tone="blue" />;
+  return <Branches />;
 }
 
 /** Many agents in one folder, next to one branch for each agent. */

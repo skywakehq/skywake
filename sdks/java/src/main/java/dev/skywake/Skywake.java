@@ -50,14 +50,6 @@ public final class Skywake {
         return new Disk(http, name, branch);
     }
 
-    public Index index(String name) {
-        return index(name, MAIN);
-    }
-
-    public Index index(String name, String branch) {
-        return new Index(http, name, branch);
-    }
-
     public Disk createDisk(String name) {
         return createDisk(name, new DiskOptions());
     }
@@ -67,21 +59,8 @@ public final class Skywake {
         return disk(name);
     }
 
-    public Index createIndex(String name) {
-        return createIndex(name, new IndexOptions());
-    }
-
-    public Index createIndex(String name, IndexOptions options) {
-        http.post("/indexes", new Body().with("name", name).with(options.body()));
-        return index(name);
-    }
-
     public Iterable<DiskSummary> listDisks() {
         return list("/disks", DiskSummary.class);
-    }
-
-    public Iterable<IndexSummary> listIndexes() {
-        return list("/indexes", IndexSummary.class);
     }
 
     public CreatedKey createKey(NewKey key) {

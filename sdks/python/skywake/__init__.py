@@ -11,14 +11,12 @@ from .errors import (
     ServerError,
     SkywakeError,
 )
-from .index import Index
 
 __all__ = [
     "AsyncSkywake",
     "AuthError",
     "Conflict",
     "Disk",
-    "Index",
     "InvalidRequest",
     "MergeConflict",
     "NotFound",

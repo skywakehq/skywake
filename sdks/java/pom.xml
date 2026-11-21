@@ -8,7 +8,7 @@
   <artifactId>skywake</artifactId>
   <version>0.2.0</version>
   <name>Skywake</name>
-  <description>Skywake for Java: disks and search indexes with branches, for AI agents.</description>
+  <description>Skywake for Java: shared, branchable disks with search, for AI agents.</description>
   <url>https://skywake.dev</url>
 
   <scm>

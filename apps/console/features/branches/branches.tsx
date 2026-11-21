@@ -22,28 +22,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@skywake/ui/components/alert-dialog";
-import { type Agent, type Check, type Review, useChecks, useFleet } from "@/features/fleet/fleet";
+import { type Check, type Review, useChecks, useFleet } from "@/features/fleet/fleet";
 import { branchPath } from "@/lib/paths";
+import { usePeople } from "@/hooks/use-people";
 import { cn } from "@skywake/ui/lib/utils";
 import type { Branch } from "@/zero/schema";
 import { ForkDialog, useBranchActions, useForkDialog } from "./branch-actions";
 import { NamespacePage } from "@/features/namespaces/namespace-header";
-import {
-  Ago,
-  Avatar,
-  Button,
-  Empty,
-  Hash,
-  Panel,
-  perDay,
-  plural,
-  Rows,
-  Stat,
-  Stats,
-  useNow,
-  Glide,
-  Choice,
-} from "@/components/kit";
+import { Ago, Avatar, Button, Choice, Empty, Glide, Hash, plural, Rows } from "@/components/kit";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/menu";
 import { type Status, StatusPill } from "@/components/status";
 
@@ -53,24 +39,22 @@ type Leaf = {
   label: string;
   branch: Branch;
   status: Status;
-  agent?: string;
+  author?: string;
   commits: number;
 };
 type Group = { kind: "group"; name: string; label: string; children: Node[] };
 type Node = Leaf | Group;
 
 // Which state a folded group shows: the one that most needs a person.
-const URGENCY: Status[] = ["conflict", "live", "ready", "checking", "idle", "merged", "protected"];
+const URGENCY: Status[] = ["conflict", "ready", "checking", "idle", "merged", "protected"];
 
 export function branchStatus(
   branch: Branch,
   review: Review | undefined,
   check: Check,
-  agent: Agent | undefined,
 ): Status {
   if (branch.protected) return "protected";
   if (review?.state === "merged") return "merged";
-  if (agent?.live) return "live";
   if (review) return check ? (check.conflicts.length ? "conflict" : "ready") : "checking";
   return "idle";
 }
@@ -117,30 +101,24 @@ export function Branches({ ns }: { ns: string }) {
   const [filter, setFilter] = useState("");
   const { fork, openFork, closeFork } = useForkDialog();
   const actions = useBranchActions(ns);
-  const current = useNow();
+  const people = usePeople();
 
   const leaves = useMemo(() => {
     const reviews = new Map(fleet.reviews.map((r) => [r.branch.name, r]));
-    const agents = new Map<string, Agent>();
-    for (const agent of fleet.agents) {
-      if (agent.branch && (agent.live || !agents.has(agent.branch)))
-        agents.set(agent.branch, agent);
-    }
     return fleet.branches.map((branch): Leaf => {
       const review = reviews.get(branch.name);
-      const agent = agents.get(branch.name);
       const commits = fleet.commitsOf(ns, branch.name);
       return {
         kind: "leaf",
         name: branch.name,
         label: branch.name,
         branch,
-        status: branchStatus(branch, review, review && checks.get(review), agent),
-        agent: agent?.label ?? review?.agent ?? fleet.agentOf(commits[0]),
+        status: branchStatus(branch, review, review && checks.get(review)),
+        author: commits[0] && people(commits[0].actor),
         commits: commits.length,
       };
     });
-  }, [fleet, checks, ns]);
+  }, [fleet, checks, ns, people]);
 
   const roots = leaves.filter((l) => l.branch.protected);
   const main = roots[0]?.branch ?? fleet.branches[0];
@@ -153,30 +131,21 @@ export function Branches({ ns }: { ns: string }) {
   );
   const tree = group(rest);
 
-  const live = leaves.filter((l) => l.status === "live").length;
-  const waiting = leaves.filter((l) => l.status === "ready" || l.status === "conflict").length;
-  const activity = perDay(
-    fleet.commits.map((c) => c.at),
-    14,
-    current,
-  );
-
   return (
     <NamespacePage
       ns={ns}
       main={main?.name}
       head={main?.head}
       commits={fleet.commits.length}
-      onFork={main ? () => openFork(main.name) : undefined}
       tools={
         <>
-          <label className="flex h-7 w-44 items-center gap-1.5 rounded-md bg-muted/70 px-2 text-muted-foreground max-sm:hidden">
+          <label className="flex h-8 w-44 items-center gap-2 rounded-full bg-hover px-3 text-muted-foreground transition-colors focus-within:bg-active max-sm:hidden">
             <Search className="size-3.5 shrink-0" />
             <input
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
               placeholder="Filter branches"
-              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
             />
           </label>
           <Choice
@@ -190,41 +159,11 @@ export function Branches({ ns }: { ns: string }) {
         </>
       }
     >
-      {fleet.branches.length > 0 && (
-        <Stats>
-          <Stat label="Open branches" value={rest.filter((l) => l.status !== "merged").length} />
-          <Stat label="Live sessions" value={live} note="working on a branch" />
-          <Stat label="To merge" value={waiting} note={`${merged} merged so far`} alert />
-          <Stat
-            label="Commits"
-            value={activity.reduce((a, b) => a + b, 0)}
-            note="last 14 days"
-            trend={activity}
-          />
-        </Stats>
-      )}
-
       {fleet.loading && !leaves.length ? (
         <Rows />
       ) : fleet.branches.length ? (
-        <Panel
-          title="Branches"
-          count={rest.length + roots.length}
-          action={
-            <span className="text-xs text-muted-foreground">
-              {merged} merged · {fleet.rejections.length} rejected
-              {show === "open" && merged > 0 && (
-                <button
-                  onClick={() => setShow("all")}
-                  className="ml-2 text-foreground underline-offset-4 hover:underline"
-                >
-                  Show merged
-                </button>
-              )}
-            </span>
-          }
-        >
-          <Glide className="py-1">
+        <div className="grid gap-3">
+          <Glide className="panel p-2" fill="rounded-xl bg-hover">
             {roots.map((leaf) => (
               <LeafRow key={leaf.name} ns={ns} leaf={leaf} depth={0} onFork={openFork} />
             ))}
@@ -238,16 +177,25 @@ export function Branches({ ns }: { ns: string }) {
               />
             ))}
           </Glide>
-        </Panel>
+          <p className="px-2 text-xs text-muted-foreground">
+            {merged} merged · {fleet.rejections.length} rejected
+            {show === "open" && merged > 0 && (
+              <button
+                onClick={() => setShow("all")}
+                className="ml-2 text-foreground underline-offset-4 hover:underline"
+              >
+                Show merged
+              </button>
+            )}
+          </p>
+        </div>
       ) : (
-        <div className="-mx-5">
-          <Empty title="Start with main" columns={["Branch", "Commits", "Updated"]}>
+        <Empty title="Start with main">
             <p>Create an empty main branch. Agents fork from it and merge back into it.</p>
             <Button variant="primary" className="mt-4" onClick={() => actions.create("main")}>
               Create main
             </Button>
           </Empty>
-        </div>
       )}
       {fork && <ForkDialog ns={ns} from={fork.from} at={fork.at} open onOpenChange={closeFork} />}
     </NamespacePage>
@@ -264,7 +212,7 @@ function TreeNode({ node, ...props }: RowProps & { node: Node }) {
   );
 }
 
-const indent = (depth: number) => ({ paddingLeft: 16 + depth * 18 });
+const indent = (depth: number) => ({ paddingLeft: 12 + depth * 18 });
 
 function GroupRow({ group, depth, ...props }: RowProps & { group: Group }) {
   const leaves = leavesOf(group);
@@ -272,14 +220,14 @@ function GroupRow({ group, depth, ...props }: RowProps & { group: Group }) {
   const [open, setOpen] = useState(group.children.some((c) => c.kind === "group"));
   const status = URGENCY.find((s) => leaves.some((l) => l.status === s)) ?? "idle";
   const latest = Math.max(...leaves.map((l) => l.branch.updated));
-  const agent = leaves.find((l) => l.agent)?.agent;
+  const author = leaves.find((l) => l.author)?.author;
 
   return (
     <div>
       <button
         onClick={() => setOpen(!open)}
         data-glide
-        className="flex h-11 w-full items-center gap-2 pr-4 text-left"
+        className="flex h-12 w-full items-center gap-2 rounded-xl pr-3 text-left"
         style={indent(depth)}
       >
         <ChevronRight
@@ -300,7 +248,7 @@ function GroupRow({ group, depth, ...props }: RowProps & { group: Group }) {
                 className="flex items-center gap-4"
               >
                 <span className="hidden w-28 truncate text-right text-xs text-muted-foreground sm:block">
-                  {agent}
+                  {author}
                 </span>
                 <StatusPill status={status} className="w-[84px] justify-center" />
               </motion.span>
@@ -321,8 +269,8 @@ function GroupRow({ group, depth, ...props }: RowProps & { group: Group }) {
           >
             <span
               aria-hidden
-              className="absolute top-0 bottom-2 w-px bg-border"
-              style={{ left: 23 + depth * 18 }}
+              className="absolute top-0 bottom-2 w-px bg-hairline"
+              style={{ left: 19 + depth * 18 }}
             />
             {group.children.map((child) => (
               <TreeNode key={child.name} node={child} depth={depth + 1} {...props} />
@@ -339,7 +287,7 @@ function LeafRow({ ns, leaf, depth, onFork }: RowProps & { leaf: Leaf }) {
   const [confirming, setConfirming] = useState(false);
   const { branch } = leaf;
   return (
-    <div data-glide className="group relative flex h-11 items-center gap-2 pr-4">
+    <div data-glide className="group relative flex h-12 items-center gap-2 rounded-xl pr-3">
       <Link
         href={branchPath(ns, branch.name)}
         className="absolute inset-0"
@@ -353,10 +301,10 @@ function LeafRow({ ns, leaf, depth, onFork }: RowProps & { leaf: Leaf }) {
       </span>
       <span className="ml-auto flex shrink-0 items-center gap-4">
         <span className="hidden w-32 items-center justify-end gap-1.5 truncate text-xs text-muted-foreground sm:flex">
-          {leaf.agent && (
+          {leaf.author && (
             <>
-              <Avatar name={leaf.agent} className="size-4 text-[8px] ring-0" />
-              <span className="truncate">{leaf.agent}</span>
+              <Avatar name={leaf.author} className="size-4" />
+              <span className="truncate">{leaf.author}</span>
             </>
           )}
         </span>
@@ -364,10 +312,16 @@ function LeafRow({ ns, leaf, depth, onFork }: RowProps & { leaf: Leaf }) {
           {leaf.commits ? plural(leaf.commits, "commit") : ""}
         </span>
         <Hash value={branch.head} className="hidden w-16 text-faint lg:block" />
-        <StatusPill status={leaf.status} className="w-[84px] justify-center" />
+        {leaf.status === "ready" || leaf.status === "conflict" ? (
+          <Button asChild variant="primary" className="relative w-[84px]">
+            <Link href={branchPath(ns, branch.name)}>Review</Link>
+          </Button>
+        ) : (
+          <StatusPill status={leaf.status} className="w-[84px] justify-center" />
+        )}
         <Ago time={branch.updated} className="w-8 text-right" />
         <Menu>
-          <MenuTrigger className="relative grid size-6 place-items-center rounded-md text-muted-foreground opacity-0 outline-none transition-opacity group-hover:opacity-100 hover:bg-selected focus-visible:opacity-100 data-[state=open]:opacity-100">
+          <MenuTrigger className="relative grid size-7 place-items-center rounded-full text-muted-foreground opacity-0 outline-none transition-opacity group-hover:opacity-100 hover:bg-selected focus-visible:opacity-100 data-[state=open]:opacity-100">
             <MoreHorizontal className="size-4" />
           </MenuTrigger>
           <MenuContent align="end">

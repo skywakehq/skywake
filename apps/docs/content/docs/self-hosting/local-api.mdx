@@ -74,7 +74,7 @@ For every setting, see the API's README.
 
 ## A second API
 
-Postgres records which disks and indexes exist and where their data is. So if you run a second, separate API on the same Postgres, such as a test run next to your dev server, give it its own database:
+Postgres records which disks exist and where their data is. So if you run a second, separate API on the same Postgres, such as a test run next to your dev server, give it its own database:
 
 ```bash norun
 docker compose -f docker/dev/compose.yaml exec postgres createdb -U skywake skywake2
@@ -92,6 +92,6 @@ To also run zero-cache and the web console on `http://localhost:3100`, use `scri
 
 <Cards>
   <Card href="./docker-compose.mdx" />
-  <Card href="../getting-started/first-index.mdx" />
+  <Card href="../getting-started/first-branch.mdx" />
   <Card href="../security/api-keys.mdx" />
 </Cards>

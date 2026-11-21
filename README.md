@@ -1,6 +1,6 @@
 # Skywake
 
-**A filesystem and search index for agents, on object storage.**
+**A filesystem for agents, with branches and search, on object storage.**
 
 Give every agent its own branch of one environment. Forks copy a pointer, never data.
 
@@ -50,22 +50,16 @@ skywake merge app@agent-37           # three-way, conflicts per file
 - **Fork in milliseconds**, whatever the size
 - **Mount without downloading**: files stream in as they're read
 - **Lose at most 2 seconds** to `kill -9`; `fsync` means saved
-- **Search files** by meaning with `skywake query app "..."`, or with `grep` and `find`
+- **Search files** with `grep` and `find`, or by meaning (below)
 
-## Indexes
+## Search
 
-An index holds rows you search by meaning, keywords and filters, kept in the same bucket and
-branched like files. The first upsert creates it, and text is embedded for you.
+Turn search on for a disk, and its files are found by meaning and keywords.
 
 ```bash
-skywake upsert products products.jsonl
-skywake query products "shoes for running" --filter "price < 100"
-skywake fork products draft
+skywake create disk app --search
+skywake query app "where is auth handled"
 ```
-
-- **Meaning, keywords and filters** in one query
-- **Fork an index** to try writes without touching `main`
-- **Pin** hot indexes in memory, across replicas
 
 ## Numbers
 

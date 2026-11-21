@@ -5,41 +5,38 @@ import {
   BookOpen,
   ChartColumn,
   ChevronsUpDown,
-  CreditCard,
-  KeyRound,
   LayoutGrid,
+  CircleUser,
   LogOut,
   Moon,
   Plus,
-  ScanSearch,
   Settings,
-  ShieldCheck,
   Sun,
-  Users,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { Link, navigate, useHash } from "@/components/shell/router";
+import { useQuery } from "@rocicorp/zero/react";
+import { Link, navigate } from "@/components/shell/router";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from "@skywake/ui/components/sidebar";
 import { authClient } from "@/features/auth/auth-client";
-import { envPath, isIndexPath } from "@/lib/paths";
+import { envOf, nameInEnv } from "@/lib/names";
+import { envPath, nsPath } from "@/lib/paths";
+import { queries } from "@/zero/queries";
 import { useEnvironments } from "@/features/environments/use-environments";
 import { useEnvironment, useNamespace } from "@/hooks/use-ns";
-import { Count, Glide } from "@/components/kit";
+import { DiskMark, Glide } from "@/components/kit";
 import { Logo } from "@skywake/ui/components/logo";
 import {
   Menu,
@@ -48,28 +45,21 @@ import {
   MenuLabel,
   MenuSeparator,
   MenuTrigger,
+  Prompt,
 } from "@/components/menu";
 import { NewEnvironment } from "@/features/environments/new-environment";
 import { withBase } from "@/lib/zone";
+import { openAccount } from "@/features/settings/account";
 
-// Which sidebar row each #section of the settings page belongs to.
-const SETTINGS_ROWS: Record<string, string> = {
-  keys: "keys",
-  members: "members",
-  security: "security",
-  sso: "security",
-  "ip-allowlist": "security",
-  billing: "billing",
-};
+const DOCS = "https://skywake.dev/docs";
 
-/** The console's pages, grouped, for the current environment. */
+/** The console's pages for the current environment, with its disks listed as folders. */
 export function AppSidebar() {
   const env = useEnvironment() ?? "default";
   const ns = useNamespace();
   const path = usePathname();
-  const hash = useHash();
-  const billing = useBillingEnabled();
-  const settings = path === "/settings" ? (SETTINGS_ROWS[hash] ?? "settings") : null;
+  const [namespaces] = useQuery(queries.namespaces());
+  const disks = namespaces.filter((disk) => envOf(disk.name) === env);
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -79,63 +69,40 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <Glide fill="rounded-md bg-sidebar-accent/60">
-          <Group label="Data">
-            <NavItem
-              href={envPath(env)}
-              active={path === envPath(env) || !!ns}
-              icon={<LayoutGrid />}
-            >
-              Disks
-            </NavItem>
-            <NavItem
-              href={envPath(env, "indexes")}
-              active={path === envPath(env, "indexes") || isIndexPath(path)}
-              icon={<ScanSearch />}
-            >
-              Indexes
-            </NavItem>
-          </Group>
-          <Group label="Observe">
-            <NavItem
-              href={envPath(env, "activity")}
-              active={path === envPath(env, "activity")}
-              icon={<Activity />}
-            >
-              Activity
-            </NavItem>
-            <NavItem href="/usage" active={path === "/usage"} icon={<ChartColumn />}>
-              Usage
-            </NavItem>
-          </Group>
-          <Group label="Access">
-            <NavItem href="/settings#keys" active={settings === "keys"} icon={<KeyRound />}>
-              API keys
-            </NavItem>
-            <NavItem href="/settings#members" active={settings === "members"} icon={<Users />}>
-              Members
-            </NavItem>
-            <NavItem
-              href="/settings#security"
-              active={settings === "security"}
-              icon={<ShieldCheck />}
-            >
-              Security
-            </NavItem>
-          </Group>
-          <Group label="Organization">
-            {billing && (
-              <NavItem
-                href="/settings#billing"
-                active={settings === "billing"}
-                icon={<CreditCard />}
-              >
-                Billing
+          <SidebarGroup className="py-1">
+            <SidebarMenu>
+              <NavItem href={envPath(env)} active={path === envPath(env)} icon={<LayoutGrid />}>
+                Disks
               </NavItem>
-            )}
-            <NavItem href="/settings" active={settings === "settings"} icon={<Settings />}>
-              Settings
-            </NavItem>
-          </Group>
+              {disks.map((disk) => (
+                <NavItem
+                  key={disk.name}
+                  href={nsPath(disk.name)}
+                  active={ns === disk.name}
+                  icon={<DiskMark className="h-3.5" />}
+                >
+                  {nameInEnv(disk.name)}
+                </NavItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+          <SidebarGroup className="py-1">
+            <SidebarMenu>
+              <NavItem
+                href={envPath(env, "activity")}
+                active={path === envPath(env, "activity")}
+                icon={<Activity />}
+              >
+                Activity
+              </NavItem>
+              <NavItem href="/usage" active={path === "/usage"} icon={<ChartColumn />}>
+                Usage
+              </NavItem>
+              <NavItem href="/settings" active={path.startsWith("/settings")} icon={<Settings />}>
+                Settings
+              </NavItem>
+            </SidebarMenu>
+          </SidebarGroup>
         </Glide>
       </SidebarContent>
       <SidebarFooter>
@@ -155,43 +122,16 @@ export function AppSidebar() {
   );
 }
 
-const DOCS = "https://skywake.dev/docs";
-
-function Group({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <SidebarGroup className="py-1">
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarMenu>{children}</SidebarMenu>
-    </SidebarGroup>
-  );
-}
-
-/** Whether this console bills organizations, so Billing has something to show. */
-function useBillingEnabled() {
-  const [enabled, setEnabled] = useState(false);
-  useEffect(() => {
-    fetch(withBase("/api/billing"))
-      .then((response) => (response.ok ? response.json() : null))
-      .then((billing) => setEnabled(!!billing?.enabled))
-      .catch(() => {});
-  }, []);
-  return enabled;
-}
-
 /** A link in the sidebar. The highlight glides to the active one. */
 function NavItem({
   href,
   active,
   icon,
-  count,
-  pulse,
   children,
 }: {
   href: string;
   active: boolean;
   icon: ReactNode;
-  count?: number;
-  pulse?: boolean;
   children: string;
 }) {
   return (
@@ -214,12 +154,6 @@ function NavItem({
           <span>{children}</span>
         </Link>
       </SidebarMenuButton>
-      {!!count && (
-        <SidebarMenuBadge className="gap-1.5 text-muted-foreground">
-          {pulse && <span className="size-1.5 animate-breathe rounded-full bg-green" />}
-          <Count value={count} />
-        </SidebarMenuBadge>
-      )}
     </SidebarMenuItem>
   );
 }
@@ -230,7 +164,18 @@ function OrgSwitcher() {
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
 
+  const [creating, setCreating] = useState(false);
   const count = orgs?.length ?? 0;
+
+  async function create(name: string) {
+    const response = await fetch(withBase("/api/orgs"), {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Could not make the organization");
+    await switchTo(data.id);
+  }
 
   async function switchTo(id: string) {
     await authClient.organization.setActive({ organizationId: id });
@@ -273,17 +218,23 @@ function OrgSwitcher() {
               index={count}
               icon={Plus}
               label="New organization"
-              onSelect={() => router.push("/onboarding")}
+              onSelect={() => setCreating(true)}
             />
             <MenuSeparator />
             <MenuItem
               index={count + 1}
+              icon={CircleUser}
+              label="Your account"
+              onSelect={openAccount}
+            />
+            <MenuItem
+              index={count + 2}
               icon={resolvedTheme === "dark" ? Sun : Moon}
               label={resolvedTheme === "dark" ? "Light theme" : "Dark theme"}
               onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             />
             <MenuItem
-              index={count + 2}
+              index={count + 3}
               icon={LogOut}
               label="Sign out"
               onSelect={async () => {
@@ -293,12 +244,20 @@ function OrgSwitcher() {
             />
           </MenuContent>
         </Menu>
+        <Prompt
+          open={creating}
+          onOpenChange={setCreating}
+          title="New organization"
+          label="Acme"
+          submit="Create"
+          onSubmit={create}
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   );
 }
 
-/** Environments, such as prod and staging, each hold their own disks and indexes. */
+/** Environments, such as prod and staging, each hold their own disks. */
 function EnvironmentSwitcher({ current }: { current: string }) {
   const { envs } = useEnvironments();
   const [creating, setCreating] = useState(false);

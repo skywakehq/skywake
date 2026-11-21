@@ -1,38 +1,17 @@
-import type { MiniArtName } from "@/components/art/mini-art";
-
-type Feature = { name: string; line: string; art: MiniArtName };
 /** A legal page. In a body, a string is a paragraph and a list of strings is a bulleted list. */
 type LegalPage = {
   title: string;
   intro: string;
   sections: { title: string; body: (string | string[])[] }[];
 };
-type Chart = { title: string; verdict: string; labels: string[] };
-type ProductPage = {
-  label: string;
-  title: string;
-  accent: string;
-  line: string;
-  features: Feature[];
-};
 
 export type HomeMessages = {
   /** Title and description of each page, for search engines and link previews. */
   pages: Record<
-    | "/"
-    | "/filesystem"
-    | "/search"
-    | "/use-cases"
-    | "/pricing"
-    | "/privacy"
-    | "/terms"
-    | "/benchmarks",
+    "/" | "/use-cases" | "/pricing" | "/privacy" | "/terms",
     { title: string; description: string }
   >;
   nav: {
-    filesystem: string;
-    search: string;
-    benchmarks: string;
     pricing: string;
     docs: string;
     github: string;
@@ -58,46 +37,59 @@ export type HomeMessages = {
     badge: string;
     titleBefore: string;
     titleAccent: string;
-    screenshotAlt: string;
     getStartedCta: string;
+    waitlistCta: string;
+    docsCta: string;
+    worksWith: string;
+  };
+  shared: {
+    label: string;
+    line: string;
+    titleBefore: string;
+    titleAccent: string;
+    write: string;
+    read: string;
+    mounted: string;
+    /** Where each agent in the demo runs, in the order the demo shows them. */
+    machines: string[];
+  };
+  searchDemo: {
+    label: string;
+    line: string;
+    titleBefore: string;
+    titleAccent: string;
+    modes: string[];
+    queries: string[];
+    /** The top result's line for each query. Words in [brackets] are highlighted. */
+    snippets: string[];
+  };
+  bento: {
+    label: string;
+    line: string;
+    titleBefore: string;
+    titleAccent: string;
+    /** The feature names, in the order the grid shows them. */
+    items: string[];
+    /** What the two crash numbers measure. */
+    crash: string[];
   };
   useCases: {
     label: string;
+    line: string;
     /** The heading: a short claim, then a quieter second line. */
     heading: [string, string];
     more: string;
     cta: string;
-    items: { name: string; title: string; line: string }[];
-  };
-  git: {
-    label: string;
-    titleBefore: string;
-    titleAccent: string;
-    line: string;
-    works: string;
-    note: string;
-  };
-  products: {
-    items: {
-      name: string;
-      href: "/filesystem" | "/search";
-      icon: "files" | "search";
-      before: string;
-      highlight: string;
-      after: string;
-      points: string[];
-    }[];
-  };
-  architecture: {
-    label: string;
-    titleBefore: string;
-    titleAccent: string;
-    line: string;
-    stats: string[];
+    items: { name: string; title: string }[];
   };
   benchmarks: {
     label: string;
+    line: string;
     title: string;
+    /** One per figure in `homeClaims`: the promise, a line on it, and what the figure measures. */
+    claims: { title: string; line: string; label: string }[];
+    /** One per entry in `homeRaces`: what was measured, how, and a label for each bar. */
+    races: { title: string; proof: string; labels: string[] }[];
   };
   cost: {
     label: string;
@@ -110,8 +102,8 @@ export type HomeMessages = {
       perMonth: string;
       gap: string;
     };
-    /** The headline: "{n}% less storage, {n}× lower cost and {n}× faster agent starts." */
-    headline: { storage: string; cost: string; starts: string; and: string };
+    /** The headline: "{n}% less storage and {n}× lower cost." */
+    headline: { storage: string; cost: string; and: string };
   };
   openSource: {
     label: string;
@@ -138,30 +130,6 @@ export type HomeMessages = {
       error: string;
     };
   };
-  /** The picture of how Skywake is put together. */
-  layers: {
-    alt: string;
-    agents: [string, string];
-    filesystem: [string, string];
-    index: [string, string];
-    cache: [string, string];
-    storage: [string, string];
-  };
-  productPages: {
-    getStarted: string;
-    star: string;
-    filesystem: ProductPage;
-    search: ProductPage;
-  };
-  benchmarkPage: {
-    line: string;
-    filesTitle: string;
-    searchTitle: string;
-    filesNote: string;
-    searchNote: string;
-    files: Chart[];
-    search: Chart[];
-  };
   plans: {
     eyebrow: string;
     title: string;
@@ -187,7 +155,6 @@ export type HomeMessages = {
     title: string;
     accent: string;
     onThisPage: string;
-    read: string;
     related: { eyebrow: string; title: string; all: string };
     /** One per use case, by its id in content/use-cases. */
     items: Record<string, { name: string; title: string; lead: string }>;

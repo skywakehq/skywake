@@ -184,7 +184,7 @@ async fn version(api: &str) -> Check {
         .timeout(Duration::from_secs(3))
         .build()
     {
-        Ok(client) => client.get(format!("{api}/v2/indexes")).send().await.ok(),
+        Ok(client) => client.get(format!("{api}/v2/disks")).send().await.ok(),
         Err(_) => None,
     };
     let ours = env!("CARGO_PKG_VERSION");

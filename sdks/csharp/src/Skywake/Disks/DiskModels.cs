@@ -38,6 +38,8 @@ public sealed record Entry(
     bool Executable,
     string? Target = null);
 
+public sealed record Branch(string Name, string? From, DateTimeOffset Created);
+
 public sealed record Commit(string Id, string Message, DateTimeOffset Created, string? Merged);
 
 public sealed record Committed(string Commit, bool Changed);

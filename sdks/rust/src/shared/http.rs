@@ -67,13 +67,6 @@ impl Http {
         }
     }
 
-    pub fn within(&self, environment: &str) -> Http {
-        Http {
-            environment: Some(environment.into()),
-            ..self.clone()
-        }
-    }
-
     pub async fn get<T: DeserializeOwned>(&self, path: &str, params: Params) -> Result<T> {
         decode(self.send(Method::GET, path, &params, &Body::Empty).await?).await
     }

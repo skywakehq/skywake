@@ -11,14 +11,13 @@ import {
 import { envOf, nameInEnv } from "@/lib/names";
 import { envPath, nsPath } from "@/lib/paths";
 import { useEnvironment, useNamespace } from "@/hooks/use-ns";
-import { IndexMark, Orb } from "@/components/kit";
+import { DiskMark } from "@/components/kit";
 
 const PAGES: Record<string, string> = {
   activity: "Activity",
+  branches: "Branches",
+  search: "Search",
   history: "History",
-  usage: "Usage",
-  settings: "Settings",
-  indexes: "Indexes",
 };
 
 /** Where you are, as a trail of links. Switching happens in the sidebar. */
@@ -31,17 +30,11 @@ export function TopBar() {
   const page = PAGES[path.split("/").at(-1) ?? ""];
 
   const trail: TrailStep[] = [];
-  if (path === "/usage" || path === "/settings") trail.push({ label: page });
+  if (path === "/usage") trail.push({ label: "Usage" });
+  else if (route.view === "settings") trail.push({ label: "Settings" });
   else if (route.view === "cli") trail.push({ label: "Sign in the CLI" });
   else if (route.view === "desktop") trail.push({ label: "Sign in Skywake for Mac" });
-  else if (route.view === "index") {
-    if (env) trail.push({ label: env, href: envPath(env) });
-    trail.push({ label: "Indexes", href: env && envPath(env, "indexes") });
-    trail.push({
-      label: nameInEnv(route.index),
-      lead: <IndexMark name={route.index} className="size-3.5" />,
-    });
-  } else {
+  else {
     if (env) trail.push({ label: env, href: envPath(env) });
     if (ns)
       trail.push(
@@ -49,7 +42,7 @@ export function TopBar() {
         {
           label: nameInEnv(ns),
           href: nsPath(ns),
-          lead: <Orb name={ns} className="size-3.5" />,
+          lead: <DiskMark className="h-3.5" />,
         },
       );
     if (branch) trail.push({ label: branch });
@@ -60,8 +53,10 @@ export function TopBar() {
 
   return (
     <ShellTopBar
+      flat
       end={
         <ShellSearch
+          flat
           label="Search or jump to…"
           onClick={() => window.dispatchEvent(new Event("open-command-menu"))}
         />

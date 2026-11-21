@@ -2,9 +2,10 @@
 
 import { Search as SearchIcon } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Button, Panel } from "@/components/kit";
+import { Button } from "@/components/kit";
+import { FileIcon } from "@/features/files/file-icon";
 import { Link } from "@/components/shell/router";
-import { Select, TextField } from "@/features/indexes/fields";
+import { Select } from "@/components/fields";
 import { branchPath } from "@/lib/paths";
 import { diskApi, v2 } from "@/lib/v2";
 
@@ -42,13 +43,17 @@ export function SearchBox({ ns, branches }: { ns: string; branches: string[] }) 
   }
 
   return (
-    <Panel title="Search">
-      <form onSubmit={search} className="flex flex-wrap gap-2 px-4 py-4">
-        <TextField
+    <div className="grid gap-4">
+      <form
+        onSubmit={search}
+        className="flex h-12 items-center gap-3 rounded-full bg-hover pr-1.5 pl-5 transition-colors focus-within:bg-active"
+      >
+        <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+        <input
           value={text}
           onChange={(event) => setText(event.target.value)}
           placeholder="Ask in words, or type the words you remember"
-          className="min-w-0 flex-1"
+          className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
           aria-label="Search text"
           autoFocus
         />
@@ -68,35 +73,37 @@ export function SearchBox({ ns, branches }: { ns: string; branches: string[] }) 
           type="submit"
           variant="primary"
           size="default"
-          leadingIcon={SearchIcon}
           disabled={found.state === "busy" || !text.trim()}
         >
           Search
         </Button>
       </form>
       <Results ns={ns} branch={branch} found={found} />
-    </Panel>
+    </div>
   );
 }
 
 function Results({ ns, branch, found }: { ns: string; branch: string; found: Found }) {
   if (found.state === "idle" || found.state === "busy") return null;
-  if (found.state === "failed") return <p className="px-4 pb-4 text-sm text-red">{found.error}</p>;
+  if (found.state === "failed") return <p className="px-5 text-sm text-red">{found.error}</p>;
   if (!found.hits.length)
-    return <p className="px-4 pb-4 text-sm text-muted-foreground">No files match.</p>;
+    return <p className="px-5 text-sm text-muted-foreground">No files match.</p>;
   return (
-    <ul className="divide-y divide-border/60 border-t border-border/60">
+    <ul className="grid gap-1">
       {found.hits.map((hit) => (
-        <li key={hit.path} className="grid gap-1 px-4 py-3">
+        <li key={hit.path}>
           <Link
             href={branchPath(ns, branch, { tab: "files", path: hit.path })}
-            className="truncate font-mono text-sm hover:underline"
+            className="flex gap-3 rounded-2xl px-5 py-3 transition-colors hover:bg-hover"
           >
-            {hit.path}
+            <FileIcon name={hit.path} className="mt-0.5 size-4 shrink-0" />
+            <span className="grid min-w-0 gap-1">
+              <span className="truncate text-sm font-medium">{hit.path}</span>
+              {hit.snippet && (
+                <span className="line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</span>
+              )}
+            </span>
           </Link>
-          {hit.snippet && (
-            <p className="line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</p>
-          )}
         </li>
       ))}
     </ul>

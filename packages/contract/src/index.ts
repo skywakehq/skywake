@@ -14,7 +14,6 @@ import * as logins from "./logins.ts";
 import * as namespaces from "./namespaces.ts";
 import * as oauth from "./oauth.ts";
 import * as orgs from "./orgs.ts";
-import * as sessions from "./sessions.ts";
 import * as sso from "./sso.ts";
 import * as v2 from "./v2/index.ts";
 
@@ -36,7 +35,6 @@ export {
   namespaces,
   oauth,
   orgs,
-  sessions,
   sso,
   v2,
 };
@@ -155,15 +153,6 @@ export const routes = {
     indexes.getIndexOperation,
     indexes.checkRecall,
     indexes.getIndexUsage,
-  ],
-  sessions: [
-    sessions.listSessions,
-    sessions.startSession,
-    sessions.renewSession,
-    sessions.endSession,
-    sessions.listClaims,
-    sessions.claimPath,
-    sessions.releaseClaim,
   ],
 };
 
