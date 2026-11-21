@@ -10,6 +10,8 @@ services:
     ports: !reset []
     environment:
       SKYWAKE_API_TRUST_PROXY: "1"
+      # The bucket's AWS region, so the console shows where disks live.
+      SKYWAKE_API_REGION: ${AWS_REGION:?set AWS_REGION in .env}
       SKYWAKE_API_CONSOLE_URL: ${CONSOLE_URL}
       SKYWAKE_API_BILLING: stripe
       SKYWAKE_API_BILLING_LIVE: ${STRIPE_LIVE:-false}

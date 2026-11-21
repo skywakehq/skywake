@@ -13,6 +13,7 @@ import {
   check,
   next,
   useKeepNext,
+  useSignedInSkip,
 } from "@/features/auth/auth-form";
 import { useAuthOptions } from "@/features/auth/options";
 import { SocialButtons } from "@/features/auth/social";
@@ -45,6 +46,7 @@ function SignIn() {
   const failed = authError(new URLSearchParams(query.toString()));
   const { email: emailOn } = useAuthOptions();
   const keepNext = useKeepNext();
+  useSignedInSkip();
 
   // Ask once the email has a domain, and again only when the domain changes.
   const domain = email.split("@")[1]?.toLowerCase() ?? "";
