@@ -6,7 +6,7 @@ import { Button, Choice, Field, Input, Page } from "@/components/kit";
 import { navigate } from "@/components/shell/router";
 import { useEnvironments } from "@/features/environments/use-environments";
 import { Select } from "@/components/fields";
-import { act } from "@/features/settings/settings";
+import { act } from "@/features/settings/parts";
 import { useEnvironment } from "@/hooks/use-ns";
 import { withBase } from "@/lib/zone";
 

@@ -2,10 +2,13 @@ import { namespaceName } from "./names.ts";
 
 const ENV_PAGES = ["activity"] as const;
 const DISK_TABS = ["files", "branches", "history", "search"] as const;
+const SETTINGS_TABS = ["general", "members", "keys", "security", "billing"] as const;
+
+export type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 export type Route =
   | { view: "home" }
-  | { view: "settings" }
+  | { view: "settings"; tab: SettingsTab }
   | { view: "usage" }
   | { view: "cli"; code: string }
   | { view: "desktop" }
@@ -36,7 +39,11 @@ function legacyDisk(ns: string, [page, ...rest]: string[]): Route {
 export function parse(path: string): Route {
   const [first, id, kind, name, ...rest] = path.split("/").filter(Boolean).map(decodeURIComponent);
   if (!first) return { view: "home" };
-  if ((first === "settings" || first === "usage") && !id) return { view: first };
+  if (first === "usage" && !id) return { view: first };
+  if (first === "settings" && !kind) {
+    const tab = id ? SETTINGS_TABS.find((each) => each === id && each !== "general") : "general";
+    return tab ? { view: "settings", tab } : MISSING;
+  }
   if (first === "cli") return { view: "cli", code: id ?? "" };
   if (first === "desktop" && !id) return { view: "desktop" };
   const tail = [kind, name, ...rest].filter((part): part is string => Boolean(part));

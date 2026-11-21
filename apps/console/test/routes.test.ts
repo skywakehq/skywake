@@ -31,3 +31,10 @@ test("old addresses still open", () => {
 test("the sign-in page for the CLI takes its code", () => {
   assert.deepEqual(parse("/cli/ABCD-2345"), { view: "cli", code: "ABCD-2345" });
 });
+
+test("settings has a page for each part", () => {
+  assert.deepEqual(parse("/settings"), { view: "settings", tab: "general" });
+  assert.deepEqual(parse("/settings/keys"), { view: "settings", tab: "keys" });
+  assert.deepEqual(parse("/settings/general"), { view: "missing" });
+  assert.deepEqual(parse("/settings/keys/x"), { view: "missing" });
+});

@@ -4,18 +4,7 @@ import { Check, ChevronDown, Copy, KeyRound, Plus, X } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button, Choice, Field, Input, cx } from "@/components/kit";
-import {
-  act,
-  Actions,
-  copy,
-  FormDialog,
-  Glyph,
-  Lines,
-  Remove,
-  Row,
-  Section,
-  Tag,
-} from "./settings";
+import { act, Actions, copy, FormDialog, Glyph, Lines, Remove, Row, Section, Tag } from "./parts";
 import { withBase } from "@/lib/zone";
 
 type Connection = {

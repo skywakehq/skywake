@@ -303,7 +303,7 @@ function LeafRow({ ns, leaf, depth, onFork }: RowProps & { leaf: Leaf }) {
         <span className="hidden w-32 items-center justify-end gap-1.5 truncate text-xs text-muted-foreground sm:flex">
           {leaf.author && (
             <>
-              <Avatar name={leaf.author} className="size-4 text-[8px] ring-0" />
+              <Avatar name={leaf.author} className="size-4" />
               <span className="truncate">{leaf.author}</span>
             </>
           )}

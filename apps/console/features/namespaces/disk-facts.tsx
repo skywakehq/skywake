@@ -22,17 +22,28 @@ export function BucketBadge({ region, className }: { region: string; className?:
 }
 
 /** Whether search is on for a disk, once the API answers. */
+const SEARCH_CHANGED = "skywake:search";
+
+/** Tells every `useSearchOn` of the disk to ask again. */
+export const searchChanged = (ns: string) =>
+  window.dispatchEvent(new CustomEvent(SEARCH_CHANGED, { detail: ns }));
+
 export function useSearchOn(ns: string) {
   const [on, setOn] = useState<boolean>();
   useEffect(() => {
     let live = true;
     const [env, path] = diskApi(ns);
-    v2<{ search: boolean }>(env, "GET", path).then(
-      (disk) => live && setOn(disk.search),
-      () => live && setOn(undefined),
-    );
+    const load = () =>
+      v2<{ search: boolean }>(env, "GET", path).then(
+        (disk) => live && setOn(disk.search),
+        () => live && setOn(undefined),
+      );
+    const changed = (event: Event) => (event as CustomEvent).detail === ns && load();
+    load();
+    window.addEventListener(SEARCH_CHANGED, changed);
     return () => {
       live = false;
+      window.removeEventListener(SEARCH_CHANGED, changed);
     };
   }, [ns]);
   return on;

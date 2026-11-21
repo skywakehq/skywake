@@ -21,7 +21,7 @@ export function Views() {
     case "home":
       return <Home />;
     case "settings":
-      return <SettingsPage />;
+      return <SettingsPage tab={route.tab} />;
     case "usage":
       return <Usage />;
     case "cli":

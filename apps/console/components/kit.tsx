@@ -1,19 +1,11 @@
 "use client";
 
 import { ArrowUpRight } from "lucide-react";
-import {
-  animate,
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useReducedMotion,
-  useTransform,
-} from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
   type ComponentProps,
   type MouseEvent,
   type ReactNode,
-  useEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -22,6 +14,7 @@ import { Button as UIButton } from "@skywake/ui/components/button";
 import { Tabs, TabsItem } from "@skywake/ui/components/tabs";
 import type { IconComponent } from "@skywake/ui/lib/icon-context";
 import { Input } from "@skywake/ui/components/input";
+import { meshOf } from "@skywake/ui/lib/mesh";
 import { Skeleton } from "@skywake/ui/components/skeleton";
 import { FolderIcon } from "@skywake/ui/components/folder-icon";
 import { cn } from "@skywake/ui/lib/utils";
@@ -245,11 +238,7 @@ export function TabNav({ id, tabs, tools }: { id: string; tabs: Tab[]; tools?: R
 
 /** A row of headline numbers, each on its own soft tray. */
 export function Stats({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-2 gap-3 md:auto-cols-fr md:grid-flow-col">
-      {children}
-    </div>
-  );
+  return <div className="grid grid-cols-2 gap-3 md:auto-cols-fr md:grid-flow-col">{children}</div>;
 }
 
 export function Stat({
@@ -330,18 +319,16 @@ export function perDay(times: number[], days: number, current = Date.now()) {
   return counts;
 }
 
-/** A person's or a key's mark: its initial. */
+/** A person's or a key's mark: a round orb of colour, the same for the same name. */
 export function Avatar({ name, className }: { name: string; className?: string }) {
   return (
     <span
       title={name}
-      className={cn(
-        "grid size-6 shrink-0 place-items-center rounded-[24%] bg-tint text-[10px] font-semibold text-foreground uppercase",
-        className,
-      )}
-    >
-      {name[0]}
-    </span>
+      role="img"
+      aria-label={name}
+      style={{ background: meshOf(name) }}
+      className={cn("block size-6 shrink-0 rounded-full", className)}
+    />
   );
 }
 
@@ -349,7 +336,6 @@ export function Avatar({ name, className }: { name: string; className?: string }
 export function DiskMark({ className }: { className?: string }) {
   return <FolderIcon className={cn("h-5 w-auto shrink-0", className)} />;
 }
-
 
 type Box = { x: number; y: number; width: number; height: number };
 
@@ -456,13 +442,7 @@ export function Panel({
 }
 
 /** A list with nothing in it yet: a folder, what goes here, and how to add the first one. */
-export function Empty({
-  title,
-  children,
-}: {
-  title: string;
-  children?: ReactNode;
-}) {
+export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="panel grid justify-items-start gap-5 p-8 sm:p-10">
       <FolderIcon className="h-12 w-auto" />
@@ -490,13 +470,7 @@ export function Rows({ count = 6, className }: { count?: number; className?: str
 
 /** A number that rolls to its new value instead of jumping. */
 function Count({ value, className }: { value: number; className?: string }) {
-  const motionValue = useMotionValue(value);
-  const shown = useTransform(motionValue, (v) => Math.round(v).toLocaleString());
-  useEffect(() => {
-    const controls = animate(motionValue, value, { duration: 0.6, ease: [0.22, 1, 0.36, 1] });
-    return () => controls.stop();
-  }, [motionValue, value]);
-  return <motion.span className={cn("tabular-nums", className)}>{shown}</motion.span>;
+  return <span className={cn("tabular-nums", className)}>{value.toLocaleString()}</span>;
 }
 
 // One clock for every "3m ago" on the page, so they tick together.

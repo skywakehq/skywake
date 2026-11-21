@@ -4,6 +4,7 @@ import { useZero, ZeroProvider } from "@rocicorp/zero/react";
 import { createContext, type ReactNode, use, useEffect, useSyncExternalStore } from "react";
 import { AppShell } from "@skywake/ui/components/app-shell";
 import { UploadTray } from "@/features/files/upload-tray";
+import { AccountDialog } from "@/features/settings/account";
 import { since } from "@/features/usage/usage";
 import { mutators } from "@/zero/mutators";
 import { queries } from "@/zero/queries";
@@ -72,6 +73,7 @@ export function Console({
           </AppShell>
           <CommandMenu />
           <UploadTray />
+          <AccountDialog />
         </UrlsContext>
       </RoleContext>
     </ZeroProvider>

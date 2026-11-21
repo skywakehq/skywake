@@ -6,6 +6,7 @@ import {
   ChartColumn,
   ChevronsUpDown,
   LayoutGrid,
+  CircleUser,
   LogOut,
   Moon,
   Plus,
@@ -44,9 +45,11 @@ import {
   MenuLabel,
   MenuSeparator,
   MenuTrigger,
+  Prompt,
 } from "@/components/menu";
 import { NewEnvironment } from "@/features/environments/new-environment";
 import { withBase } from "@/lib/zone";
+import { openAccount } from "@/features/settings/account";
 
 const DOCS = "https://skywake.dev/docs";
 
@@ -95,7 +98,7 @@ export function AppSidebar() {
               <NavItem href="/usage" active={path === "/usage"} icon={<ChartColumn />}>
                 Usage
               </NavItem>
-              <NavItem href="/settings" active={path === "/settings"} icon={<Settings />}>
+              <NavItem href="/settings" active={path.startsWith("/settings")} icon={<Settings />}>
                 Settings
               </NavItem>
             </SidebarMenu>
@@ -161,7 +164,18 @@ function OrgSwitcher() {
   const { resolvedTheme, setTheme } = useTheme();
   const router = useRouter();
 
+  const [creating, setCreating] = useState(false);
   const count = orgs?.length ?? 0;
+
+  async function create(name: string) {
+    const response = await fetch(withBase("/api/orgs"), {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error ?? "Could not make the organization");
+    await switchTo(data.id);
+  }
 
   async function switchTo(id: string) {
     await authClient.organization.setActive({ organizationId: id });
@@ -204,17 +218,23 @@ function OrgSwitcher() {
               index={count}
               icon={Plus}
               label="New organization"
-              onSelect={() => router.push("/onboarding")}
+              onSelect={() => setCreating(true)}
             />
             <MenuSeparator />
             <MenuItem
               index={count + 1}
+              icon={CircleUser}
+              label="Your account"
+              onSelect={openAccount}
+            />
+            <MenuItem
+              index={count + 2}
               icon={resolvedTheme === "dark" ? Sun : Moon}
               label={resolvedTheme === "dark" ? "Light theme" : "Dark theme"}
               onSelect={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
             />
             <MenuItem
-              index={count + 2}
+              index={count + 3}
               icon={LogOut}
               label="Sign out"
               onSelect={async () => {
@@ -224,6 +244,14 @@ function OrgSwitcher() {
             />
           </MenuContent>
         </Menu>
+        <Prompt
+          open={creating}
+          onOpenChange={setCreating}
+          title="New organization"
+          label="Acme"
+          submit="Create"
+          onSubmit={create}
+        />
       </SidebarMenuItem>
     </SidebarMenu>
   );

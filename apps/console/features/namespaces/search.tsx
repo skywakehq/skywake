@@ -9,6 +9,7 @@ import { call, useApi } from "@/lib/api";
 import { Label, TextArea, TextField } from "@/components/fields";
 import { apiPath } from "@/lib/paths";
 import { diskApi, v2 } from "@/lib/v2";
+import { searchChanged } from "./disk-facts";
 import { withBase } from "@/lib/zone";
 import { NamespacePage } from "./namespace-header";
 import { SearchBox } from "./search-box";
@@ -138,6 +139,7 @@ function TurnOn({ ns, onDone }: { ns: string; onDone: () => void }) {
         embed: mode === "words" ? false : model.trim() ? { model: model.trim() } : undefined,
       });
       toast.success("Search is on", { description: "Files on main are searchable in seconds." });
+      searchChanged(ns);
       onDone();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));
@@ -151,8 +153,8 @@ function TurnOn({ ns, onDone }: { ns: string; onDone: () => void }) {
       <div>
         <p className="text-lg font-medium tracking-[-0.015em]">Search is off</p>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Turn it on and every file on <span className="font-mono">main</span> is searchable
-          seconds after it is saved.
+          Turn it on and every file on <span className="font-mono">main</span> is searchable seconds
+          after it is saved.
         </p>
       </div>
       <div className="grid gap-1.5">
@@ -240,6 +242,7 @@ function SearchOn({ ns, link, onChange }: { ns: string; link: IndexLink; onChang
       const [env, path] = diskApi(ns);
       await v2(env, "PATCH", path, { search: false });
       toast.success("Search is off", { description: "The files stay; only the search goes." });
+      searchChanged(ns);
       onChange();
     } catch (failure) {
       toast.error(failure instanceof Error ? failure.message : String(failure));

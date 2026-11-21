@@ -10,6 +10,7 @@ import { Button, DiskMark, Hash, TabNav, plural } from "@/components/kit";
 import { ForkDialog, useForkDialog } from "@/features/branches/branch-actions";
 import { useFleet } from "@/features/fleet/fleet";
 import { queries } from "@/zero/queries";
+import { DeleteNamespace } from "./delete-namespace";
 import { BucketBadge, MountLine, useSearchOn } from "./disk-facts";
 
 const TABS = [
@@ -45,16 +46,14 @@ export function NamespacePage({
           <h1 className="min-w-0 truncate text-[22px] leading-8 font-medium tracking-[-0.025em]">
             {nameInEnv(ns)}
           </h1>
-          {main && (
-            <Button
-              className="ml-auto"
-              size="default"
-              onClick={() => openFork(main)}
-              leadingIcon={GitFork}
-            >
-              Fork {main}
-            </Button>
-          )}
+          <div className="ml-auto flex gap-2">
+            {main && (
+              <Button size="default" onClick={() => openFork(main)} leadingIcon={GitFork}>
+                Fork {main}
+              </Button>
+            )}
+            <DeleteNamespace ns={ns} />
+          </div>
         </div>
         <TabNav
           id={ns}

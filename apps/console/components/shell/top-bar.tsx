@@ -18,8 +18,6 @@ const PAGES: Record<string, string> = {
   branches: "Branches",
   search: "Search",
   history: "History",
-  usage: "Usage",
-  settings: "Settings",
 };
 
 /** Where you are, as a trail of links. Switching happens in the sidebar. */
@@ -32,7 +30,8 @@ export function TopBar() {
   const page = PAGES[path.split("/").at(-1) ?? ""];
 
   const trail: TrailStep[] = [];
-  if (path === "/usage" || path === "/settings") trail.push({ label: page });
+  if (path === "/usage") trail.push({ label: "Usage" });
+  else if (route.view === "settings") trail.push({ label: "Settings" });
   else if (route.view === "cli") trail.push({ label: "Sign in the CLI" });
   else if (route.view === "desktop") trail.push({ label: "Sign in Skywake for Mac" });
   else {

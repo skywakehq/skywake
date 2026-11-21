@@ -17,7 +17,7 @@ export function Connect({ ns }: { ns: string }) {
       </div>
       <MountLine ns={ns} />
       <Button asChild variant="primary" size="default" leadingIcon={KeyRound}>
-        <Link href="/settings#keys">Create a key</Link>
+        <Link href="/settings/keys">Create a key</Link>
       </Button>
     </div>
   );

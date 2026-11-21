@@ -114,7 +114,7 @@ export function Activity({ env }: { env: string }) {
         >
           {ICONS[event.kind] ?? <ActivityIcon />}
         </span>
-        <Avatar name={who} className="size-5 ring-0 max-sm:hidden" />
+        <Avatar name={who} className="size-5 max-sm:hidden" />
         <span className="min-w-0 flex-1 truncate">
           <span className="font-medium">{who}</span>{" "}
           <span className="text-muted-foreground">{describe(event, many)}</span>

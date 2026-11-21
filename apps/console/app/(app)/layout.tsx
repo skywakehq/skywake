@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Console } from "@/components/shell/console";
 import { AuthOptionsProvider } from "@/features/auth/options";
 import { auth } from "@/server/auth";
+import { newOrg } from "@/server/new-org";
 import { membershipOf } from "@/server/membership";
 import { authOptions } from "@/server/hosted";
 
@@ -13,8 +14,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   let org = session.session.activeOrganizationId;
   if (!org) {
     const orgs = await auth.api.listOrganizations({ headers: requestHeaders });
-    if (!orgs.length) redirect("/onboarding");
-    org = orgs[0].id;
+    org = orgs[0]?.id ?? (await newOrg(requestHeaders, session.user));
     await auth.api.setActiveOrganization({
       headers: requestHeaders,
       body: { organizationId: org },

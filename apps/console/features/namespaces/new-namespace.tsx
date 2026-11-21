@@ -55,11 +55,10 @@ export function NewNamespace({
     setBusy(true);
     try {
       const name = namespaceName(env, value);
-      const result = zero.mutate(mutators.namespace.create({ name, region }));
-      navigate(nsPath(name));
-      await settled(result);
+      await settled(zero.mutate(mutators.namespace.create({ name, region })));
       toast.success(`Created ${value} in ${city(region)}`);
       close(false);
+      navigate(nsPath(name));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
     }
