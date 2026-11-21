@@ -1,11 +1,17 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, CreditCard, Gauge, ReceiptText } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { AlertTriangle, Check, ChevronDown, CreditCard, Gauge, ReceiptText } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@skywake/ui/components/dialog";
+import { type ComponentProps, type ReactNode, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { authClient } from "@/features/auth/auth-client";
 import { Button, cx } from "@/components/kit";
-import { act, FormDialog, Glyph, Lines, Row, Section, Tag } from "./settings";
+import { act, Glyph, Lines, Row, Section, Tag } from "./parts";
 import { withBase } from "@/lib/zone";
 import { Checkout, type CheckoutPlan } from "./checkout";
 
@@ -22,7 +28,13 @@ type Meter = {
   limit: number | null;
 };
 
-type Offer = { plan: Plan; name: string; minimum_cents: number | null; features: string[] };
+type Offer = {
+  plan: Plan;
+  name: string;
+  minimum_cents: number | null;
+  storage_gb: number | null;
+  features: string[];
+};
 
 type Billing = {
   enabled: boolean;
@@ -39,7 +51,6 @@ type Billing = {
   estimate_cents: number;
   meters: Meter[];
   stored: { gb: number; limit_gb: number | null };
-  indexes: { count: number; limit: number | null };
   files: { gb: number; limit_gb: number | null };
   filesystems: { count: number; limit: number | null };
   plans: Offer[];
@@ -63,6 +74,8 @@ const FEATURES: Record<string, string> = {
   customer_keys: "Customer-managed keys",
 };
 
+const diskOf = (index: string) => index.replace(/\.files$/, "");
+
 const UNITS: Record<string, string> = {
   storage: "GB-months stored",
   writes: "GB written",
@@ -71,6 +84,9 @@ const UNITS: Record<string, string> = {
   reranks: "rows reranked",
   pinned: "GB-hours pinned",
 };
+
+const size = (gb: number | null) =>
+  gb === null ? "Unlimited" : gb >= 1024 ? `${amount(gb / 1024)} TB` : `${amount(gb)} GB`;
 
 const money = (cents: number) =>
   (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -140,8 +156,11 @@ export function Billing() {
       setBuying({
         plan,
         name: offer.name,
-        minimumCents: offer.minimum_cents ?? 0,
-        features: offer.features.map((feature) => FEATURES[feature] ?? feature),
+        priceCents: offer.minimum_cents ?? 0,
+        features: [
+          `${size(offer.storage_gb)} of storage`,
+          ...offer.features.map((feature) => FEATURES[feature] ?? feature),
+        ],
         clientSecret: started.client_secret,
         publishableKey: started.publishable_key,
       });
@@ -165,12 +184,12 @@ export function Billing() {
   return (
     <>
       <Section
-        id="billing"
-        title="Billing"
+        id="plan"
+        title="Plan"
         description={
           paying
             ? `This period, ${day(billing.period_start)} to ${day(billing.period_end)}.`
-            : `This month's use of the Free plan. It resets on ${day(billing.period_end)}.`
+            : "Everything on your disks and in search counts toward storage."
         }
         action={
           <div className="flex gap-2">
@@ -194,58 +213,7 @@ export function Billing() {
             <Button onClick={() => go("/portal")}>Update card</Button>
           </Row>
         )}
-        {!paying && (
-          <Limit
-            name="Index storage"
-            used={billing.stored.gb}
-            limit={billing.stored.limit_gb}
-            unit="GB"
-          />
-        )}
-        {!paying && (
-          <Limit
-            name="Indexes"
-            used={billing.indexes.count}
-            limit={billing.indexes.limit}
-            unit=""
-          />
-        )}
-        {!paying && (
-          <Limit
-            name="Files stored"
-            used={billing.files.gb}
-            limit={billing.files.limit_gb}
-            unit="GB"
-          />
-        )}
-        {!paying && (
-          <Limit
-            name="Disks"
-            used={billing.filesystems.count}
-            limit={billing.filesystems.limit}
-            unit=""
-          />
-        )}
-        {billing.meters.map((meter) =>
-          paying || billing.plan === "enterprise" ? (
-            <Row key={meter.meter}>
-              <Glyph icon={Gauge} />
-              <Lines
-                title={meter.name}
-                detail={`${amount(meter.quantity)} ${meter.unit} at ${meter.price}`}
-              />
-              <span className="tabular-nums">{money(meter.amount_cents)}</span>
-            </Row>
-          ) : meter.limit !== null ? (
-            <Limit
-              key={meter.meter}
-              name={meter.name}
-              used={meter.quantity}
-              limit={meter.limit}
-              unit={meter.unit}
-            />
-          ) : null,
-        )}
+        <Limit name="Storage" used={billing.stored.gb} limit={billing.stored.limit_gb} unit="GB" />
       </Section>
       <Choose
         open={choosing}
@@ -262,13 +230,7 @@ export function Billing() {
           )
         }
       />
-      <Checkout
-        choice={buying}
-        rates={billing.meters.map((meter) => ({ name: meter.name, price: meter.price }))}
-        onClose={() => setBuying(null)}
-        onPaid={paid}
-      />
-      <Invoices />
+      <Checkout choice={buying} onClose={() => setBuying(null)} onPaid={paid} />
     </>
   );
 }
@@ -277,10 +239,10 @@ function PlanRow({ billing }: { billing: Billing }) {
   const minimum = billing.minimum_cents;
   const detail =
     billing.plan === "free"
-      ? "No card needed. Upgrade for more room and paid features."
+      ? "No card needed. Upgrade for more storage and paid features."
       : billing.plan === "enterprise"
         ? "Custom terms."
-        : `${money(minimum ?? 0)} a month minimum, counted toward usage. ${money(billing.usage_cents)} used so far.`;
+        : `${money(minimum ?? 0)} a month, renews ${day(billing.period_end)}.`;
   return (
     <Row>
       <Glyph icon={CreditCard} />
@@ -299,12 +261,6 @@ function PlanRow({ billing }: { billing: Billing }) {
         }
         detail={detail}
       />
-      {billing.plan !== "free" && (
-        <span className="text-right">
-          <span className="block tabular-nums">{money(billing.estimate_cents)}</span>
-          <span className="block text-[12px] text-muted-foreground">so far</span>
-        </span>
-      )}
     </Row>
   );
 }
@@ -352,6 +308,14 @@ function Limit({
   );
 }
 
+const PITCH: Record<"free" | Paid, string> = {
+  free: "For trying Skywake out.",
+  launch: "For agents in production.",
+  scale: "For larger workloads.",
+};
+
+const PAID_NAME: Record<Paid, string> = { launch: "Launch", scale: "Scale" };
+
 function Choose({
   open,
   onOpenChange,
@@ -366,55 +330,150 @@ function Choose({
   onCancel: () => void;
 }) {
   const paying = billing.plan === "launch" || billing.plan === "scale";
+  const includes = (offer: Offer): string[] => {
+    const storage = `${size(offer.storage_gb)} of storage`;
+    if (offer.plan === "free")
+      return [storage, "Unlimited disks and branches", "Search on every disk"];
+    if (offer.plan === "launch") return [storage, "Everything in Free", "Pinned replicas"];
+    return [storage, "Everything in Launch"];
+  };
+
   return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={paying ? "Change plan" : "Upgrade"}
-      description="Usage is billed by the meter. Each plan's monthly minimum counts toward it."
-    >
-      <div className="-mx-6">
-        {billing.plans
-          .filter((offer) => offer.plan !== "free")
-          .map((offer) => {
-            const current = offer.plan === billing.plan && !billing.next_plan;
-            return (
-              <div key={offer.plan} className="flex items-center gap-3.5 px-6 py-3 text-sm">
-                <Lines
-                  title={
-                    <>
-                      {offer.name}
-                      {current && <Tag>Current</Tag>}
-                    </>
-                  }
-                  detail={
-                    offer.plan === "enterprise"
-                      ? "Custom terms and support. Contact us."
-                      : `${money(offer.minimum_cents ?? 0)} a month minimum. ${
-                          offer.features.map((feature) => FEATURES[feature]).join(", ") ||
-                          "Usage only"
-                        }.`
-                  }
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto p-0 sm:max-w-[880px]"
+        showCloseButton={false}
+      >
+        <div className="grid gap-7 p-7 max-sm:p-4">
+          <div>
+            <DialogTitle className="text-[20px] font-medium tracking-[-0.025em]">
+              {paying ? "Change plan" : "Upgrade"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm">
+              One flat price a month. Nothing is metered.
+            </DialogDescription>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {billing.plans
+              .filter((offer) => offer.plan !== "enterprise")
+              .map((offer) => (
+                <PlanCard
+                  key={offer.plan}
+                  offer={offer}
+                  lines={includes(offer)}
+                  billing={billing}
+                  onPick={onPick}
+                  onCancel={onCancel}
                 />
-                {offer.plan !== "enterprise" && !current && (
-                  <Button variant="primary" onClick={() => onPick(offer.plan as Paid)}>
-                    {paying ? "Switch" : "Choose"}
-                  </Button>
-                )}
-              </div>
-            );
-          })}
-      </div>
-      {paying && (
-        <p className="text-[13px] text-muted-foreground">
-          A larger plan starts now, with the rest of this period charged. A smaller one starts when
-          the period ends.{" "}
-          <button type="button" className="underline" onClick={onCancel}>
-            {billing.cancel_at_period_end ? "Keep the subscription" : "End the subscription"}
-          </button>
-        </p>
+              ))}
+          </div>
+          {paying && (
+            <p className="-mt-3 text-[13px] text-muted-foreground">
+              A larger plan starts now, with the rest of this period charged. A smaller one starts
+              when the period ends.
+            </p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function PlanCard({
+  offer,
+  lines,
+  billing,
+  onPick,
+  onCancel,
+}: {
+  offer: Offer;
+  lines: string[];
+  billing: Billing;
+  onPick: (plan: Paid) => void;
+  onCancel: () => void;
+}) {
+  const plan = offer.plan as "free" | Paid;
+  const paying = billing.plan === "launch" || billing.plan === "scale";
+  const here = plan === billing.plan && !billing.next_plan;
+  const leaving = plan === "free" && billing.cancel_at_period_end;
+  const lit = plan === (paying ? billing.plan : "launch");
+  const muted = lit ? "text-background/60" : "text-muted-foreground";
+
+  let action: ReactNode = null;
+  if (here)
+    action = (
+      <PlanButton tone={lit ? "inverse" : "soft"} disabled>
+        Current plan
+      </PlanButton>
+    );
+  else if (plan === "free") {
+    if (paying)
+      action = (
+        <PlanButton tone="soft" onClick={onCancel}>
+          {leaving ? `Stay on ${billing.name}` : "Move to Free"}
+        </PlanButton>
+      );
+  } else
+    action = (
+      <PlanButton tone={lit ? "inverse" : "solid"} onClick={() => onPick(plan)}>
+        {paying ? "Switch" : "Choose"} {PAID_NAME[plan]}
+      </PlanButton>
+    );
+
+  return (
+    <div
+      className={cx(
+        "flex flex-col rounded-[20px] p-6 max-sm:p-5",
+        lit ? "bg-foreground text-background" : "bg-tint",
       )}
-    </FormDialog>
+    >
+      <div className="flex h-6 items-center justify-between gap-2">
+        <span className="text-[15px] font-medium">{offer.name}</span>
+        {leaving && <span className={cx("text-xs", muted)}>From {day(billing.period_end)}</span>}
+      </div>
+      <p className={cx("text-[13px]", muted)}>{PITCH[plan]}</p>
+      <div className="mt-6 flex items-baseline gap-1.5">
+        <span className="text-[36px] leading-none font-medium tracking-[-0.04em] tabular-nums">
+          ${(offer.minimum_cents ?? 0) / 100}
+        </span>
+        <span className={cx("text-[13px]", muted)}>{plan === "free" ? "no card" : "a month"}</span>
+      </div>
+      <div className="mt-6 h-10">{action}</div>
+      <ul className="mt-6 grid gap-2.5 text-[13px]">
+        {lines.map((line) => (
+          <li key={line} className="flex items-center gap-2.5">
+            <span
+              className={cx(
+                "grid size-4 shrink-0 place-items-center rounded-full",
+                lit ? "bg-background/15" : "bg-green/15 text-green",
+              )}
+            >
+              <Check className="size-2.5" strokeWidth={3} />
+            </span>
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PlanButton({
+  tone,
+  ...props
+}: { tone: "solid" | "inverse" | "soft" } & ComponentProps<"button">) {
+  return (
+    <button
+      type="button"
+      {...props}
+      className={cx(
+        "flex h-10 w-full items-center justify-center rounded-xl text-[13px] font-medium transition-colors disabled:cursor-default",
+        tone === "solid" && "bg-foreground text-background hover:bg-foreground/85",
+        tone === "inverse" && "bg-background text-foreground hover:bg-background/85",
+        tone === "soft" && "bg-active text-foreground hover:bg-hover disabled:hover:bg-active",
+        props.disabled && "opacity-70",
+      )}
+    />
   );
 }
 
@@ -436,9 +495,9 @@ function Invoices() {
   if (!org || invoices === null) return null;
   return (
     <Section
-      id="usage-by-index"
-      title="Usage by index"
-      description="What each index used each month, at list prices, newest first."
+      id="usage-by-disk"
+      title="Usage by disk"
+      description="What each disk used each month, at list prices, newest first."
     >
       {invoices.length === 0 && (
         <p className="px-4 py-8 text-center text-sm text-muted-foreground">No usage yet.</p>
@@ -492,7 +551,7 @@ function InvoiceLines({ org, month }: { org: string; month: string }) {
           key={`${line.index}/${line.item}`}
           className="flex items-center gap-3.5 py-2.5 pr-4 pl-[66px] text-[13px]"
         >
-          <span className="w-48 truncate">{line.index}</span>
+          <span className="w-48 truncate">{diskOf(line.index)}</span>
           <span className="flex-1 truncate text-muted-foreground">
             {amount(line.quantity)} {UNITS[line.item] ?? line.item} at ${line.unit_price}
           </span>

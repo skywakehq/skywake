@@ -6,7 +6,7 @@ import type { Feature } from "../../http/context.ts";
 import { badRequest, messageOf } from "../../http/errors.ts";
 import { clamp, pageSize } from "../../http/page.ts";
 import { changeable, readable } from "../../http/request.ts";
-import { admitsDownload, admitsFiles, downloaded, filesChanged } from "../billing/require.ts";
+import { admitsFiles, downloaded, filesChanged } from "../billing/require.ts";
 import { whileWritable } from "../branches/protection.ts";
 import * as commits from "../history/commits.ts";
 import { grepIndexed } from "../links/grep.ts";
@@ -34,7 +34,6 @@ export const filesFeature: Feature = {
       const { namespace, branch } = c.req.valid("param");
       const { path, offset, length, at } = c.req.valid("query");
       const ns = await readable(c, namespace);
-      await admitsDownload(c, ns.org);
       const commit = at ?? (await ns.engine.head(branch));
       const { info } = await ns.engine.list(branch, path, commit);
       const end = info.kind === "file" ? info.size : offset + PIECE;

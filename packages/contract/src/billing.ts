@@ -57,6 +57,10 @@ export const PlanOffer = z
     plan: Plan,
     name: z.string(),
     minimum_cents: z.number().int().nullable(),
+    storage_gb: z
+      .number()
+      .nullable()
+      .openapi({ description: "The storage the plan includes, or null for no limit." }),
     features: z.array(Feature),
   })
   .openapi("PlanOffer");

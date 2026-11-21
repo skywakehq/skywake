@@ -52,27 +52,24 @@ const FEATURE_NAME: Record<Feature, string> = {
 };
 
 const LIMIT_NAME: Record<Limit, (amount: string) => string> = {
-  stored: (n) => `${n} GB of index storage`,
+  stored: (n) => `${n} of storage`,
   storage: (n) => `${n} GB-months of storage`,
   writes: (n) => `${n} GB of writes a month`,
-  queries: (n) => `${n} TB of queries scanned a month`,
-  embeddings: (n) => `${n} embedded texts a month`,
-  reranks: (n) => `${n} reranked documents a month`,
+  queries: (n) => `${n} TB scanned by search a month`,
+  embeddings: (n) => `${n} texts embedded for search a month`,
+  reranks: (n) => `${n} search results reranked a month`,
   pinned: (n) => `${n} GB-hours of pinned replicas a month`,
-  indexes: (n) => `${n} indexes`,
-  files_stored: (n) => `${n} GB of files`,
   files_storage: (n) => `${n} GB-months of files`,
   files_egress: (n) => `${n} GB of file downloads a month`,
-  filesystems: (n) => `${n} filesystems`,
 };
 
 const GiB = 1n << 30n;
 
 function amountOf(limit: Limit, value: bigint) {
-  if (limit === "stored" || limit === "files_stored") {
-    return shownNumber(Number(value) / Number(GiB));
+  if (limit === "stored") {
+    const gb = Number(value) / Number(GiB);
+    return gb >= 1024 ? `${shownNumber(gb / 1024)} TB` : `${shownNumber(gb)} GB`;
   }
-  if (limit === "indexes" || limit === "filesystems") return value.toString();
   return shownNumber(shown(limit, value));
 }
 
@@ -86,7 +83,6 @@ export class Gate {
   readonly #accounts = new Cache<Account | null>(ACCOUNT_MS);
   readonly #usage = new Cache<Map<Meter, bigint>>(USAGE_MS);
   readonly #stored = new Cache<bigint>(STORED_MS);
-  readonly #files = new Cache<bigint>(STORED_MS);
 
   constructor(db: Db, ledger: Ledger, upgradeUrl: string, now: () => Date = () => new Date()) {
     this.#db = db;
@@ -107,7 +103,6 @@ export class Gate {
     this.#accounts.drop(org);
     this.#usage.drop(org);
     this.#stored.drop(org);
-    this.#files.drop(org);
   }
 
   async require(org: string, feature: Feature) {
@@ -126,21 +121,8 @@ export class Gate {
     await this.#within(plan, meter, async () => (await this.usage(org)).get(meter) ?? 0n);
   }
 
-  async admitIndex(org: string) {
-    const plan = await this.plan(org);
-    await this.#within(plan, "indexes", () => billing.indexCount(this.#db, org));
-  }
-
-  async admitFilesystem(org: string) {
-    const plan = await this.plan(org);
-    await this.#within(plan, "filesystems", () => billing.filesystemCount(this.#db, org));
-  }
-
   async admitFiles(org: string) {
-    const plan = await this.plan(org);
-    await this.#within(plan, "files_stored", () =>
-      this.#files.get(org, () => billing.filesStored(this.#db, org)),
-    );
+    await this.#within(await this.plan(org), "stored", () => this.#storedOf(org));
   }
 
   async usage(org: string) {
@@ -154,7 +136,13 @@ export class Gate {
   }
 
   #storedOf(org: string) {
-    return this.#stored.get(org, () => billing.storedBytes(this.#db, org));
+    return this.#stored.get(org, async () => {
+      const [search, files] = await Promise.all([
+        billing.storedBytes(this.#db, org),
+        billing.filesStored(this.#db, org),
+      ]);
+      return search + files;
+    });
   }
 
   async #within(plan: Plan, limit: Limit, used: () => Promise<bigint>) {

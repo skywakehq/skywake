@@ -1,43 +1,18 @@
 import Stripe from "stripe";
 
-import {
-  type Meter,
-  METERS,
-  meterEvent,
-  meterKey,
-  PAID,
-  type PaidPlan,
-  planKey,
-} from "./catalog.ts";
-import type {
-  CheckoutAsk,
-  CheckoutStart,
-  Grant,
-  Invoice,
-  InvoiceStatus,
-  NewGrant,
-  Notice,
-  Payments,
-  Subscription,
-  Usage,
-} from "./payments.ts";
+import { PAID, type PaidPlan, planKey } from "./catalog.ts";
+import type { CheckoutAsk, CheckoutStart, Notice, Payments, Subscription } from "./payments.ts";
 
 export const PORTAL_TAG = "skywake_portal";
-const INVOICE_TAG = "skywake_invoice";
 
 const date = (seconds: number) => new Date(seconds * 1000);
-const seconds = (at: Date) => Math.floor(at.getTime() / 1000);
 const idOf = (ref: string | { id: string } | null | undefined) =>
   ref == null ? null : typeof ref === "string" ? ref : ref.id;
 
 interface Catalog {
   plans: Map<string, PaidPlan>;
   planOf: Record<PaidPlan, string>;
-  meters: string[];
-  meterOf: Record<Meter, string>;
 }
-
-const CLOCK_SLACK_MS = 60_000;
 
 export class StripePayments implements Payments {
   readonly #stripe: Stripe;
@@ -71,7 +46,7 @@ export class StripePayments implements Payments {
       .retrieve(id, { expand: ["schedule"] })
       .catch(missing);
     if (!found) return null;
-    const { plans, meterOf } = await this.#loadCatalog();
+    const { plans } = await this.#loadCatalog();
     const schedule = typeof found.schedule === "object" ? found.schedule : null;
     const upcoming = schedule?.phases.find(
       (phase) => phase.start_date > (schedule.current_phase?.start_date ?? 0),
@@ -94,82 +69,7 @@ export class StripePayments implements Payments {
       endedAt: found.ended_at === null ? null : date(found.ended_at),
       nextPlan: nextPrice ? plans.get(nextPrice)! : null,
       scheduleDone: schedule !== null && upcoming === undefined,
-      missingMeters: METERS.filter(
-        (meter) => !items.some((item) => item.price.id === meterOf[meter]),
-      ),
     };
-  }
-
-  async invoice(id: string): Promise<Invoice | null> {
-    const found = await this.#stripe.invoices.retrieve(id).catch(missing);
-    if (!found?.id) return null;
-    const { plans } = await this.#loadCatalog();
-    let cents = 0;
-    let start: number | null = null;
-    let end: number | null = null;
-    for await (const line of this.#stripe.invoices.listLineItems(found.id, { limit: 100 })) {
-      const price = idOf(line.pricing?.price_details?.price);
-      if (!price || !plans.has(price)) continue;
-      cents += line.amount;
-      start = start === null ? line.period.start : Math.min(start, line.period.start);
-      end = end === null ? line.period.end : Math.max(end, line.period.end);
-    }
-    return {
-      id: found.id,
-      customer: idOf(found.customer)!,
-      subscription: idOf(found.parent?.subscription_details?.subscription),
-      status: (found.status ?? "draft") as InvoiceStatus,
-      planCents: cents,
-      planStart: start === null ? null : date(start),
-      planEnd: end === null ? null : date(end),
-    };
-  }
-
-  async grants(customer: string): Promise<Grant[]> {
-    const found: Grant[] = [];
-    for await (const grant of this.#stripe.billing.creditGrants.list({ customer, limit: 100 })) {
-      found.push({
-        id: grant.id,
-        invoice: grant.metadata[INVOICE_TAG] ?? null,
-        voided: grant.voided_at !== null,
-      });
-    }
-    return found;
-  }
-
-  async grant(grant: NewGrant) {
-    const later = grant.effectiveAt.getTime() > Date.now() + CLOCK_SLACK_MS;
-    const from = later ? seconds(grant.effectiveAt) : undefined;
-    await this.#stripe.billing.creditGrants.create(
-      {
-        customer: grant.customer,
-        name: "Monthly minimum",
-        category: "paid",
-        amount: { type: "monetary", monetary: { value: grant.cents, currency: "usd" } },
-        applicability_config: { scope: { price_type: "metered" } },
-        ...(from ? { effective_at: from } : {}),
-        expires_at: seconds(grant.expiresAt),
-        metadata: { [INVOICE_TAG]: grant.invoice },
-      },
-      { idempotencyKey: `grant-${grant.invoice}-${from ?? "now"}` },
-    );
-  }
-
-  async voidGrant(id: string) {
-    await this.#stripe.billing.creditGrants.voidGrant(id);
-  }
-
-  async report(usage: Usage) {
-    try {
-      await this.#stripe.billing.meterEvents.create({
-        event_name: meterEvent(usage.meter),
-        identifier: usage.identifier,
-        timestamp: seconds(usage.at),
-        payload: { stripe_customer_id: usage.customer, value: usage.value.toString() },
-      });
-    } catch (error) {
-      if (!alreadyReported(error)) throw error;
-    }
   }
 
   async checkout(ask: CheckoutAsk): Promise<CheckoutStart> {
@@ -185,12 +85,12 @@ export class StripePayments implements Payments {
       await this.#expire(open.id);
     }
     if (ask.email) await this.#addEmail(ask.customer, ask.email);
-    const { planOf, meters } = await this.#loadCatalog();
+    const { planOf } = await this.#loadCatalog();
     const common = {
       mode: "subscription",
       customer: ask.customer,
       client_reference_id: ask.org,
-      line_items: [{ price: planOf[ask.plan], quantity: 1 }, ...meters.map((price) => ({ price }))],
+      line_items: [{ price: planOf[ask.plan], quantity: 1 }],
       subscription_data: { metadata: { org: ask.org } },
     } satisfies Stripe.Checkout.SessionCreateParams;
     const done = withQuery(ask.returnUrl, "checkout", "done");
@@ -279,16 +179,6 @@ export class StripePayments implements Payments {
     });
   }
 
-  async addMeters(subscription: string, meters: Meter[]) {
-    const { meterOf } = await this.#loadCatalog();
-    for (const meter of meters) {
-      await this.#stripe.subscriptionItems.create(
-        { subscription, price: meterOf[meter], proration_behavior: "none" },
-        { idempotencyKey: `meter-${subscription}-${meter}` },
-      );
-    }
-  }
-
   async release(id: string) {
     const found = await this.#stripe.subscriptions.retrieve(id);
     const schedule = idOf(found.schedule);
@@ -338,7 +228,7 @@ export class StripePayments implements Payments {
   }
 
   async #fetchCatalog(): Promise<Catalog> {
-    const keys = [...PAID.map(planKey), ...METERS.map(meterKey)];
+    const keys = PAID.map(planKey);
     const prices = await this.#stripe.prices.list({ lookup_keys: keys, active: true, limit: 100 });
     const byKey = new Map(prices.data.map((price) => [price.lookup_key, price.id]));
     const missingKeys = keys.filter((key) => !byKey.has(key));
@@ -351,10 +241,6 @@ export class StripePayments implements Payments {
     return {
       plans: new Map(PAID.map((plan) => [planOf[plan], plan])),
       planOf,
-      meters: METERS.map((meter) => byKey.get(meterKey(meter))!),
-      meterOf: Object.fromEntries(
-        METERS.map((meter) => [meter, byKey.get(meterKey(meter))!]),
-      ) as Record<Meter, string>,
     };
   }
 
@@ -380,15 +266,6 @@ export class StripePayments implements Payments {
 function missing(error: unknown): null {
   if (error instanceof Stripe.errors.StripeError && error.statusCode === 404) return null;
   throw error;
-}
-
-function alreadyReported(error: unknown) {
-  return (
-    error instanceof Stripe.errors.StripeError &&
-    error.statusCode === 400 &&
-    /identifier/i.test(error.message) &&
-    /already|exists|duplicate/i.test(error.message)
-  );
 }
 
 function withQuery(url: string, key: string, value: string) {

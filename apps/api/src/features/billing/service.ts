@@ -11,7 +11,6 @@ import { Gate } from "./gate.ts";
 import { Ledger } from "./ledger.ts";
 import type { Payments } from "./payments.ts";
 import * as billing from "./queries.ts";
-import { Reporter } from "./reporter.ts";
 import { Sampler, type Sized } from "./sampler.ts";
 import { isLive } from "./standing.ts";
 import { periodOf, summarize } from "./summary.ts";
@@ -37,7 +36,6 @@ export class Billing {
   readonly gate: Gate;
   readonly ledger: Ledger;
   readonly sync: Sync;
-  readonly reporter: Reporter;
   readonly sampler: Sampler;
   readonly #db: Db;
   readonly #payments: Payments;
@@ -61,12 +59,11 @@ export class Billing {
     this.ledger = new Ledger(deps.db, deps.log, now);
     this.gate = new Gate(deps.db, this.ledger, this.upgradeUrl, now);
     this.sync = new Sync(deps.db, deps.payments, deps.log, (org) => this.gate.forget(org), now);
-    this.reporter = new Reporter(deps.db, deps.payments, this.sync, deps.log, now);
     this.sampler = new Sampler(deps.db, deps.stores, deps.sized, deps.log, now);
   }
 
   get upgradeUrl() {
-    return `${this.#consoleUrl}/settings#billing`;
+    return `${this.#consoleUrl}/settings/billing`;
   }
 
   record(org: string, meter: Meter, amount: bigint) {
@@ -79,14 +76,6 @@ export class Billing {
 
   require(org: string, feature: Feature) {
     return this.gate.require(org, feature);
-  }
-
-  admitIndex(org: string) {
-    return this.gate.admitIndex(org);
-  }
-
-  admitFilesystem(org: string) {
-    return this.gate.admitFilesystem(org);
   }
 
   admitFiles(org: string) {
@@ -134,7 +123,6 @@ export class Billing {
         }
         this.#refreshed = performance.now();
       }
-      await this.reporter.run();
     } catch (error) {
       this.#log({ level: "error", msg: "billing run failed", error: messageOf(error) });
     }
@@ -143,9 +131,8 @@ export class Billing {
   async notice(payload: string, signature: string) {
     const notice = await this.#payments.notice(payload, signature);
     if (notice.kind === "subscription") await this.sync.subscription(notice.id);
-    if (notice.kind === "invoice") {
-      await this.sync.invoice(notice.id);
-      if (notice.subscription) await this.sync.subscription(notice.subscription);
+    if (notice.kind === "invoice" && notice.subscription) {
+      await this.sync.subscription(notice.subscription);
     }
     return notice;
   }
@@ -175,7 +162,7 @@ export class Billing {
     if (account.plan === plan && !account.nextPlan) {
       throw conflict(`this organization is already on ${PLAN[plan].name}`);
     }
-    const larger = (PLAN[plan].minimumCents ?? 0) > (PLAN[account.plan].minimumCents ?? 0);
+    const larger = (PLAN[plan].priceCents ?? 0) > (PLAN[account.plan].priceCents ?? 0);
     await this.#payments.changePlan(account.subscription, plan, larger ? "now" : "period_end");
     await this.sync.subscription(account.subscription);
     return this.summary(org);

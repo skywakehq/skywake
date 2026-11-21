@@ -43,6 +43,20 @@ test("a deleted namespace's files leave the bucket", { skip }, async () => {
   assert.deepEqual(await pending(s, id), []);
 });
 
+test("a deleted namespace takes the index it made with it", { skip }, async () => {
+  const s = await server();
+  const { key } = await s.ready();
+  const linked = await s.call("PUT", "/namespaces/prod%2Fapp/index", key, {
+    index: "prod/app.files",
+    embed: false,
+  });
+  assert.equal(linked.status, 200, JSON.stringify(linked.body));
+  assert.equal((await s.call("GET", "/indexes/prod%2Fapp.files", key)).status, 200);
+
+  assert.equal((await s.call("DELETE", "/namespaces/prod%2Fapp", key)).status, 204);
+  assert.equal((await s.call("GET", "/indexes/prod%2Fapp.files", key)).status, 404);
+});
+
 test("a deletion that fails is kept and tried again, by any server", { skip }, async () => {
   const s = await server();
   const { id, key } = await s.ready();

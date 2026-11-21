@@ -6,7 +6,7 @@ import { randomId } from "../../auth/keys.ts";
 import { allow, type Caller } from "../../auth/roles.ts";
 import type { Ctx } from "../../http/context.ts";
 import { conflict, forbidden, HttpError } from "../../http/errors.ts";
-import { admitsIndex, requires } from "../billing/require.ts";
+import { requires } from "../billing/require.ts";
 import { removeAndDelete } from "../deletions/queries.ts";
 import { indexFor, signedIn } from "../../http/request.ts";
 import { bucketFolder } from "../environments/buckets.ts";
@@ -44,7 +44,6 @@ export async function makeIndex(
   fill: (target: Target) => Promise<void>,
 ) {
   allow(caller, "admin", asked.name);
-  await admitsIndex(c, caller.org);
   if (asked.encryption) await requires(c, caller.org, "customer_keys");
   if (asked.pinned) await requires(c, caller.org, "pinning");
   const { db, stores } = c.var.services;

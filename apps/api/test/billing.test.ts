@@ -141,48 +141,45 @@ test("an organization's plan follows its subscription's status", () => {
   assert.equal(standing(account({ plan: null }), now), "free");
 });
 
-test("the estimate is the usage or the minimum, whichever is more", () => {
+test("a plan costs its price, and its storage is the one limit", () => {
   const now = at("2026-11-10T00:00:00Z");
-  const measured = (writes: number, values: Partial<Account> = {}) =>
+  const measured = (values: Partial<Account> | null, filesBytes = 0n) =>
     summarize({
-      account: account(values),
+      account: values === null ? null : account(values),
       now,
-      totals: new Map([["writes", BigInt(writes)]]),
-      storedBytes: 0n,
-      indexes: 0n,
-      filesBytes: 0n,
-      filesystems: 0n,
+      totals: new Map([["writes", BigInt(100 * GiB)]]),
+      storedBytes: BigInt(GiB),
+      indexes: 2n,
+      filesBytes,
+      filesystems: 1n,
     });
-  const small = measured(GiB);
-  assert.equal(small.usage_cents, 150);
-  assert.equal(small.estimate_cents, 1600);
-  assert.equal(small.period_start, "2026-11-01T00:00:00.000Z");
-  const big = measured(20 * GiB, { plan: "scale" });
-  assert.equal(big.usage_cents, 3000);
-  assert.equal(big.estimate_cents, 12_800);
-  const free = summarize({
-    account: null,
-    now,
-    totals: new Map(),
-    storedBytes: 0n,
-    indexes: 2n,
-    filesBytes: BigInt(GiB),
-    filesystems: 1n,
-  });
-  assert.equal(free.files.gb, 1);
-  assert.equal(free.files.limit_gb, 5);
-  assert.equal(free.filesystems.count, 1);
-  assert.equal(free.filesystems.limit, 3);
-  assert.equal(free.meters.find((line) => line.meter === "files_egress")!.limit, 10);
+  const launch = measured({});
+  assert.equal(launch.estimate_cents, 2000);
+  assert.equal(launch.usage_cents, 0);
+  assert.deepEqual(launch.meters, []);
+  assert.equal(launch.stored.limit_gb, 500);
+  assert.equal(launch.period_start, "2026-11-01T00:00:00.000Z");
+  assert.equal(measured({ plan: "scale" }).stored.limit_gb, 3 * 1024);
+  assert.equal(measured({ plan: "scale" }).estimate_cents, 5000);
+
+  const free = measured(null, BigInt(GiB));
   assert.equal(free.plan, "free");
   assert.equal(free.estimate_cents, 0);
-  assert.equal(free.indexes.limit, 3);
-  assert.equal(free.stored.limit_gb, 1);
-  assert.equal(free.period_start, "2026-11-01T00:00:00.000Z");
+  assert.equal(free.stored.gb, 2);
+  assert.equal(free.stored.limit_gb, 10);
+  assert.equal(free.files.gb, 1);
+  assert.equal(free.filesystems.limit, null);
+  assert.deepEqual(
+    free.plans.map((offer) => [offer.plan, offer.minimum_cents, offer.storage_gb]),
+    [
+      ["free", 0, 10],
+      ["launch", 2000, 500],
+      ["scale", 5000, 3072],
+      ["enterprise", null, null],
+    ],
+  );
   assert.equal(free.period_end, "2026-12-01T00:00:00.000Z");
-  assert.equal(free.meters.find((line) => line.meter === "writes")!.limit, 1);
 });
-
 test("billing is off unless a Stripe key is set", () => {
   const base = { SKYWAKE_API_DATABASE: "postgres://x/y", SKYWAKE_STORE: "/tmp/store" };
   assert.equal(loadConfig(base).billing, undefined);
@@ -252,70 +249,53 @@ test("a server without Stripe does not bill or limit", { skip }, async () => {
   assert.equal(webhook.status, 404);
 });
 
-test("the Free plan stops at its limits and leaves out paid features", { skip }, async () => {
-  const b = await billed();
-  const { s, id, key } = b;
-  for (const name of ["a", "b", "c"]) assert.equal((await b.index(name)).status, 201);
-  const fourth = await b.index("d");
-  assert.equal(fourth.status, 402);
-  assert.equal(fourth.body.code, "payment_required");
-  assert.match(fourth.body.error, /Free plan includes 3 indexes/);
-  assert.match(fourth.body.error, /https:\/\/console\.test\/settings#billing/);
+test(
+  "the Free plan meters nothing but storage and leaves out paid features",
+  { skip },
+  async () => {
+    const b = await billed();
+    const { s, id, key } = b;
+    for (const name of ["a", "b", "c", "d"]) assert.equal((await b.index(name)).status, 201);
 
-  const docs = "/indexes/a/branches/main/documents";
-  assert.equal((await s.call("POST", docs, key, { documents: DOCS })).status, 200);
-  await b.use("writes", at("2026-11-02T00:00:00Z"), BigInt(GiB));
-  b.service.gate.forget(id);
-  const refused = await s.call("POST", docs, key, { documents: DOCS });
-  assert.equal(refused.status, 402);
-  assert.match(refused.body.error, /1 GB of writes a month/);
-  const deleted = await s.call("POST", `${docs}/delete`, key, { ids: [1] });
-  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+    const docs = "/indexes/a/branches/main/documents";
+    await b.use("writes", at("2026-11-02T00:00:00Z"), 100n * BigInt(GiB));
+    await b.use("queries", at("2026-11-02T00:00:00Z"), 100n << 40n);
+    b.service.gate.forget(id);
+    assert.equal((await s.call("POST", docs, key, { documents: DOCS })).status, 200);
+    const query = "/indexes/a/branches/main/query";
+    assert.equal(
+      (await s.call("POST", query, key, { vector: { column: "v", value: [0, 0] } })).status,
+      200,
+    );
 
-  const query = "/indexes/a/branches/main/query";
-  assert.equal(
-    (await s.call("POST", query, key, { vector: { column: "v", value: [0, 0] } })).status,
-    200,
-  );
-  await b.use("queries", at("2026-11-02T00:00:00Z"), 10n << 40n);
-  b.service.gate.forget(id);
-  const blocked = await s.call("POST", query, key, { vector: { column: "v", value: [0, 0] } });
-  assert.equal(blocked.status, 402);
-  assert.match(blocked.body.error, /10 TB of queries scanned/);
+    const allowlist = `/orgs/${id}/ip-allowlist`;
+    const listed = await s.call("PUT", allowlist, key, { cidrs: ["0.0.0.0/0"] });
+    assert.equal(listed.status, 402);
+    assert.match(listed.body.error, /IP allowlists needs the Enterprise plan/);
+    assert.equal((await s.call("PUT", allowlist, key, { cidrs: [] })).status, 200);
+    assert.equal((await s.call("GET", "/audit", key)).status, 402);
+    const sso = await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: ["acme.test"] });
+    assert.equal(sso.status, 402);
+    assert.equal(
+      (await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: [] })).status,
+      200,
+    );
+    await s.call("DELETE", "/indexes/c", key);
+    const pinned = await b.index("p", { pinned: { replicas: 1 } });
+    assert.equal(pinned.status, 402);
+    assert.match(pinned.body.error, /Pinned replicas needs the Launch plan/);
+    const keyed = await b.index("k", {
+      encryption: { kms_key_id: "arn:aws:kms:us-east-1:1:key/x" },
+    });
+    assert.equal(keyed.status, 402);
+    assert.match(keyed.body.error, /Customer-managed keys needs the Enterprise plan/);
 
-  b.clock.now = at("2026-12-01T00:30:00Z");
-  b.service.gate.forget(id);
-  assert.equal(
-    (await s.call("POST", query, key, { vector: { column: "v", value: [0, 0] } })).status,
-    200,
-  );
-  assert.equal((await s.call("POST", docs, key, { documents: DOCS })).status, 200);
-
-  const allowlist = `/orgs/${id}/ip-allowlist`;
-  const listed = await s.call("PUT", allowlist, key, { cidrs: ["0.0.0.0/0"] });
-  assert.equal(listed.status, 402);
-  assert.match(listed.body.error, /IP allowlists needs the Scale plan/);
-  assert.equal((await s.call("PUT", allowlist, key, { cidrs: [] })).status, 200);
-  assert.equal((await s.call("GET", "/audit", key)).status, 402);
-  const sso = await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: ["acme.test"] });
-  assert.equal(sso.status, 402);
-  assert.equal(
-    (await s.call("PUT", `/orgs/${id}/sso`, ADMIN, { required_domains: [] })).status,
-    200,
-  );
-  await s.call("DELETE", "/indexes/c", key);
-  const pinned = await b.index("p", { pinned: { replicas: 1 } });
-  assert.equal(pinned.status, 402);
-  assert.match(pinned.body.error, /Pinned replicas needs the Launch plan/);
-  const keyed = await b.index("k", { encryption: { kms_key_id: "arn:aws:kms:us-east-1:1:key/x" } });
-  assert.equal(keyed.status, 402);
-  assert.match(keyed.body.error, /Customer-managed keys needs the Scale plan/);
-
-  const shown = await b.summary();
-  assert.equal(shown.plan, "free");
-  assert.equal(shown.minimum_cents, 0);
-  assert.equal(shown.customer, false);
-});
+    const shown = await b.summary();
+    assert.equal(shown.plan, "free");
+    assert.equal(shown.minimum_cents, 0);
+    assert.equal(shown.customer, false);
+  },
+);
 
 test("checkout gives the customer the signed-in person's email", { skip }, async () => {
   const { id, payments, service } = await billed();
@@ -347,7 +327,7 @@ test("checkout subscribes once, and plans change up at once and down later", { s
   assert.equal(payments.checkouts[0]!.email, undefined);
   assert.equal(payments.customers.size, 1);
   assert.equal(payments.checkouts[1]!.plan, "scale");
-  assert.equal(payments.checkouts[0]!.returnUrl, `${CONSOLE}/settings#billing`);
+  assert.equal(payments.checkouts[0]!.returnUrl, `${CONSOLE}/settings/billing`);
   const elsewhere = await b.checkout("launch", { return_url: "https://evil.test/x" });
   assert.equal(elsewhere.status, 400);
   const ok = await b.checkout("launch", { return_url: `${CONSOLE}/settings?x=1` });
@@ -358,17 +338,16 @@ test("checkout subscribes once, and plans change up at once and down later", { s
   let shown = await b.summary();
   assert.equal(shown.plan, "launch");
   assert.equal(shown.status, "active");
-  assert.equal(shown.minimum_cents, 1600);
+  assert.equal(shown.minimum_cents, 2000);
   assert.equal(shown.customer, true);
   assert.equal((await b.checkout("scale")).status, 409);
   for (const name of ["a", "b", "c", "d"]) assert.equal((await b.index(name)).status, 201);
-  assert.equal((await s.call("GET", "/audit", key)).status, 402);
 
   const up = await s.call("PUT", `/orgs/${id}/billing/subscription`, key, { plan: "scale" });
   assert.equal(up.status, 200, JSON.stringify(up.body));
   assert.deepEqual(payments.changes.at(-1), { subscription: sub, plan: "scale", at: "now" });
   assert.equal(up.body.plan, "scale");
-  assert.equal((await s.call("GET", "/audit", key)).status, 200);
+  assert.equal((await s.call("GET", "/audit", key)).status, 402);
   const same = await s.call("PUT", `/orgs/${id}/billing/subscription`, key, { plan: "scale" });
   assert.equal(same.status, 409);
 
@@ -392,7 +371,6 @@ test("checkout subscribes once, and plans change up at once and down later", { s
   assert.equal(shown.plan, "launch");
   assert.equal(shown.next_plan, null);
   assert.ok(payments.released.includes(sub));
-  assert.equal((await s.call("GET", "/audit", key)).status, 402);
 
   const portal = await s.call("POST", `/orgs/${id}/billing/portal`, key, {});
   assert.equal(portal.status, 200);
@@ -427,51 +405,6 @@ test("the portal and plan changes need a subscription", { skip }, async () => {
   assert.equal(change.status, 409);
   const other = await b.s.org();
   assert.equal((await b.s.call("GET", `/orgs/${b.id}/billing`, other.key)).status, 404);
-});
-
-test("each invoice for a plan credits its minimum against usage once", { skip }, async () => {
-  const b = await billed();
-  const { customer, sub } = await b.subscribe("launch");
-  const { payments } = b;
-  const invoice = payments.bill(customer, sub);
-  await b.hook({ kind: "invoice", id: invoice, subscription: sub });
-  await b.hook({ kind: "invoice", id: invoice, subscription: sub });
-  assert.equal(payments.grantsMade.length, 1);
-  const grant = payments.grantsMade[0]!;
-  assert.equal(grant.cents, 1600);
-  assert.equal(grant.invoice, invoice);
-  const period = payments.subscriptions.get(sub)!;
-  assert.equal(grant.effectiveAt.getTime(), period.periodStart.getTime() + 1000);
-  assert.equal(grant.expiresAt.getTime(), period.periodEnd.getTime() + 4 * DAY);
-
-  const draft = payments.bill(customer, sub, { status: "draft" });
-  await b.hook({ kind: "invoice", id: draft, subscription: sub });
-  assert.equal(payments.grantsMade.length, 1);
-  const usageOnly = payments.bill(customer, sub, { planCents: 0, planStart: null, planEnd: null });
-  await b.hook({ kind: "invoice", id: usageOnly, subscription: sub });
-  assert.equal(payments.grantsMade.length, 1);
-
-  b.clock.now = later(period.periodStart, 10 * DAY);
-  const upgrade = payments.bill(customer, sub, {
-    planCents: 7467,
-    planStart: b.clock.now,
-    planEnd: period.periodEnd,
-  });
-  await b.hook({ kind: "invoice", id: upgrade, subscription: sub });
-  const prorated = payments.grantsMade.find((made) => made.invoice === upgrade)!;
-  assert.equal(prorated.cents, 7467);
-  assert.equal(prorated.effectiveAt.getTime(), b.clock.now.getTime() + 1000);
-
-  payments.invoices.set(invoice, { ...payments.invoices.get(invoice)!, status: "void" });
-  await b.hook({ kind: "invoice", id: invoice, subscription: sub });
-  assert.equal(grant.voided, true);
-  payments.invoices.set(upgrade, { ...payments.invoices.get(upgrade)!, status: "uncollectible" });
-  await b.hook({ kind: "invoice", id: upgrade, subscription: sub });
-  assert.equal(prorated.voided, true);
-
-  const stranger = payments.bill("cus_unknown", sub);
-  await b.hook({ kind: "invoice", id: stranger, subscription: sub });
-  assert.equal(payments.grantsMade.length, 2);
 });
 
 test("cancellation and failed payments move an organization to Free", { skip }, async () => {
@@ -573,154 +506,6 @@ test("webhooks need Stripe's signature", { skip }, async () => {
   assert.deepEqual(await good.json(), { received: true, handled: "ignored" });
   assert.equal((await send(payload.replace("cus_1", "cus_2"), header)).status, 400);
 });
-
-test(
-  "usage reaches Stripe once, an hour at a time, with remainders carried",
-  { skip },
-  async () => {
-    const b = await billed(at("2026-11-03T10:15:00Z"));
-    const { customer, sub } = await b.subscribe("launch");
-    const { payments, service } = b;
-    await b.use("writes", at("2026-11-03T10:00:00Z"), BigInt(5 * MiB));
-    await b.use("writes", at("2026-11-03T11:00:00Z"), BigInt(1.5 * MiB));
-    await b.use("writes", at("2026-11-03T12:00:00Z"), BigInt(0.75 * MiB));
-    await b.use("embeddings", at("2026-11-03T12:00:00Z"), 7n);
-
-    b.clock.now = at("2026-11-03T13:01:00Z");
-    await service.reporter.run();
-    assert.equal(payments.reports(payments.customerOf(b.id)).length, 1);
-    b.clock.now = at("2026-11-03T13:05:00Z");
-    await service.reporter.run();
-    const writes = payments.reports(payments.customerOf(b.id), "writes");
-    assert.deepEqual(
-      writes.map((usage) => [usage.at.toISOString(), usage.value, usage.customer]),
-      [
-        ["2026-11-03T11:00:00.000Z", 1n, customer],
-        ["2026-11-03T12:00:00.000Z", 1n, customer],
-      ],
-    );
-    assert.equal(writes[0]!.identifier, `${sub}:writes:2026-11-03T11:00:00.000Z`);
-    assert.deepEqual(
-      payments.reports(payments.customerOf(b.id), "embeddings").map((usage) => usage.value),
-      [7n],
-    );
-    const cursor = await billing.cursor(b.s.db, b.id, "writes");
-    assert.equal(cursor!.remainder, BigInt(MiB / 4));
-    assert.equal(cursor!.next.toISOString(), "2026-11-03T13:00:00.000Z");
-
-    await service.reporter.run();
-    assert.equal(payments.reports(payments.customerOf(b.id)).length, 3);
-
-    await b.use("writes", at("2026-11-03T13:00:00Z"), BigInt(MiB));
-    b.clock.now = at("2026-11-03T14:05:00Z");
-    payments.failReports = true;
-    await service.reporter.run();
-    assert.equal(payments.reports(payments.customerOf(b.id)).length, 3);
-    assert.equal(
-      (await billing.cursor(b.s.db, b.id, "writes"))!.next.toISOString(),
-      "2026-11-03T13:00:00.000Z",
-    );
-    payments.failReports = false;
-    await service.reporter.run();
-    assert.equal(payments.reports(payments.customerOf(b.id), "writes").length, 3);
-    assert.equal(payments.reports(payments.customerOf(b.id), "writes")[2]!.value, 1n);
-  },
-);
-
-test(
-  "usage of an hour before a renewal goes to the new period once the old invoice is closed",
-  { skip },
-  async () => {
-    const b = await billed(at("2026-11-03T10:15:00Z"));
-    const { sub } = await b.subscribe("launch");
-    const { payments, service } = b;
-    b.clock.now = at("2026-11-03T12:05:00Z");
-    await service.reporter.run();
-    payments.renew(sub);
-    const renewed = payments.subscriptions.get(sub)!.periodStart;
-    await b.hook({ kind: "subscription", id: sub });
-    const before = new Date(Math.floor((renewed.getTime() - HOUR) / HOUR) * HOUR);
-    b.clock.now = later(renewed, 2 * HOUR);
-    await billing.moveCursor(b.s.db, {
-      org: b.id,
-      meter: "reranks",
-      subscription: sub,
-      next: before,
-      remainder: 0n,
-    });
-    await b.use("reranks", before, 3n);
-    await service.reporter.run();
-    const [late] = payments.reports(payments.customerOf(b.id), "reranks");
-    assert.equal(late!.at.getTime(), renewed.getTime());
-  },
-);
-
-test("a canceled subscription reports its last hours, then stops", { skip }, async () => {
-  const b = await billed(at("2026-11-03T10:15:00Z"));
-  const { sub } = await b.subscribe("launch");
-  const { payments, service } = b;
-  const ended = at("2026-11-03T12:30:00Z");
-  payments.update(sub, { status: "canceled", endedAt: ended });
-  await b.hook({ kind: "subscription", id: sub });
-  await b.use("reranks", at("2026-11-03T12:00:00Z"), 4n);
-  await b.use("reranks", at("2026-11-03T13:00:00Z"), 9n);
-  b.clock.now = at("2026-11-03T14:30:00Z");
-  await service.reporter.run();
-  assert.deepEqual(
-    payments.reports(payments.customerOf(b.id), "reranks").map((usage) => usage.value),
-    [4n],
-  );
-  b.clock.now = at("2026-11-03T16:00:00Z");
-  await b.use("reranks", at("2026-11-03T12:00:00Z"), 40n);
-  await billing.moveCursor(b.s.db, {
-    org: b.id,
-    meter: "reranks",
-    subscription: sub,
-    next: at("2026-11-03T12:00:00Z"),
-    remainder: 0n,
-  });
-  await service.reporter.run();
-  assert.equal(payments.reports(payments.customerOf(b.id), "reranks").length, 1);
-});
-
-test(
-  "a new subscription starts counting afresh, and Free usage is never sent",
-  { skip },
-  async () => {
-    const b = await billed(at("2026-11-03T10:15:00Z"));
-    const { payments, service } = b;
-    await b.use("writes", at("2026-11-03T09:00:00Z"), BigInt(50 * MiB));
-    b.clock.now = at("2026-11-03T10:20:00Z");
-    await service.reporter.run();
-    assert.equal(payments.reports(payments.customerOf(b.id)).length, 0);
-
-    const { customer, sub } = await b.subscribe("launch");
-    b.clock.now = at("2026-11-03T12:10:00Z");
-    await b.use("writes", at("2026-11-03T11:00:00Z"), BigInt(2 * MiB));
-    await service.reporter.run();
-    assert.deepEqual(
-      payments.reports(payments.customerOf(b.id), "writes").map((usage) => usage.value),
-      [2n],
-    );
-
-    payments.update(sub, { status: "canceled", endedAt: at("2026-11-03T12:10:00Z") });
-    await b.hook({ kind: "subscription", id: sub });
-    b.clock.now = at("2026-11-04T09:10:00Z");
-    const next = payments.subscribe(customer, "scale", b.clock.now);
-    await b.hook({ kind: "subscription", id: next });
-    await b.use("writes", at("2026-11-04T08:00:00Z"), BigInt(3 * MiB));
-    await b.use("writes", at("2026-11-04T10:00:00Z"), BigInt(3 * MiB));
-    b.clock.now = at("2026-11-04T11:05:00Z");
-    await service.reporter.run();
-    const fresh = payments
-      .reports(payments.customerOf(b.id), "writes")
-      .filter((usage) => usage.identifier.startsWith(next));
-    assert.deepEqual(
-      fresh.map((usage) => [usage.at.toISOString(), usage.value]),
-      [["2026-11-04T10:00:00.000Z", 3n]],
-    );
-  },
-);
 
 test("writes and queries are measured in bytes", { skip }, async () => {
   const b = await billed();
@@ -846,9 +631,9 @@ test(
     service.gate.forget(id);
     const summary = await b.summary();
     assert.equal(summary.filesystems.count, 1);
-    assert.equal(summary.filesystems.limit, 3);
     assert.ok(summary.files.gb > 0);
-    assert.equal(summary.files.limit_gb, 5);
+    assert.equal(summary.stored.gb, summary.files.gb);
+    assert.equal(summary.stored.limit_gb, 10);
   },
 );
 
@@ -867,14 +652,10 @@ test("downloads are metered by the bytes sent", { skip }, async () => {
   assert.equal(totals.get("files_egress"), 2n * BigInt(text.length));
 });
 
-test("the Free plan stops at its files limits, and a paid plan lifts them", { skip }, async () => {
+test("each plan stops writes at its storage, and a larger plan lifts it", { skip }, async () => {
   const b = await billed();
   const { s, id, service } = b;
-  for (const name of ["a", "b", "c"]) assert.equal((await filesystem(b, name)).status, 201);
-  const fourth = await filesystem(b, "d");
-  assert.equal(fourth.status, 402);
-  assert.equal(fourth.body.code, "payment_required");
-  assert.match(fourth.body.error, /Free plan includes 3 filesystems/);
+  for (const name of ["a", "b", "c", "d"]) assert.equal((await filesystem(b, name)).status, 201);
 
   assert.equal((await commitTo(b, "a", { path: "a.txt", text: "hello" })).status, 201);
   assert.equal((await commitTo(b, "b", { path: "a.txt", text: "hello" })).status, 201);
@@ -882,14 +663,15 @@ test("the Free plan stops at its files limits, and a paid plan lifts them", { sk
   await billing.saveSize(s.db, {
     folder: row!.folder,
     org: id,
-    bytes: 5n * BigInt(GiB),
+    bytes: 10n * BigInt(GiB),
     objects: 1,
     measured: b.clock.now,
   });
   service.gate.forget(id);
   const full = await commitTo(b, "a", { path: "b.txt", text: "more" });
   assert.equal(full.status, 402);
-  assert.match(full.body.error, /5 GB of files/);
+  assert.equal(full.body.code, "payment_required");
+  assert.match(full.body.error, /Free plan includes 10 GB of storage/);
   const upload = await s.app.request("/v1/namespaces/a/uploads", {
     method: "POST",
     headers: { authorization: `Bearer ${b.key}`, "content-type": "application/octet-stream" },
@@ -900,31 +682,25 @@ test("the Free plan stops at its files limits, and a paid plan lifts them", { sk
   assert.equal(removed.status, 201, JSON.stringify(removed.body));
   assert.equal((await commitTo(b, "a", { path: "c.txt", text: "x" })).status, 402);
 
-  assert.equal((await download(b, "b", "a.txt")).status, 200);
-  await b.use("files_egress", at("2026-11-02T00:00:00Z"), 10n * BigInt(GiB));
+  await b.use("files_egress", at("2026-11-02T00:00:00Z"), 100n * BigInt(GiB));
   service.gate.forget(id);
-  const blocked = await download(b, "b", "a.txt");
-  assert.equal(blocked.status, 402);
-  assert.match(blocked.bytes.toString(), /10 GB of file downloads a month/);
+  assert.equal((await download(b, "b", "a.txt")).status, 200);
 
   await b.subscribe("launch");
   service.gate.forget(id);
-  assert.equal((await filesystem(b, "d")).status, 201);
   assert.equal((await commitTo(b, "a", { path: "c.txt", text: "x" })).status, 201);
-  assert.equal((await download(b, "b", "a.txt")).status, 200);
-});
 
-test("a subscription made before a meter existed gets the new meter", { skip }, async () => {
-  const b = await billed();
-  const { sub } = await b.subscribe("launch");
-  assert.deepEqual(b.payments.metersAdded, []);
-  b.payments.update(sub, { missingMeters: ["files_storage", "files_egress"] });
-  assert.equal((await b.hook({ kind: "subscription", id: sub })).status, 200);
-  assert.deepEqual(b.payments.metersAdded, [
-    { subscription: sub, meters: ["files_storage", "files_egress"] },
-  ]);
-  assert.equal((await b.hook({ kind: "subscription", id: sub })).status, 200);
-  assert.equal(b.payments.metersAdded.length, 1);
+  await billing.saveSize(s.db, {
+    folder: row!.folder,
+    org: id,
+    bytes: 500n * BigInt(GiB),
+    objects: 1,
+    measured: b.clock.now,
+  });
+  service.gate.forget(id);
+  const over = await commitTo(b, "a", { path: "d.txt", text: "x" });
+  assert.equal(over.status, 402);
+  assert.match(over.body.error, /Launch plan includes 500 GB of storage/);
 });
 
 test(

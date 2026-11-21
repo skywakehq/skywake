@@ -4,7 +4,7 @@ import { note } from "../../audit/note.ts";
 import type { Feature } from "../../http/context.ts";
 import { HttpError } from "../../http/errors.ts";
 import { changeable } from "../../http/request.ts";
-import { admitsDownload, admitsFiles, filesChanged } from "../billing/require.ts";
+import { admitsFiles, filesChanged } from "../billing/require.ts";
 import * as branches from "../branches/queries.ts";
 import { isBucketRegion } from "../environments/buckets.ts";
 import { customerRole } from "../environments/queries.ts";
@@ -35,7 +35,6 @@ export const credentialsFeature: Feature = {
             "use the file routes for this namespace",
         );
       }
-      await admitsDownload(c, ns.org);
       if (access !== "read") {
         await admitsFiles(c, ns.org);
         await filesChanged(c, ns.folder);

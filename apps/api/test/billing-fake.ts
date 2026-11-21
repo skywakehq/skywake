@@ -1,16 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import type { Meter, PaidPlan } from "../src/features/billing/catalog.ts";
+import type { PaidPlan } from "../src/features/billing/catalog.ts";
 import type {
   CheckoutAsk,
   CheckoutStart,
-  Grant,
-  Invoice,
-  NewGrant,
   Notice,
   Payments,
   Subscription,
-  Usage,
 } from "../src/features/billing/payments.ts";
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
@@ -22,15 +18,10 @@ export class SignatureError extends Error {
 export class FakePayments implements Payments {
   readonly customers = new Map<string, string>();
   readonly subscriptions = new Map<string, Subscription>();
-  readonly invoices = new Map<string, Invoice>();
-  readonly grantsMade: (NewGrant & { id: string; voided: boolean })[] = [];
-  readonly reported = new Map<string, Usage>();
   readonly checkouts: CheckoutAsk[] = [];
   readonly emails = new Map<string, string>();
-  readonly metersAdded: { subscription: string; meters: Meter[] }[] = [];
   readonly canceled: string[] = [];
   readonly changes: { subscription: string; plan: PaidPlan; at: string }[] = [];
-  failReports = false;
   #ids = 0;
 
   #id(prefix: string) {
@@ -59,7 +50,6 @@ export class FakePayments implements Payments {
       endedAt: null,
       nextPlan: null,
       scheduleDone: false,
-      missingMeters: [],
     });
     return id;
   }
@@ -80,47 +70,8 @@ export class FakePayments implements Payments {
     });
   }
 
-  bill(customer: string, subscription: string, values: Partial<Invoice> = {}) {
-    const id = this.#id("in");
-    const found = this.subscriptions.get(subscription)!;
-    this.invoices.set(id, {
-      id,
-      customer,
-      subscription,
-      status: "open",
-      planCents: found.plan === "scale" ? 12_800 : 1600,
-      planStart: found.periodStart,
-      planEnd: found.periodEnd,
-      ...values,
-    });
-    return id;
-  }
-
   async subscription(id: string) {
     return this.subscriptions.get(id) ?? null;
-  }
-
-  async invoice(id: string) {
-    return this.invoices.get(id) ?? null;
-  }
-
-  async grants(customer: string): Promise<Grant[]> {
-    return this.grantsMade
-      .filter((grant) => grant.customer === customer)
-      .map((grant) => ({ id: grant.id, invoice: grant.invoice, voided: grant.voided }));
-  }
-
-  async grant(grant: NewGrant) {
-    this.grantsMade.push({ ...grant, id: this.#id("credgr"), voided: false });
-  }
-
-  async voidGrant(id: string) {
-    this.grantsMade.find((grant) => grant.id === id)!.voided = true;
-  }
-
-  async report(usage: Usage) {
-    if (this.failReports) throw new Error("Stripe is down");
-    if (!this.reported.has(usage.identifier)) this.reported.set(usage.identifier, usage);
   }
 
   async checkout(ask: CheckoutAsk): Promise<CheckoutStart> {
@@ -148,11 +99,6 @@ export class FakePayments implements Payments {
 
   readonly released: string[] = [];
 
-  async addMeters(subscription: string, meters: Meter[]) {
-    this.metersAdded.push({ subscription, meters });
-    this.update(subscription, { missingMeters: [] });
-  }
-
   async release(subscription: string) {
     this.released.push(subscription);
     this.update(subscription, { scheduleDone: false });
@@ -170,12 +116,6 @@ export class FakePayments implements Payments {
   async notice(payload: string, signature: string): Promise<Notice> {
     if (signature !== "signed") throw new SignatureError("No signatures found");
     return JSON.parse(payload) as Notice;
-  }
-
-  reports(customer: string, meter?: string) {
-    return [...this.reported.values()].filter(
-      (usage) => usage.customer === customer && (!meter || usage.meter === meter),
-    );
   }
 
   customerOf(org: string) {

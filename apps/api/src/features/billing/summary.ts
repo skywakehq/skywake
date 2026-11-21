@@ -1,10 +1,11 @@
 import type { billing as contract } from "@skywake/contract";
 
-import { limitOf, METER, METERS, type Meter, PLAN, PLANS, rawCents, shown } from "./catalog.ts";
+import { limitOf, type Meter, PLAN, PLANS } from "./catalog.ts";
 import { type Account, isLive, standing } from "./standing.ts";
 
 const GiB = 2 ** 30;
 
+const gbOf = (bytes: bigint | null) => (bytes === null ? null : Number(bytes) / GiB);
 const iso = (at: Date | null) => at?.toISOString() ?? null;
 const month = (now: Date, offset: number) =>
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
@@ -38,27 +39,8 @@ export function summarize({
   const plan = standing(account, now);
   const live = account !== null && isLive(account.status);
   const period = periodOf(account, now);
-  const charged = plan !== "free";
-  const meters = METERS.map((meter) => {
-    const raw = totals.get(meter) ?? 0n;
-    const spec = METER[meter];
-    const limit = limitOf(plan, meter);
-    return {
-      meter,
-      name: spec.name,
-      quantity: shown(meter, raw),
-      unit: spec.shownAs,
-      price: `$${spec.dollars} per ${spec.per}`,
-      amount_cents: charged ? rawCents(meter, raw) : 0,
-      limit: limit === null ? null : shown(meter, limit),
-    };
-  });
-  const usage = meters.reduce((sum, line) => sum + line.amount_cents, 0);
-  const minimum = PLAN[plan].minimumCents;
+  const price = PLAN[plan].priceCents;
   const storedLimit = limitOf(plan, "stored");
-  const indexLimit = limitOf(plan, "indexes");
-  const filesLimit = limitOf(plan, "files_stored");
-  const filesystemLimit = limitOf(plan, "filesystems");
   return {
     enabled: true,
     plan,
@@ -69,26 +51,14 @@ export function summarize({
     next_plan: live ? (account.nextPlan ?? null) : null,
     cancel_at_period_end: account?.cancelAtPeriodEnd ?? false,
     past_due_since: iso(account?.pastDueSince ?? null),
-    minimum_cents: minimum,
-    usage_cents: usage,
-    estimate_cents: Math.max(usage, minimum ?? 0),
-    meters,
-    stored: {
-      gb: Number(storedBytes) / GiB,
-      limit_gb: storedLimit === null ? null : Number(storedLimit) / GiB,
-    },
-    indexes: {
-      count: Number(indexes),
-      limit: indexLimit === null ? null : Number(indexLimit),
-    },
-    files: {
-      gb: Number(filesBytes) / GiB,
-      limit_gb: filesLimit === null ? null : Number(filesLimit) / GiB,
-    },
-    filesystems: {
-      count: Number(filesystems),
-      limit: filesystemLimit === null ? null : Number(filesystemLimit),
-    },
+    minimum_cents: price,
+    usage_cents: 0,
+    estimate_cents: price ?? 0,
+    meters: [],
+    stored: { gb: Number(storedBytes + filesBytes) / GiB, limit_gb: gbOf(storedLimit) },
+    indexes: { count: Number(indexes), limit: null },
+    files: { gb: Number(filesBytes) / GiB, limit_gb: null },
+    filesystems: { count: Number(filesystems), limit: null },
     features: [...PLAN[plan].features],
     plans: offers(),
     customer: account?.customer != null,
@@ -99,7 +69,8 @@ export const offers = () =>
   PLANS.map((name) => ({
     plan: name,
     name: PLAN[name].name,
-    minimum_cents: PLAN[name].minimumCents,
+    minimum_cents: PLAN[name].priceCents,
+    storage_gb: gbOf(limitOf(name, "stored")),
     features: [...PLAN[name].features],
   }));
 
@@ -123,7 +94,7 @@ export function unbilled(
     usage_cents: 0,
     estimate_cents: 0,
     meters: [],
-    stored: { gb: Number(storedBytes) / GiB, limit_gb: null },
+    stored: { gb: Number(storedBytes + filesBytes) / GiB, limit_gb: null },
     indexes: { count: Number(indexes), limit: null },
     files: { gb: Number(filesBytes) / GiB, limit_gb: null },
     filesystems: { count: Number(filesystems), limit: null },

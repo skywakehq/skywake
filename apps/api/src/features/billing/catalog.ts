@@ -18,7 +18,7 @@ export type PaidPlan = "launch" | "scale";
 export const FEATURES = ["pinning", "sso", "audit_log", "ip_allowlist", "customer_keys"] as const;
 export type Feature = (typeof FEATURES)[number];
 
-export type Limit = Meter | "stored" | "indexes" | "files_stored" | "filesystems";
+export type Limit = Meter | "stored";
 
 const KiB = 1024n;
 const MiB = KiB * KiB;
@@ -124,7 +124,7 @@ export const METER: Record<Meter, MeterSpec> = {
 
 export interface PlanSpec {
   name: string;
-  minimumCents: number | null;
+  priceCents: number | null;
   features: readonly Feature[];
   limits: Partial<Record<Limit, bigint>>;
 }
@@ -134,35 +134,29 @@ const ALL_FEATURES = FEATURES;
 export const PLAN: Record<Plan, PlanSpec> = {
   free: {
     name: "Free",
-    minimumCents: 0,
+    priceCents: 0,
     features: [],
     limits: {
-      stored: GiB,
-      writes: GiB,
-      queries: 10n * TiB,
+      stored: 10n * GiB,
       embeddings: 10_000n,
       reranks: 1_000n,
-      indexes: 3n,
-      files_stored: 5n * GiB,
-      files_egress: 10n * GiB,
-      filesystems: 3n,
     },
   },
   launch: {
     name: "Launch",
-    minimumCents: 1600,
+    priceCents: 2000,
     features: ["pinning"],
-    limits: {},
+    limits: { stored: 500n * GiB },
   },
   scale: {
     name: "Scale",
-    minimumCents: 12_800,
-    features: ALL_FEATURES,
-    limits: {},
+    priceCents: 5000,
+    features: ["pinning"],
+    limits: { stored: 3n * TiB },
   },
   enterprise: {
     name: "Enterprise",
-    minimumCents: null,
+    priceCents: null,
     features: ALL_FEATURES,
     limits: {},
   },
@@ -173,8 +167,6 @@ export const PAID: readonly PaidPlan[] = ["launch", "scale"];
 export const PAST_DUE_GRACE_DAYS = 7;
 
 export const planKey = (plan: PaidPlan) => `skywake_plan_${plan}_monthly`;
-export const meterKey = (meter: Meter) => `skywake_meter_${meter}`;
-export const meterEvent = (meter: Meter) => `skywake_${meter}`;
 
 export const lowestPlanWith = (feature: Feature): Plan =>
   PLANS.find((plan) => PLAN[plan].features.includes(feature))!;
