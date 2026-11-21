@@ -1,0 +1,70 @@
+# Moves skywake.dev to a release once its images are built, or to the
+# version asked for by hand. The machine runs deploy/hosted/deploy.sh from
+# the release's commit, through AWS Systems Manager: no SSH and no stored keys.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release to run, such as 0.3.0
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  INSTANCE: i-0a1a76d537d8c7afe
+  ROLE: arn:aws:iam::078169972324:role/skywake-deploy
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - id: what
+        env:
+          ASKED: ${{ inputs.version }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+          RELEASED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          version=${ASKED:-${TAG#v}}
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "not a version: $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=${RELEASED:-$GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ env.ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Deploy ${{ steps.what.outputs.version }}
+        env:
+          VERSION: ${{ steps.what.outputs.version }}
+          COMMIT: ${{ steps.what.outputs.commit }}
+        run: |
+          script="https://raw.githubusercontent.com/skywakehq/skywake/$COMMIT/deploy/hosted/deploy.sh"
+          params=$(jq -nc --arg c "curl -fsSL $script | bash -s -- $VERSION $COMMIT" '{commands: [$c]}')
+          id=$(aws ssm send-command --instance-ids "$INSTANCE" --document-name AWS-RunShellScript \
+            --timeout-seconds 900 --parameters "$params" --query Command.CommandId --output text)
+          for _ in $(seq 1 180); do
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+              --query Status --output text 2>/dev/null || true)
+            case $status in Success|Failed|TimedOut|Cancelled) break ;; esac
+            sleep 5
+          done
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+            --query '[StandardOutputContent,StandardErrorContent]' --output text
+          test "$status" = Success
+      - name: Check
+        run: |
+          for url in https://app.skywake.dev/sign-in https://api.skywake.dev/ready https://app.skywake.dev/zero/; do
+            curl -fsS -o /dev/null --retry 5 --retry-all-errors "$url" && echo "ok $url"
+          done
