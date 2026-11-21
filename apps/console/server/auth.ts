@@ -9,7 +9,7 @@ import { learnCaller, recordAuth } from "./audit";
 import { authPool } from "./db";
 import { leaverOf, revokeKeysOf } from "./member-keys";
 import { renameFirst, reserveOrg } from "./org-names";
-import { EMAIL, hosted, SOCIAL } from "./hosted";
+import { EMAIL, hosted, MAX_USERS, SOCIAL } from "./hosted";
 import { domainOf, openSecrets, PRIVATE_IDP_ORIGINS, sealSecrets, ssoOrgsFor } from "./sso-policy";
 import { withBase } from "@/lib/zone";
 
@@ -160,6 +160,13 @@ export const auth = betterAuth({
     }),
   },
   databaseHooks: {
+    user: {
+      create: {
+        async before(user) {
+          await refuseIfFull(user.email);
+        },
+      },
+    },
     session: {
       create: {
         // Every way of signing in makes a session, so this is where single
@@ -272,4 +279,19 @@ async function chooseProvider(ctx: GenericEndpointContext) {
     organizationSlug: undefined,
     loginHint: body.email,
   };
+}
+
+async function refuseIfFull(email: string) {
+  if (!MAX_USERS) return;
+  const { rows } = await authPool.query<{ full: boolean }>(
+    `SELECT (SELECT count(*) FROM "user") >= $1
+        AND NOT EXISTS (SELECT 1 FROM invitation WHERE lower(email) = lower($2) AND status = 'pending')
+        AS full`,
+    [MAX_USERS, email],
+  );
+  if (rows[0]?.full) {
+    throw new APIError("FORBIDDEN", {
+      message: "Skywake is full for now. Ask a teammate for an invite, or try again soon.",
+    });
+  }
 }
