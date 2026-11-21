@@ -6,6 +6,9 @@ export const hosted = readEnv(hostedEnv);
 
 export const EMAIL = emailOn(hosted);
 
+/** New accounts stop at this many people, unless they hold an invitation. */
+export const MAX_USERS = hosted.MAX_USERS;
+
 const pair = (clientId?: string, clientSecret?: string) =>
   clientId && clientSecret ? { clientId, clientSecret } : undefined;
 const google = pair(hosted.GOOGLE_CLIENT_ID, hosted.GOOGLE_CLIENT_SECRET);

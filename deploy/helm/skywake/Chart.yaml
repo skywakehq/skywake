@@ -2,5 +2,5 @@ apiVersion: v2
 name: skywake
 description: Skywake in your own cloud — the API, the console, zero-cache and the shared chunk cache.
 type: application
-version: 0.2.0
-appVersion: "0.2.0"
+version: 0.3.0
+appVersion: "0.3.0"

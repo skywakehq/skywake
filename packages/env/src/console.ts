@@ -14,6 +14,7 @@ export const hostedEnv = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GITHUB_CLIENT_ID: z.string().optional(),
   GITHUB_CLIENT_SECRET: z.string().optional(),
+  MAX_USERS: z.coerce.number().int().positive().optional(),
 });
 
 export const consoleEnv = z

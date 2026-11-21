@@ -3,6 +3,32 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.3.0 (2026-11-22)
+
+### Disks
+
+- Skywake is disks only: standalone indexes and agent sessions are gone.
+  Search is turned on per disk, and deleting a disk deletes its search data.
+- The console is rebuilt around disks: commits and changes per disk, a delete
+  button, and settings split into general, members, keys, account and billing.
+- The Mac app is back, with browser sign-in and mounted disks.
+- The site is redesigned around one shared disk.
+
+### Plans
+
+- Plans are flat by storage: Free (10 GB), Launch ($20 a month, 500 GB) and
+  Scale ($50 a month, 3 TB). Nothing is metered; writes fail with `402` at the
+  plan's storage.
+- SSO, the audit log, IP allowlists and customer-managed keys are on
+  Enterprise only for now.
+- `MAX_USERS` on the console stops new accounts at that many people, unless
+  they hold an invitation.
+
+### Engine
+
+- Faster vector queries at 10M rows, appends to delta pieces, and branch
+  merges by line.
+
 ## 0.2.0 (2026-11-17)
 
 ### v2
