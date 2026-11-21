@@ -4,7 +4,6 @@ import {
   createSchema,
   json,
   number,
-  relationships,
   type ReadonlyJSONValue,
   type Row,
   string,
@@ -49,39 +48,12 @@ const commit = table("commit")
     hash: string(),
     parent: string().optional(),
     message: string(),
-    session: string().optional(),
     merged: string().optional(),
     actor: string(),
     changes: json<Change[]>(),
     at: number(),
-    agent: string().optional(),
   })
   .primaryKey("org", "namespace", "branch", "hash");
-
-const session = table("session")
-  .from("api.sessions")
-  .columns({
-    id: string(),
-    org: string(),
-    namespace: string(),
-    label: string(),
-    actor: string(),
-    expires: number(),
-    created: number(),
-  })
-  .primaryKey("id");
-
-const claim = table("claim")
-  .from("api.claims")
-  .columns({
-    org: string(),
-    namespace: string(),
-    branch: string(),
-    path: string(),
-    session: string(),
-    created: number(),
-  })
-  .primaryKey("org", "namespace", "branch", "path");
 
 const audit = table("audit")
   .from("api.audit")
@@ -97,13 +69,8 @@ const audit = table("audit")
   })
   .primaryKey("id");
 
-const sessionClaims = relationships(session, ({ many }) => ({
-  claims: many({ sourceField: ["id"], destField: ["session"], destSchema: claim }),
-}));
-
 export const schema = createSchema({
-  tables: [environment, namespace, branch, commit, session, claim, audit],
-  relationships: [sessionClaims],
+  tables: [environment, namespace, branch, commit, audit],
 });
 
 export const zql = createBuilder(schema);
@@ -118,9 +85,7 @@ type Rows = Row<typeof schema>;
 export type Environment = Rows["environment"];
 export type Branch = Rows["branch"];
 export type Commit = Rows["commit"];
-export type Session = Rows["session"];
 export type Audit = Rows["audit"];
-export type Claim = Rows["claim"];
 
 declare module "@rocicorp/zero" {
   interface DefaultTypes {

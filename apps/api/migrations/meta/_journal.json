@@ -246,6 +246,20 @@
       "when": 1795204065704,
       "tag": "0034_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1795283179461,
+      "tag": "0035_drop_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795283345501,
+      "tag": "0036_drop_commit_agent",
+      "breakpoints": true
     }
   ]
 }

@@ -6,14 +6,14 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-pub use create::{CreateDisk, CreateIndex, CreateKey};
+pub use create::{CreateDisk, CreateKey};
 pub use types::{CreatedKey, Environment, Key, NewLogin, Role, StartedLogin, Whoami};
 
 use crate::place::{MAIN, Place};
 use crate::shared::http::{Http, segment};
 use crate::shared::paging::{List, pages};
 use crate::shared::retry::Retry;
-use crate::{Disk, DiskSummary, Index, IndexSummary, Result};
+use crate::{Disk, DiskSummary, Result};
 use settings::{Asked, resolve};
 
 #[derive(Clone)]
@@ -49,24 +49,12 @@ impl Skywake {
         Disk::from(Place::new(self.http.clone(), "disks", name, MAIN))
     }
 
-    pub fn index(&self, name: &str) -> Index {
-        Index::from(Place::new(self.http.clone(), "indexes", name, MAIN))
-    }
-
     pub fn create_disk(&self, name: &str) -> CreateDisk<'_> {
         CreateDisk::new(self, name)
     }
 
-    pub fn create_index(&self, name: &str) -> CreateIndex<'_> {
-        CreateIndex::new(self, name)
-    }
-
     pub fn list_disks(&self) -> List<DiskSummary> {
         self.list("/disks")
-    }
-
-    pub fn list_indexes(&self) -> List<IndexSummary> {
-        self.list("/indexes")
     }
 
     pub fn create_key(&self, name: &str, role: Role) -> CreateKey<'_> {

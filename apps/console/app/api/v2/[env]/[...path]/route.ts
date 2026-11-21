@@ -4,7 +4,7 @@ import { caller } from "@/server/caller";
 type Params = RouteContext<"/api/v2/[env]/[...path]">;
 
 const ALLOWED: Record<string, RegExp> = {
-  GET: /^(disks|indexes)(\/[^/]+)?$/,
+  GET: /^disks(\/[^/]+)?$/,
   PATCH: /^disks\/[^/]+$/,
   POST: /^disks\/[^/]+\/query$/,
 };

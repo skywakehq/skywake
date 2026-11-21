@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@skywake/ui/components/dialog";
 import { Tooltip } from "@skywake/ui/components/tooltip";
+import { Link } from "@/components/shell/router";
 import { authClient } from "@/features/auth/auth-client";
 import { useAuthOptions } from "@/features/auth/options";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/menu";
@@ -30,9 +31,15 @@ import { Billing } from "./billing";
 import { IpAllowlist } from "./ip-allowlist";
 import { SingleSignOn } from "./sso";
 import { withBase } from "@/lib/zone";
-import { Select } from "@/features/indexes/fields";
+import { Select } from "@/components/fields";
 import { useEnvironments } from "@/features/environments/use-environments";
 import { useEnvironment } from "@/hooks/use-ns";
+
+const JUMPS = [
+  ["members", "Members"],
+  ["keys", "API keys"],
+  ["security", "Security"],
+] as const;
 
 export function SettingsPage() {
   const { data: org } = authClient.useActiveOrganization();
@@ -43,6 +50,17 @@ export function SettingsPage() {
       title="Settings"
       description="Who can reach your disks, and how."
     >
+      <nav className="-mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        {JUMPS.map(([id, label]) => (
+          <Link
+            key={id}
+            href={`/settings#${id}`}
+            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
       <div className="grid gap-12">
         <Members />
         <Keys />
@@ -90,18 +108,18 @@ export function Section({
     <section id={id} className="grid scroll-mt-8 gap-4">
       <div className="flex items-end gap-4">
         <div className="min-w-0 flex-1">
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+          <h2 className="text-lg font-medium tracking-[-0.015em]">{title}</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
         </div>
         {action}
       </div>
-      <div className="-mx-4 divide-y divide-border/60 border-y border-border/60">{children}</div>
+      <div className="panel overflow-hidden py-1">{children}</div>
     </section>
   );
 }
 
 export function Row({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-16 items-center gap-3.5 px-4 py-3 text-sm">{children}</div>;
+  return <div className="flex min-h-16 items-center gap-3.5 px-5 py-3 text-sm">{children}</div>;
 }
 
 export function Lines({ title, detail }: { title: ReactNode; detail?: ReactNode }) {
@@ -276,7 +294,7 @@ function Members() {
       ))}
       {pending.map((invitation) => (
         <Row key={invitation.id}>
-          <span className="size-9 shrink-0 rounded-full border border-dashed" />
+          <span className="size-9 shrink-0 rounded-full bg-muted" />
           <Lines
             title={<span className="font-normal text-muted-foreground">{invitation.email}</span>}
             detail={`Invited as ${invitation.role}`}
@@ -523,7 +541,7 @@ function NewKey({
         description="Copy it now. It is not shown again."
       >
         <div className="grid gap-4">
-          <code className="rounded-lg border bg-muted/40 px-3 py-2.5 font-mono text-sm break-all select-all">
+          <code className="rounded-lg bg-muted px-3 py-2.5 font-mono text-sm break-all select-all">
             {secret}
           </code>
           <DialogFooter>
@@ -559,7 +577,7 @@ function NewKey({
             ))}
           </Select>
         </Field>
-        <Field label="Only these disks and indexes">
+        <Field label="Only these disks">
           <Input name="only" placeholder="All, or names like products, logs-*" />
         </Field>
         <Field label="Access">
@@ -702,12 +720,12 @@ function TwoFactor({
             type="button"
             title="Copy"
             onClick={() => copy(secret, "Key")}
-            className="rounded-lg border bg-muted/40 px-3 py-2.5 text-left font-mono text-sm break-all hover:bg-hover"
+            className="rounded-lg bg-muted px-3 py-2.5 text-left font-mono text-sm break-all hover:bg-hover"
           >
             {secret}
           </button>
           <Field label="Backup codes, each good once">
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg border px-3 py-2.5 font-mono text-sm">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-muted px-3 py-2.5 font-mono text-sm">
               {setup.backupCodes.map((code) => (
                 <span key={code}>{code}</span>
               ))}

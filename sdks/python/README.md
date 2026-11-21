@@ -1,6 +1,6 @@
 # Skywake for Python
 
-A client for Skywake: disks of files and search indexes, both with branches. Python 3.10+.
+A client for Skywake: shared disks of files with branches, and search over them. Python 3.10+.
 
 ```bash
 pip install skywake
@@ -13,12 +13,9 @@ from skywake import Skywake
 
 sky = Skywake()
 
-products = sky.index("products")
-products.upsert({"id": 1, "text": "red running shoes", "price": 89})
-hits = products.query("shoes for running", filter={"price": {"lt": 100}})
-
-app = sky.disk("app")
+app = sky.create_disk("app", search=True)
 app.write("notes.md", "hello")
+hits = app.query("greeting")
 work = app.fork("agent-1")
 work.write("notes.md", "changed")
 work.merge_into("main")
@@ -28,15 +25,14 @@ work.merge_into("main")
   `SKYWAKE_API_KEY`, `SKYWAKE_URL`, `SKYWAKE_ENV` and `SKYWAKE_PROFILE`, else
   the profile `skywake login` saved. `AsyncSkywake` has the same methods, to
   `await`.
-- **Handles.** `sky.disk(name)` and `sky.index(name)` call no network; pass
+- **Handles.** `sky.disk(name)` calls no network; pass
   `branch="agent-1"` for another branch. `fork(name, at=...)` returns a handle
   on the new branch, and copies no data.
 - **Disks.** `read`, `write` (one file, or a dict of files as one commit),
   `delete`, `move`, `list`, `grep`, `find`, `query`, `log`, `diff`, `revert`,
   `restore`, `upload` and `download`.
-- **Indexes.** `upsert`, `update`, `delete`, `get`, `query`, `count`,
-  `aggregate` and `rows`. Rows are plain dicts. The first upsert creates the
-  index.
+- **Search.** Create a disk with `search=True`, or turn it on later with
+  `configure(search=True)`, then `query(text, limit=..., path=...)` its files.
 - **Errors** are `AuthError`, `PermissionError`, `NotFound`, `Conflict`,
   `MergeConflict`, `InvalidRequest`, `RateLimited` and `ServerError`, each with
   `code`, `message`, `hint` and `request_id`. Safe requests are retried.

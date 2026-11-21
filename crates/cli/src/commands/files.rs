@@ -171,13 +171,19 @@ pub(crate) async fn find(
 
 pub(crate) async fn query(
     session: &Session,
-    disk: skywake::Disk,
-    text: &str,
-    path: Option<&str>,
+    target: &Target,
+    text: Option<String>,
     limit: Option<u32>,
 ) -> Result<()> {
-    let mut query = disk.query(text);
-    if let Some(path) = path {
+    let Some(text) = text else {
+        bail!(
+            "a disk query needs words, such as `skywake query {} \"where is auth\"`",
+            target.name
+        );
+    };
+    let disk = session.found(target).await?;
+    let mut query = disk.query(&text);
+    if let Some(path) = &target.path {
         query = query.path(path);
     }
     if let Some(limit) = limit {

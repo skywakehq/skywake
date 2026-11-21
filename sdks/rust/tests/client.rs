@@ -7,7 +7,7 @@ use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use futures::TryStreamExt;
 use serde_json::{Value, json};
-use skywake::{ErrorKind, Mode, Order, Skywake};
+use skywake::{ErrorKind, Skywake};
 
 #[derive(Clone, Debug)]
 struct Seen {
@@ -150,7 +150,7 @@ async fn each_status_becomes_its_own_error_with_the_hint_in_the_message() {
         sky.whoami().await.unwrap_err().kind(),
         Some(&ErrorKind::Permission)
     );
-    let error = sky.index("prodcts").info().await.unwrap_err();
+    let error = sky.disk("prodcts").info().await.unwrap_err();
     let api_error = error.api().unwrap();
     assert_eq!(api_error.kind, ErrorKind::NotFound);
     assert_eq!(api_error.hint.as_deref(), Some("did you mean `products`?"));
@@ -226,133 +226,6 @@ async fn lists_follow_next_until_the_last_page() {
         .unwrap();
     let names: Vec<_> = disks.iter().map(|disk| disk.name.as_str()).collect();
     assert_eq!(names, ["a", "b", "c"]);
-}
-
-#[tokio::test]
-async fn upsert_takes_any_number_of_rows_and_sends_them_in_batches() {
-    let api = fake(|seen, _| {
-        let rows = seen.json();
-        let ids: Vec<_> = rows
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|row| row["id"].clone())
-            .collect();
-        ok(json!({ "count": ids.len(), "ids": ids }))
-    })
-    .await;
-    let rows: Vec<Value> = (0..25_000)
-        .map(|id| json!({ "id": id, "text": format!("row {id}") }))
-        .collect();
-    let sky = api.sky().build().unwrap();
-    let done = sky.index("products").upsert(rows).await.unwrap();
-    assert_eq!(done.count, 25_000);
-    assert_eq!(done.ids.len(), 25_000);
-    let sizes: Vec<_> = api
-        .seen()
-        .iter()
-        .map(|seen| seen.json().as_array().unwrap().len())
-        .collect();
-    assert_eq!(sizes, [10_000, 10_000, 5_000]);
-    assert_eq!(api.seen()[0].query["branch"], "main");
-}
-
-#[tokio::test]
-async fn update_and_delete_take_an_id_ids_or_a_filter() {
-    let api = fake(|_, _| ok(json!({ "count": 1 }))).await;
-    let sky = api.sky().build().unwrap();
-    let products = sky.index("products");
-    products.update(7, json!({ "stock": 3 })).await.unwrap();
-    products
-        .update(json!({ "tag": { "eq": "sale" } }), json!({ "stock": 0 }))
-        .await
-        .unwrap();
-    products.delete(vec![1, 2]).await.unwrap();
-    products
-        .delete(json!({ "filter": { "stock": { "eq": 0 } } }))
-        .await
-        .unwrap();
-    let seen: Vec<_> = api
-        .seen()
-        .iter()
-        .map(|seen| (seen.method.to_string(), seen.path.clone(), seen.json()))
-        .collect();
-    let rows = "/v2/indexes/products/rows".to_string();
-    let delete = "/v2/indexes/products/rows/delete".to_string();
-    assert_eq!(
-        seen,
-        [
-            (
-                "PATCH".into(),
-                rows.clone(),
-                json!({ "id": 7, "fields": { "stock": 3 } })
-            ),
-            (
-                "PATCH".into(),
-                rows,
-                json!({ "filter": { "tag": { "eq": "sale" } }, "fields": { "stock": 0 } })
-            ),
-            ("POST".into(), delete.clone(), json!({ "ids": [1, 2] })),
-            (
-                "POST".into(),
-                delete,
-                json!({ "filter": { "stock": { "eq": 0 } } })
-            ),
-        ]
-    );
-}
-
-#[tokio::test]
-async fn get_gives_none_for_a_missing_row_but_fails_for_a_missing_index() {
-    let api = fake(|seen, _| {
-        if seen.path.contains("/rows/") {
-            failure(404, "not_found", json!({ "path": "id" }))
-        } else {
-            failure(
-                404,
-                "not_found",
-                json!({ "hint": "did you mean `products`?" }),
-            )
-        }
-    })
-    .await;
-    let sky = api.sky().build().unwrap();
-    assert_eq!(sky.index("products").get("a b").await.unwrap(), None);
-    assert_eq!(api.seen()[0].path, "/v2/indexes/products/rows/a%20b");
-    let error = sky.index("prodcts").info().await.unwrap_err();
-    assert_eq!(error.kind(), Some(&ErrorKind::NotFound));
-}
-
-#[tokio::test]
-async fn query_takes_text_first_and_options_on_their_own() {
-    let api = fake(|_, _| {
-        ok(json!({ "data": [{ "id": 1, "score": 0.9, "title": "mug" }], "next": null }))
-    })
-    .await;
-    let sky = api.sky().build().unwrap();
-    let products = sky.index("products").on("draft");
-    let hits = products
-        .query("coffee")
-        .limit(3)
-        .mode(Mode::Keywords)
-        .await
-        .unwrap();
-    assert_eq!(hits[0]["title"], "mug");
-    products
-        .query(None)
-        .filter(json!({ "price": { "lt": 10 } }))
-        .sort("price", Order::Asc)
-        .await
-        .unwrap();
-    let seen = api.seen();
-    assert_eq!(
-        seen[0].json(),
-        json!({ "text": "coffee", "limit": 3, "mode": "keywords", "branch": "draft" })
-    );
-    assert_eq!(
-        seen[1].json(),
-        json!({ "filter": { "price": { "lt": 10 } }, "sort": { "price": "asc" }, "branch": "draft" })
-    );
 }
 
 #[tokio::test]

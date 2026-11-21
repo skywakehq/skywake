@@ -1,7 +1,7 @@
 ---
 title: MCP server
 icon: Plug
-description: skywake mcp gives an MCP-capable agent tools for files on a disk, a bash shell, and search indexes.
+description: skywake mcp gives an MCP-capable agent tools for files on a disk, a bash shell, and search.
 ---
 
 Use the MCP server when your agent speaks MCP and you want it to work on a disk through tools, without a mount or a local folder. There is one server, started by `skywake mcp`, `npx skywake mcp` or `uvx skywake mcp`. Add it to the agent's MCP config:
@@ -68,22 +68,14 @@ File tools take an optional `disk`, which defaults to `SKYWAKE_DISK`.
 | `list`   | List a folder: each entry's path, kind, size and modified time.                                              |
 | `grep`   | Find lines that match a regular expression, on the server.                                                   |
 | `find`   | Find paths that match a glob, such as `**/*.md`.                                                             |
-| `query`  | Search the disk's files by meaning and keywords; the best file first, with a snippet.                        |
+| `query`  | Search the disk's files by meaning and keywords; the best file first, with a snippet. Needs search on.       |
 | `bash`   | Run a command in a [bash shell](./bash.mdx) over the branch. Each command that changes files is one commit.  |
 | `fork`   | Fork the branch in use as `name`, and work there from then on.                                               |
 | `merge`  | Merge the branch in use into another, `main` by default. Takes `prefer` and `dry_run`. Conflicts are listed. |
 | `log`    | The newest commits of the branch, or of one path.                                                            |
 | `diff`   | What the branch changed compared with another, `main` by default.                                            |
 
-Index tools take the index's name.
-
-| Tool           | What it does                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------- |
-| `index_query`  | Search an index by `text` or `vector`, with `filter`, `limit`, `mode` and `fields`. No text lists rows. |
-| `index_upsert` | Write rows; each replaces any row with its id. The first write makes the index.                         |
-| `index_delete` | Delete rows by `ids`, or every row a `filter` matches.                                                  |
-
-A `read` key hides `write`, `delete`, `fork`, `merge`, `index_upsert` and `index_delete`. Its `bash` tool still runs, but commits nothing.
+A `read` key hides `write`, `delete`, `fork` and `merge`. Its `bash` tool still runs, but commits nothing.
 
 When the API rejects a call, the agent gets the API's message and hint as the tool's error. That lets it fix the call and try again.
 

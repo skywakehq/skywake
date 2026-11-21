@@ -66,6 +66,7 @@ export function Console({
             topBar={<TopBar />}
             sidebarOpen={sidebarOpen}
             scroll={false}
+            flat
           >
             {children}
           </AppShell>
@@ -87,7 +88,6 @@ function Preload() {
       zero.preload(queries.namespaces()),
       zero.preload(queries.orgBranches()),
       zero.preload(queries.orgCommits({ limit: 10_000 })),
-      zero.preload(queries.orgSessions()),
       zero.preload(queries.activity({ limit: 1000 })),
       zero.preload(queries.usage({ since: since() })),
     ];

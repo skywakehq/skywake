@@ -24,7 +24,6 @@ export type Version = {
   hash: string;
   message: string;
   time: number;
-  session: string | null;
   size: number | null;
 };
 

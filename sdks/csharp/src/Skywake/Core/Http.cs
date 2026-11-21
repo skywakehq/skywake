@@ -17,19 +17,14 @@ internal sealed class Http
         _retry = retry;
     }
 
-    internal Http In(string environment) =>
-        new(_client, _base, new Dictionary<string, string>(_headers) { ["skywake-environment"] = environment }, _retry);
-
     internal Task<T> GetAsync<T>(string path, IReadOnlyDictionary<string, object?>? query, CancellationToken ct) =>
         CallAsync<T>(HttpMethod.Get, path, query, null, ct);
 
-    internal Task<T> PostAsync<T>(
-        string path, object body, CancellationToken ct, IReadOnlyDictionary<string, object?>? query = null) =>
-        CallAsync<T>(HttpMethod.Post, path, query, Payload.Json(body), ct);
+    internal Task<T> PostAsync<T>(string path, object body, CancellationToken ct) =>
+        CallAsync<T>(HttpMethod.Post, path, null, Payload.Json(body), ct);
 
-    internal Task<T> PatchAsync<T>(
-        string path, object body, CancellationToken ct, IReadOnlyDictionary<string, object?>? query = null) =>
-        CallAsync<T>(HttpMethod.Patch, path, query, Payload.Json(body), ct);
+    internal Task<T> PatchAsync<T>(string path, object body, CancellationToken ct) =>
+        CallAsync<T>(HttpMethod.Patch, path, null, Payload.Json(body), ct);
 
     internal async Task DeleteAsync(string path, CancellationToken ct)
     {

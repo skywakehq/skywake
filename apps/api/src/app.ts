@@ -51,7 +51,6 @@ import { Allowlists } from "./features/orgs/allowlist.ts";
 import { orgsFeature } from "./features/orgs/routes.ts";
 import { pinnedQueriesFeature } from "./features/pinning/routing.ts";
 import { Pinning, serverId } from "./features/pinning/service.ts";
-import { sessionsFeature } from "./features/sessions/routes.ts";
 import { ssoFeature } from "./features/sso/routes.ts";
 import type { AppEnv, Ctx, Feature, Services } from "./http/context.ts";
 import { errorBody, errorHandler, jsonPath, unauthorized } from "./http/errors.ts";
@@ -80,7 +79,6 @@ const FEATURES: Feature[] = [
   branchesFeature,
   filesFeature,
   historyFeature,
-  sessionsFeature,
   indexesFeature,
   indexBranchesFeature,
   indexWritesFeature,

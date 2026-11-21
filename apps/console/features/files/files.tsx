@@ -4,12 +4,14 @@ import { useZero } from "@rocicorp/zero/react";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   ChevronRight,
   Download,
   Eye,
   FileUp,
   FolderInput,
   FolderPlus,
+  Plus,
   FolderUp,
   GitBranch,
   History,
@@ -24,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { FolderIcon } from "@skywake/ui/components/folder-icon";
 import { useSearchParams } from "next/navigation";
 import {
   type DragEvent,
@@ -49,7 +52,6 @@ import {
 } from "@skywake/ui/components/alert-dialog";
 import { mainOf, useFleet } from "@/features/fleet/fleet";
 import { NamespacePage } from "@/features/namespaces/namespace-header";
-import { ForkDialog, useForkDialog } from "@/features/branches/branch-actions";
 import { Link, navigate } from "@/components/shell/router";
 import { Ago, Button, Checkbox, Choice, Glide, cx } from "@/components/kit";
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Prompt } from "@/components/menu";
@@ -82,7 +84,6 @@ export function Files({ ns }: { ns: string }) {
   const params = useSearchParams();
   const fleet = useFleet({ ns });
   const zero = useZero();
-  const { fork, openFork, closeFork } = useForkDialog();
 
   const main = mainOf(fleet.branches);
   const branchName = params.get("branch") ?? main?.name ?? "main";
@@ -284,6 +285,21 @@ export function Files({ ns }: { ns: string }) {
     send(await dropped(event.dataTransfer));
   }
 
+  const rowMenu = (entry: Entry) => (
+    <RowMenu
+      entry={entry}
+      onOpen={() => open(entry)}
+      onDownload={() => downloadEntries([entry])}
+      onRename={() => setRenaming(entry.name)}
+      onMove={() => setMoving([entry.name])}
+      onDelete={() => setDeleting([entry.name])}
+      onVersions={() => {
+        setHistory(true);
+        open(entry);
+      }}
+    />
+  );
+
   const parts = dir ? dir.split("/") : [];
   const forkedFrom = !branch?.protected ? branch?.forkedFrom : undefined;
 
@@ -293,7 +309,6 @@ export function Files({ ns }: { ns: string }) {
       main={main?.name}
       head={main?.head}
       commits={fleet.commits.length}
-      onFork={main ? () => openFork(main.name) : undefined}
     >
       <div
         className="relative grid gap-4"
@@ -303,9 +318,10 @@ export function Files({ ns }: { ns: string }) {
         onDragOver={(event) => event.preventDefault()}
         onDrop={drop}
       >
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-9 flex-wrap items-center gap-2">
           <BranchMenu
             current={branchName}
+            locked={!!branch?.protected}
             branches={fleet.branches}
             onPick={(name) => go({ branch: name, path: "" })}
           />
@@ -326,9 +342,16 @@ export function Files({ ns }: { ns: string }) {
             ))}
           </nav>
           {chosen.length > 0 ? (
-            // While something is chosen, its actions take the tools' place.
-            <div className="flex items-center gap-1">
-              <span className="pr-2 text-sm tabular-nums">{chosen.length} selected</span>
+            <div className="flex h-9 items-center gap-0.5 rounded-full bg-active pr-1 pl-1">
+              <button
+                aria-label="Clear the selection"
+                title="Clear the selection"
+                onClick={() => setSelected(new Set())}
+                className="grid size-7 place-items-center rounded-full text-muted-foreground hover:bg-hover hover:text-foreground"
+              >
+                <X className="size-4" />
+              </button>
+              <span className="pr-2 pl-1 text-sm tabular-nums">{chosen.length} selected</span>
               <Button leadingIcon={Download} onClick={() => downloadEntries(chosen)}>
                 Download
               </Button>
@@ -346,56 +369,51 @@ export function Files({ ns }: { ns: string }) {
               <Button leadingIcon={Trash2} onClick={() => setDeleting(chosen.map((e) => e.name))}>
                 Delete
               </Button>
-              <button
-                aria-label="Clear the selection"
-                title="Clear the selection"
-                onClick={() => setSelected(new Set())}
-                className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-hover"
-              >
-                <X className="size-4" />
-              </button>
             </div>
           ) : (
             <>
-              <label className="flex h-7 w-40 items-center gap-1.5 rounded-md bg-muted/70 px-2 text-muted-foreground focus-within:bg-muted max-sm:hidden">
+              <label className="flex h-8 w-44 items-center gap-2 rounded-full bg-hover px-3 text-muted-foreground transition-colors focus-within:bg-active max-sm:hidden">
                 <Search className="size-3.5 shrink-0" />
                 <input
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   placeholder="Filter"
-                  className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-faint"
+                  className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
                 />
               </label>
               <Choice
                 value={view}
                 onChange={setView}
                 options={[
-                  { value: "list", label: "List", icon: List },
                   { value: "grid", label: "Grid", icon: LayoutGrid },
+                  { value: "list", label: "List", icon: List },
                 ]}
               />
-              <Button leadingIcon={FolderPlus} onClick={() => setMaking(true)}>
-                New folder
-              </Button>
             </>
           )}
           <Menu>
             <MenuTrigger asChild>
-              <Button variant="primary" leadingIcon={UploadIcon}>
-                Upload
+              <Button variant="primary" size="default" leadingIcon={Plus}>
+                New
               </Button>
             </MenuTrigger>
             <MenuContent align="end">
               <MenuItem
                 index={0}
-                icon={FileUp}
-                label="Files"
-                onSelect={() => filesInput.current?.click()}
+                icon={FolderPlus}
+                label="New folder"
+                onSelect={() => setMaking(true)}
               />
               <MenuItem
                 index={1}
+                icon={FileUp}
+                label="Upload files"
+                onSelect={() => filesInput.current?.click()}
+              />
+              <MenuItem
+                index={2}
                 icon={FolderUp}
-                label="Folder"
+                label="Upload folder"
                 onSelect={() => folderInput.current?.click()}
               />
             </MenuContent>
@@ -427,23 +445,13 @@ export function Files({ ns }: { ns: string }) {
           />
         </div>
 
-        {branch?.protected && (
-          <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
-            <Lock className="size-3.5" />
-            {branchName} is protected. What you change goes to a new branch, to merge when it is
-            ready.
-          </p>
-        )}
         {forkedFrom && (
-          <p className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <p className="flex w-fit items-center gap-2 rounded-full bg-hover py-1.5 pr-1.5 pl-3.5 text-[13px] text-muted-foreground">
             <GitBranch className="size-3.5" />
-            Working on {branchName}, forked from {forkedFrom}.
-            <Link
-              href={branchPath(ns, branchName)}
-              className="font-medium text-foreground hover:underline"
-            >
-              See changes and merge
-            </Link>
+            Forked from {forkedFrom}
+            <Button asChild variant="primary">
+              <Link href={branchPath(ns, branchName)}>Review and merge</Link>
+            </Button>
           </p>
         )}
 
@@ -452,11 +460,15 @@ export function Files({ ns }: { ns: string }) {
           onClick={(event) => event.target === event.currentTarget && setSelected(new Set())}
         >
           {fresh ? (
-            <Blank title="This disk is empty.">
-              Drop files here, upload them, or make a folder.
+            <Blank title="This disk is empty">
+              Drop files here, or start with one of these.
+              <StartHere
+                onUpload={() => filesInput.current?.click()}
+                onFolder={() => setMaking(true)}
+              />
             </Blank>
           ) : error ? (
-            <Blank title="This folder is not on this branch.">
+            <Blank title="This folder is not on this branch">
               <button
                 onClick={() => go({ path: "" })}
                 className="font-medium text-foreground hover:underline"
@@ -471,8 +483,16 @@ export function Files({ ns }: { ns: string }) {
               ))}
             </div>
           ) : !entries.length ? (
-            <Blank title={filter ? "Nothing matches." : "This folder is empty."}>
-              {!filter && "Drop files here, or upload them."}
+            <Blank title={filter ? "Nothing matches" : "This folder is empty"}>
+              {!filter && (
+                <>
+                  Drop files here, or start with one of these.
+                  <StartHere
+                    onUpload={() => filesInput.current?.click()}
+                    onFolder={() => setMaking(true)}
+                  />
+                </>
+              )}
             </Blank>
           ) : view === "list" ? (
             <ListView
@@ -492,20 +512,7 @@ export function Files({ ns }: { ns: string }) {
                 )
               }
               onOpen={open}
-              actions={(entry) => (
-                <RowMenu
-                  entry={entry}
-                  onOpen={() => open(entry)}
-                  onDownload={() => downloadEntries([entry])}
-                  onRename={() => setRenaming(entry.name)}
-                  onMove={() => setMoving([entry.name])}
-                  onDelete={() => setDeleting([entry.name])}
-                  onVersions={() => {
-                    setHistory(true);
-                    open(entry);
-                  }}
-                />
-              )}
+              actions={rowMenu}
             />
           ) : (
             <GridView
@@ -516,6 +523,7 @@ export function Files({ ns }: { ns: string }) {
               }
               onChoose={choose}
               onOpen={open}
+              actions={rowMenu}
             />
           )}
         </div>
@@ -530,10 +538,10 @@ export function Files({ ns }: { ns: string }) {
               onDragLeave={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragging(false);
               }}
-              className="absolute inset-0 z-20 grid place-items-center rounded-xl border-2 border-dashed border-signal bg-signal/5"
+              className="absolute inset-0 z-20 grid place-items-center rounded-3xl bg-[color-mix(in_oklab,var(--sun)_16%,var(--card))]"
             >
-              <div className="pointer-events-none grid place-items-center gap-2 text-center">
-                <UploadIcon className="size-6 text-signal" />
+              <div className="pointer-events-none grid place-items-center gap-3 text-center">
+                <FolderIcon className="h-14 w-auto" />
                 <p className="text-sm font-medium">
                   Drop to upload to {dir ? `/${dir}` : nameInEnv(ns)}
                 </p>
@@ -680,7 +688,6 @@ export function Files({ ns }: { ns: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {fork && <ForkDialog ns={ns} from={fork.from} at={fork.at} open onOpenChange={closeFork} />}
     </NamespacePage>
   );
 }
@@ -698,7 +705,7 @@ function Crumb({
     <button
       onClick={onClick}
       className={cx(
-        "truncate rounded-md px-1.5 py-0.5 hover:bg-hover",
+        "truncate rounded-full px-2.5 py-1 transition-colors hover:bg-hover",
         current ? "font-medium text-foreground" : "text-muted-foreground",
       )}
     >
@@ -709,10 +716,13 @@ function Crumb({
 
 function BranchMenu({
   current,
+  locked,
   branches,
   onPick,
 }: {
   current: string;
+  /** A protected branch: changes made here go to a new branch. */
+  locked: boolean;
   branches: { name: string; protected: boolean }[];
   onPick: (name: string) => void;
 }) {
@@ -722,7 +732,12 @@ function BranchMenu({
   return (
     <Menu>
       <MenuTrigger asChild>
-        <Button leadingIcon={GitBranch} className="max-w-56">
+        <Button
+          leadingIcon={locked ? Lock : GitBranch}
+          trailingIcon={ChevronDown}
+          title={locked ? `${current} is protected. Your changes go to a new branch.` : undefined}
+          className="max-w-56 rounded-full bg-hover"
+        >
           <span className="truncate">{current}</span>
         </Button>
       </MenuTrigger>
@@ -783,7 +798,7 @@ function RowMenu({
           aria-label={`More for ${entry.name}`}
           onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
-          className="grid size-7 place-items-center rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
+          className="grid size-7 shrink-0 place-items-center rounded-full text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-active hover:text-foreground focus-visible:opacity-100 data-[state=open]:opacity-100"
         >
           <MoreHorizontal className="size-4" />
         </button>
@@ -850,7 +865,7 @@ function ListView({
   );
   return (
     <div>
-      <div className={cx(COLUMNS, "h-10 border-b px-3 text-xs text-muted-foreground")}>
+      <div className={cx(COLUMNS, "h-10 px-3 text-xs text-muted-foreground")}>
         <span className="grid place-items-center">
           <Checkbox
             on={count > 0 && count === entries.length}
@@ -875,8 +890,8 @@ function ListView({
               onDoubleClick={() => onOpen(entry)}
               className={cx(
                 COLUMNS,
-                "group h-10 cursor-default rounded-md px-2 text-sm select-none",
-                on && "bg-selected",
+                "group h-11 cursor-default rounded-xl px-2 text-sm select-none",
+                on && TILE_ON,
               )}
             >
               <span
@@ -928,69 +943,121 @@ function ListView({
   );
 }
 
+const TILES = "grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3";
+
 function GridView({
   entries,
   selected,
   thumb,
   onChoose,
   onOpen,
+  actions,
 }: {
   entries: Entry[];
   selected: Set<string>;
   thumb: (entry: Entry) => string;
   onChoose: (event: MouseEvent, name: string) => void;
   onOpen: (entry: Entry) => void;
+  actions: (entry: Entry) => React.ReactNode;
 }) {
+  const folders = entries.filter((entry) => entry.kind === "folder");
+  const files = entries.filter((entry) => entry.kind !== "folder");
+  const tile = (entry: Entry) => ({
+    onClick: (event: MouseEvent) => onChoose(event, entry.name),
+    onDoubleClick: () => onOpen(entry),
+    className: cx(
+      "group cursor-default rounded-2xl transition-colors select-none",
+      selected.has(entry.name) ? TILE_ON : "bg-(--panel) hover:bg-(--panel-hover)",
+    ),
+  });
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 p-3">
-      {entries.map((entry) => {
-        const on = selected.has(entry.name);
-        const image =
-          entry.kind === "file" && kindOf(entry.name) === "image" && entry.size < 25_000_000;
-        return (
-          <div
-            key={entry.name}
-            onClick={(event) => onChoose(event, entry.name)}
-            onDoubleClick={() => onOpen(entry)}
-            className={cx(
-              "grid cursor-default gap-2 rounded-lg p-2 select-none transition-colors",
-              on ? "bg-selected" : "hover:bg-hover",
-            )}
-          >
-            <div className="grid aspect-[4/3] place-items-center overflow-hidden rounded-md bg-muted/50">
-              {image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={thumb(entry)} alt="" loading="lazy" className="size-full object-cover" />
-              ) : (
-                <FileIcon name={entry.name} folder={entry.kind === "folder"} className="size-9" />
-              )}
-            </div>
-            <div className="flex min-w-0 items-center gap-1.5 px-0.5">
-              <FileIcon
-                name={entry.name}
-                folder={entry.kind === "folder"}
-                className="size-3.5 shrink-0"
-              />
-              <span className="truncate text-sm">{entry.name}</span>
-            </div>
+    <div className="grid gap-8 px-3 pt-1">
+      {folders.length > 0 && (
+        <section className="grid gap-3">
+          <h2 className="text-xs font-medium text-muted-foreground">Folders</h2>
+          <div className={TILES}>
+            {folders.map((entry) => {
+              const { className, ...events } = tile(entry);
+              return (
+                <div
+                  key={entry.name}
+                  {...events}
+                  className={cx(className, "flex h-12 items-center gap-3 pr-2 pl-4")}
+                >
+                  <FolderIcon className="h-5 w-auto shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{entry.name}</span>
+                  {actions(entry)}
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </section>
+      )}
+      {files.length > 0 && (
+        <section className="grid gap-3">
+          {folders.length > 0 && (
+            <h2 className="text-xs font-medium text-muted-foreground">Files</h2>
+          )}
+          <div className={TILES}>
+            {files.map((entry) => {
+              const { className, ...events } = tile(entry);
+              const image = kindOf(entry.name) === "image" && entry.size < 25_000_000;
+              return (
+                <div key={entry.name} {...events} className={cx(className, "grid gap-2 p-2")}>
+                  <div className="flex h-8 min-w-0 items-center gap-2 pl-2">
+                    <FileIcon name={entry.name} className="size-4 shrink-0" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {entry.name}
+                    </span>
+                    {actions(entry)}
+                  </div>
+                  <div className="grid aspect-[4/3] place-items-center overflow-hidden rounded-xl bg-background">
+                    {image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={thumb(entry)}
+                        alt=""
+                        loading="lazy"
+                        className="size-full object-cover"
+                      />
+                    ) : (
+                      <FileIcon name={entry.name} className="size-10" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
 
+const TILE_ON = "bg-[color-mix(in_oklab,var(--sun)_32%,var(--card))]";
+
 function Blank({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <div className="grid min-h-80 place-items-center p-8 text-center">
-      <div>
-        <div className="mx-auto mb-3 grid size-11 place-items-center rounded-xl bg-muted text-muted-foreground">
-          <UploadIcon className="size-5" />
-        </div>
-        <p className="font-medium">{title}</p>
-        {children && <div className="mt-1 text-sm text-muted-foreground">{children}</div>}
+    <div className="grid min-h-96 place-items-center p-8 text-center">
+      <div className="grid justify-items-center">
+        <FolderIcon className="mb-5 h-20 w-auto" />
+        <p className="text-lg font-medium tracking-[-0.015em]">{title}</p>
+        {children && <div className="mt-1.5 text-sm text-muted-foreground">{children}</div>}
       </div>
     </div>
+  );
+}
+
+function StartHere({ onUpload, onFolder }: { onUpload: () => void; onFolder: () => void }) {
+  return (
+    <span className="mt-5 flex justify-center gap-2">
+      <Button variant="primary" size="default" leadingIcon={UploadIcon} onClick={onUpload}>
+        Upload files
+      </Button>
+      <Button size="default" leadingIcon={FolderPlus} onClick={onFolder}>
+        New folder
+      </Button>
+    </span>
   );
 }
 
@@ -1037,12 +1104,12 @@ function useView() {
     },
     () => {
       try {
-        return localStorage.getItem(VIEW_KEY) === "grid" ? "grid" : "list";
+        return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "grid";
       } catch {
-        return "list";
+        return "grid";
       }
     },
-    () => "list" as const,
+    () => "grid" as const,
   );
   const set = (next: "list" | "grid") => {
     try {

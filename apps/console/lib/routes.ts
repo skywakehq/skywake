@@ -1,9 +1,7 @@
 import { namespaceName } from "./names.ts";
 
-const ENV_PAGES = ["activity", "indexes"] as const;
+const ENV_PAGES = ["activity"] as const;
 const DISK_TABS = ["files", "branches", "history", "search"] as const;
-export const INDEX_TABS = ["overview", "query", "rows", "branches", "settings"] as const;
-export type IndexTab = (typeof INDEX_TABS)[number];
 
 export type Route =
   | { view: "home" }
@@ -15,7 +13,6 @@ export type Route =
   | { view: (typeof ENV_PAGES)[number]; env: string }
   | { view: (typeof DISK_TABS)[number]; ns: string }
   | { view: "branch"; ns: string; branch: string }
-  | { view: "index"; index: string; tab: IndexTab }
   | { view: "missing" };
 
 const MISSING: Route = { view: "missing" };
@@ -31,12 +28,6 @@ function disk(ns: string, rest: string[]): Route {
   return view && !more.length ? { view, ns } : MISSING;
 }
 
-function index(name: string, rest: string[]): Route {
-  const [page = "overview", ...more] = rest;
-  const tab = INDEX_TABS.find((t) => t === (page === "documents" ? "rows" : page));
-  return tab && !more.length ? { view: "index", index: name, tab } : MISSING;
-}
-
 function legacyDisk(ns: string, [page, ...rest]: string[]): Route {
   if (page === "b") return rest.length ? { view: "branch", ns, branch: rest.join("/") } : MISSING;
   return disk(ns, page ? [page, ...rest] : []);
@@ -50,7 +41,6 @@ export function parse(path: string): Route {
   if (first === "desktop" && !id) return { view: "desktop" };
   const tail = [kind, name, ...rest].filter((part): part is string => Boolean(part));
   if (first === "n" && id) return legacyDisk(id, tail);
-  if (first === "i" && id) return index(id, tail);
   if (first !== "e" || !id) return MISSING;
   if (!kind) return { view: "disks", env: id };
   if (!name) {
@@ -58,6 +48,5 @@ export function parse(path: string): Route {
     return view ? { view, env: id } : MISSING;
   }
   if (kind === "d") return disk(namespaceName(id, name), rest);
-  if (kind === "i") return index(namespaceName(id, name), rest);
   return MISSING;
 }

@@ -1,6 +1,6 @@
 # Skywake for TypeScript
 
-A client for Skywake: branches of a filesystem, and search indexes.
+A client for Skywake: disks your agents share, with branches and search.
 
 ```bash
 npm install skywake
@@ -12,33 +12,23 @@ The `skywake` package holds this SDK, `skywake/bash` and the `skywake` command.
 ```ts
 import { Skywake } from "skywake";
 
-const sky = new Skywake({ url: "https://api.skywake.dev", key: process.env.SKYWAKE_KEY! });
+const sky = new Skywake();
 
-// Filesystems
-const main = sky.namespace("prod/app").branch("main");
-const fork = await main.fork("agents/42");
-await fork.write({ "notes.md": "# Plan" }, "Add the plan");
-await sky.namespace("prod/app").merge("agents/42", "main");
+const app = await sky.createDisk("app", { search: true });
+await app.write("notes.md", "# Plan");
 
-// Search indexes
-const products = await sky.indexes.create("prod/products", {
-  vectors: [{ name: "embedding", dims: 3 }],
-  attributes: [{ name: "tag", type: "string" }],
-});
-await products.upsert([
-  { id: 1, vectors: { embedding: [0.1, 0.2, 0.3] }, attributes: { tag: "billing" } },
-]);
-const hits = await products.query({
-  vector: { column: "embedding", value: [0.1, 0.2, 0.3] },
-  topK: 5,
-});
+const work = await app.fork("agent-1");
+await work.write("notes.md", "# Plan, changed");
+await work.mergeInto("main");
+
+const hits = await app.query("where is the plan");
 ```
 
-- **Branches.** `fork` copies nothing; `fork(name, at)` starts at an older
-  commit. `protect()` makes a branch change only by merge.
-- **Files.** `list`, `read`, `readText`, `write`, `commit`, `checkout` and
-  `commitFolder` for a whole folder; `log`, `history`, `diff`, `revert`, `reset`.
-- **Indexes.** `query`, `search` (BM25), `hybrid`, `order`, `rank`,
-  `aggregate` and `multi`; `upsert`, `patch`, `delete` and `write`.
-- **Errors** are `SkywakeError` with `status`, `code`, `requestId` and, for a
-  bad field, its `path`. Safe requests are retried.
+- **Files.** `read`, `write`, `delete`, `move`, `list`, `stat`, `grep`, `find`,
+  `upload` and `download` for a whole folder.
+- **Branches.** `fork` copies nothing; `fork(name, { at })` starts at an older
+  commit. `mergeInto`, `diff`, `log`, `revert` and `restore`.
+- **Search.** With search on, `query` finds files by meaning and keywords.
+- **Errors** are `SkywakeError`s such as `NotFound` (with a `hint`),
+  `PermissionError` and `MergeConflict` (with its `conflicts`). Safe requests
+  are retried.

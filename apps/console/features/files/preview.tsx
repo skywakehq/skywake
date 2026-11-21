@@ -96,12 +96,12 @@ export function Preview({
           if (event.key === "ArrowLeft") step(-1);
           if (event.key === "ArrowRight") step(1);
         }}
-        className="flex h-[calc(100dvh-2rem)] max-w-[min(1400px,calc(100vw-2rem))] flex-col overflow-hidden p-0"
+        className="flex h-[calc(100dvh-2rem)] max-w-[min(1400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl p-0"
       >
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b pr-2 pl-4">
+        <header className="flex h-16 shrink-0 items-center gap-2 pr-3 pl-5">
           <FileIcon name={shown} className="size-5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <DialogTitle className="truncate text-sm">{shown}</DialogTitle>
+            <DialogTitle className="truncate text-[15px] font-medium">{shown}</DialogTitle>
             <DialogDescription className="truncate text-xs">
               {at ? (
                 <>
@@ -132,7 +132,7 @@ export function Preview({
             leadingIcon={History}
             aria-pressed={versions}
             onClick={() => onVersions(!versions)}
-            className={cx(versions && "bg-selected text-foreground")}
+            className={cx("rounded-full", versions && "bg-active text-foreground")}
           >
             Versions
           </Button>
@@ -142,8 +142,8 @@ export function Preview({
             </Button>
           </DialogClose>
         </header>
-        <div className="flex min-h-0 flex-1">
-          <div className="rounded-lg relative grid min-w-0 flex-1 place-items-center bg-muted/30 p-6">
+        <div className="flex min-h-0 flex-1 gap-2 px-2 pb-2">
+          <div className="relative grid min-w-0 flex-1 place-items-center rounded-2xl bg-(--panel) p-6">
             {shown && (
               <Body key={url} url={url} name={shown} size={entry?.size ?? 0} onDownload={save} />
             )}
@@ -211,12 +211,12 @@ function Text({ url, size, onDownload }: { url: string; size: number; onDownload
   if (text.state === "failed") return <p className="text-sm text-red">{text.error}</p>;
   if (text.value.includes("\0")) return <None onDownload={onDownload} />;
   return (
-    <div className="size-full max-w-5xl overflow-auto rounded-lg bg-card">
+    <div className="size-full max-w-5xl overflow-auto rounded-xl bg-background">
       <pre className="p-5 font-mono text-[13px] leading-6 whitespace-pre-wrap break-words">
         {text.value}
       </pre>
       {size > TEXT_LIMIT && (
-        <p className="border-t px-5 py-3 text-sm text-muted-foreground">
+        <p className="px-5 py-3 text-sm text-muted-foreground">
           Showing the first {bytes(TEXT_LIMIT)}.{" "}
           <button onClick={onDownload} className="font-medium text-foreground hover:underline">
             Download the rest
@@ -251,8 +251,8 @@ function Versions({
 }) {
   const versions = useFetch<Version[]>(url, asJSON);
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l bg-card max-sm:hidden">
-      <h2 className="flex h-11 shrink-0 items-center border-b px-4 text-sm font-medium">
+    <aside className="flex w-80 shrink-0 flex-col rounded-2xl bg-(--panel) max-sm:hidden">
+      <h2 className="flex h-11 shrink-0 items-center px-4 text-sm font-medium">
         Versions
       </h2>
       <ol className="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -271,8 +271,8 @@ function Versions({
               <li key={version.hash}>
                 <div
                   className={cx(
-                    "group flex w-full items-start gap-2 rounded-md px-2.5 py-2 text-left text-sm",
-                    on ? "bg-selected" : "hover:bg-hover",
+                    "group flex w-full items-start gap-2 rounded-xl px-2.5 py-2 text-left text-sm",
+                    on ? "bg-active" : "hover:bg-hover",
                   )}
                 >
                   <button
@@ -295,7 +295,6 @@ function Versions({
                     </div>
                     <div className="mt-0.5 truncate text-xs text-muted-foreground">
                       {version.message}
-                      {version.session ? ` · ${version.session}` : ""}
                     </div>
                   </button>
                   {!gone && (
@@ -350,7 +349,7 @@ function Step({
       onClick={onClick}
       aria-label={side === "left" ? "Previous file" : "Next file"}
       className={cx(
-        "absolute top-1/2 -translate-y-1/2 bg-card",
+        "absolute top-1/2 -translate-y-1/2 rounded-full bg-background shadow-[var(--lift)]",
         side === "left" ? "left-4" : "right-4",
       )}
     >

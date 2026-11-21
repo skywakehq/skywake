@@ -2,17 +2,16 @@
 
 import { useQuery } from "@rocicorp/zero/react";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
-import { useNow } from "@/components/kit";
 import { useRole } from "@/components/shell/role";
 import { seesAudit } from "@/zero/roles";
 import { queries } from "@/zero/queries";
-import type { Branch, Claim, Commit, Session } from "@/zero/schema";
+import type { Branch, Commit } from "@/zero/schema";
 import { changesOf, type Event, eventOf } from "./events";
 import { envOf } from "@/lib/names";
 import { apiPath } from "@/lib/paths";
 
 // Everything the console derives from Zero's rows for one environment or one
-// disk: reviews, agents, and what went wrong. Pages ask for a scope and
+// disk: reviews and what went wrong. Pages ask for a scope and
 // read what they need.
 
 export type Scope = { env: string } | { ns: string };
@@ -25,17 +24,6 @@ export type Review = {
   /** Its own commits, newest first. */
   commits: Commit[];
   state: "open" | "merged";
-  agent: string | undefined;
-};
-
-export type Agent = Session & {
-  claims: readonly Claim[];
-  live: boolean;
-  /** The branch it works on: the one it holds, or the one it last committed to. */
-  branch: string | undefined;
-  last: Commit | undefined;
-  /** It committed, ended, and none of its work was merged. */
-  stranded: boolean;
 };
 
 export type Rejection = { ns: string; branch: string; at: number; actor: string };
@@ -49,17 +37,14 @@ export function useFleet(scope: Scope) {
   const [namespaces, nsResult] = useQuery(queries.namespaces());
   const [allBranches, branchResult] = useQuery(queries.orgBranches());
   const [allCommits] = useQuery(queries.orgCommits({ limit: 10_000 }));
-  const [allSessions] = useQuery(queries.orgSessions());
   const [audit] = useQuery(queries.activity({ limit: 1000 }));
   const admin = seesAudit(useRole());
-  const current = useNow();
   const scopeKey = "ns" in scope ? `ns:${scope.ns}` : `env:${scope.env}`;
 
   const data = useMemo(() => {
     const keep = inScope(scope);
     const branches = allBranches.filter((b) => keep(b.namespace));
     const commits = allCommits.filter((c) => keep(c.namespace));
-    const sessions = allSessions.filter((s) => keep(s.namespace));
     const events = admin
       ? audit.map(eventOf).filter((e): e is Event => !!e && keep(e.ns))
       : changesOf(
@@ -67,12 +52,6 @@ export function useFleet(scope: Scope) {
           branches,
           namespaces.filter((n) => keep(n.name)),
         );
-
-    const labels = new Map(sessions.map((s) => [s.id, s.label]));
-    const agentOf = (commit?: Commit) =>
-      commit
-        ? (commit.agent ?? (commit.session ? labels.get(commit.session) : undefined))
-        : undefined;
 
     const byBranch = new Map<string, Commit[]>();
     for (const commit of commits) {
@@ -98,37 +77,9 @@ export function useFleet(scope: Scope) {
         into: branch.forkedFrom,
         commits: own,
         state: mergedHeads.has(branch.head ?? "") ? "merged" : "open",
-        agent: agentOf(own.find((c) => !c.merged) ?? own[0]),
       });
     }
     reviews.sort((a, b) => b.branch.updated - a.branch.updated);
-    const merged = new Set(
-      reviews.filter((r) => r.state === "merged").map((r) => key(r.ns, r.branch.name)),
-    );
-
-    const lastBySession = new Map<string, Commit>();
-    for (const commit of commits) {
-      if (commit.session && !lastBySession.has(commit.session))
-        lastBySession.set(commit.session, commit);
-    }
-    const agents: Agent[] = sessions
-      .map((session) => {
-        const last = lastBySession.get(session.id);
-        const live = session.expires > current;
-        const landed =
-          !!last &&
-          commits.some(
-            (c) => c.session === session.id && (c.merged || merged.has(key(c.namespace, c.branch))),
-          );
-        return {
-          ...session,
-          live,
-          branch: session.claims[0]?.branch ?? last?.branch,
-          last,
-          stranded: !live && !!last && !landed,
-        };
-      })
-      .sort((a, b) => (b.last?.at ?? b.created) - (a.last?.at ?? a.created));
 
     // A branch deleted without being merged was rejected, unless another try
     // of the same task (a branch in the same folder) was merged after all.
@@ -152,16 +103,13 @@ export function useFleet(scope: Scope) {
       namespaces: namespaces.filter((n) => keep(n.name)),
       branches,
       commits,
-      sessions,
       events,
       reviews,
-      agents,
       rejections,
-      agentOf,
       commitsOf: (ns: string, branch: string) => byBranch.get(key(ns, branch)) ?? [],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey, namespaces, allBranches, allCommits, allSessions, audit, admin, current]);
+  }, [scopeKey, namespaces, allBranches, allCommits, audit, admin]);
 
   return {
     ...data,

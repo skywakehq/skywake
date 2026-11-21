@@ -42,8 +42,8 @@ export const ErrorBody = z
 
 export const Role = z.enum(["read", "write", "admin"]).openapi("Role", {
   description:
-    "What a caller may do. `read`: files, history and sessions. `write`: also fork, commit, merge " +
-    "and start sessions. `admin`: also keys, namespaces, protected branches and the audit log.",
+    "What a caller may do. `read`: files and history. `write`: also fork, commit and merge. " +
+    "`admin`: also keys, namespaces, protected branches and the audit log.",
 });
 export type Role = z.infer<typeof Role>;
 

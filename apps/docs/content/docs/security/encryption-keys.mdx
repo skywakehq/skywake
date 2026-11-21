@@ -1,35 +1,14 @@
 ---
 title: Encryption keys
 icon: LockKeyhole
-description: Encrypt an index with your own key, kept in your cloud's key service.
+description: Encrypt your data with your own key, kept in your cloud's key service.
 ---
 
-Use your own encryption key when you need to control access to an index's data yourself. If you revoke the key in your cloud's key service, the index's data becomes unreadable.
-
-The v2 API, the SDKs and the CLI can't set an index's key yet. Create the index over `/v1`, which goes away one release after v2. Its name there is the full name, with the environment first (`prod/products` is `products` in `prod`), and it takes a v1 schema:
-
-```bash norun
-curl -X POST "$SKYWAKE_URL/v1/indexes" \
-  -H "authorization: Bearer $SKYWAKE_API_KEY" -H "content-type: application/json" \
-  -d '{"name": "prod/products",
-       "schema": {"vectors": [{"name": "embedding", "dims": 768}], "attributes": []},
-       "encryption": {"kms_key_id": "arn:aws:kms:us-east-1:123456789012:key/..."}}'
-```
-
-After that, use it like any other index: `sky.index("products")` with a `prod` key.
-
-## Per index
-
-`encryption.kms_key_id` is a key id or ARN in your cloud's key service. Every object of the index is encrypted with that key.
-
-- Set the key when you create the index. A copy made with `products.copy(...)` has no key. To give a copy its own key, use `POST /v1/indexes/{index}/copy`.
-- The index's store must be an `s3://` bucket.
-- `GET /v1/indexes/{index}` shows the key as `encryption`, or `null` when there is none.
-- The API's local index cache (`SKYWAKE_INDEX_CACHE_DIR`) never holds blobs of an index that has its own key. A build of such an index never writes its rows to local disk either.
+Use your own encryption key when you need to control access to your data yourself. If you revoke the key in your cloud's key service, the data becomes unreadable.
 
 ## The whole bucket
 
-To encrypt everything with your own KMS key, disks included, set that key as the bucket's default encryption. On the [Helm chart](../self-hosting/kubernetes.mdx), the pods' role then also needs `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey` on the key.
+To encrypt everything with your own KMS key, disks and their search data included, set that key as the bucket's default encryption. Use it with [your own bucket](../self-hosting/your-bucket.mdx) or on your own servers. On the [Helm chart](../self-hosting/kubernetes.mdx), the pods' role then also needs `kms:Encrypt`, `kms:Decrypt` and `kms:GenerateDataKey` on the key.
 
 ## Next
 

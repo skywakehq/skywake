@@ -363,57 +363,6 @@ export const indexUsage = api.table(
   ],
 );
 
-export const sessions = api.table(
-  "sessions",
-  {
-    id: text("id").primaryKey(),
-    org: text("org").notNull(),
-    namespace: text("namespace").notNull(),
-    label: text("label").notNull(),
-    actor: text("actor").notNull(),
-    expires: time("expires").notNull(),
-    created: time("created").notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      name: "sessions_org_namespace_fkey",
-      columns: [table.org, table.namespace],
-      foreignColumns: [namespaces.org, namespaces.name],
-    }).onDelete("cascade"),
-    index("sessions_by_namespace").on(table.org, table.namespace, table.expires),
-    index("sessions_by_expiry").on(table.expires),
-  ],
-);
-
-export const claims = api.table(
-  "claims",
-  {
-    org: text("org").notNull(),
-    namespace: text("namespace").notNull(),
-    branch: text("branch").notNull(),
-    path: text("path").notNull(),
-    session: text("session").notNull(),
-    created: time("created").notNull().defaultNow(),
-  },
-  (table) => [
-    primaryKey({
-      name: "claims_pkey",
-      columns: [table.org, table.namespace, table.branch, table.path],
-    }),
-    foreignKey({
-      name: "claims_session_fkey",
-      columns: [table.session],
-      foreignColumns: [sessions.id],
-    }).onDelete("cascade"),
-    index("claims_by_session").on(table.session),
-    foreignKey({
-      name: "claims_org_namespace_branch_fkey",
-      columns: [table.org, table.namespace, table.branch],
-      foreignColumns: [branches.org, branches.namespace, branches.name],
-    }).onDelete("cascade"),
-  ],
-);
-
 export const audit = api.table(
   "audit",
   {
@@ -461,10 +410,8 @@ export const commits = api.table(
     hash: text("hash").notNull(),
     parent: text("parent"),
     message: text("message").notNull(),
-    session: text("session"),
     merged: text("merged"),
     actor: text("actor").notNull(),
-    agent: text("agent"),
     changes: jsonb("changes").notNull(),
     at: time("at").notNull().defaultNow(),
   },

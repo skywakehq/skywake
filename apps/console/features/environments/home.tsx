@@ -22,7 +22,7 @@ export function Home() {
 
   if (target || !loaded) return null;
   return (
-    <Empty title="Make your first environment" columns={["Environment", "Disks", "Updated"]}>
+    <Empty title="Make your first environment">
       <p>An environment, such as prod or staging, holds disks. Agents fork and merge inside one.</p>
       <Button variant="primary" className="mt-4" onClick={() => setCreating(true)}>
         New environment

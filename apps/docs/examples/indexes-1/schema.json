@@ -1,7 +1,0 @@
-{
-  "attributes": [
-    { "name": "text", "type": "text" },
-    { "name": "category", "type": "string" },
-    { "name": "price", "type": "number" }
-  ]
-}

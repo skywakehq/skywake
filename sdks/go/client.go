@@ -32,10 +32,6 @@ func (c *Client) Disk(name string, branch ...string) *Disk {
 	return &Disk{Name: name, Branch: branchOf(branch), http: c.http}
 }
 
-func (c *Client) Index(name string, branch ...string) *Index {
-	return &Index{Name: name, Branch: branchOf(branch), http: c.http}
-}
-
 func (c *Client) CreateDisk(ctx context.Context, name string, options ...DiskOptions) (*Disk, error) {
 	o := first(options)
 	body := map[string]any{"name": name, "region": o.Region, "search": o.Search, "visibility": o.Visibility}
@@ -45,24 +41,8 @@ func (c *Client) CreateDisk(ctx context.Context, name string, options ...DiskOpt
 	return c.Disk(name), nil
 }
 
-func (c *Client) CreateIndex(ctx context.Context, name string, options ...IndexOptions) (*Index, error) {
-	o := first(options)
-	body := compact(map[string]any{"name": name, "schema": o.Schema, "region": o.Region, "embed": o.Embed})
-	if o.NoEmbed {
-		body["embed"] = false
-	}
-	if err := c.http.post(ctx, "/indexes", body, nil, nil); err != nil {
-		return nil, err
-	}
-	return c.Index(name), nil
-}
-
 func (c *Client) ListDisks(ctx context.Context) iter.Seq2[DiskSummary, error] {
 	return listing[DiskSummary](ctx, c.http, "/disks", nil)
-}
-
-func (c *Client) ListIndexes(ctx context.Context) iter.Seq2[IndexSummary, error] {
-	return listing[IndexSummary](ctx, c.http, "/indexes", nil)
 }
 
 func (c *Client) CreateKey(ctx context.Context, key NewKey) (CreatedKey, error) {

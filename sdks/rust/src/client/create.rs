@@ -1,10 +1,10 @@
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::Skywake;
 use super::types::{CreatedKey, Role};
 use crate::shared::awaitable;
-use crate::{Disk, Index, Result, Visibility};
+use crate::{Disk, Names, Result, Visibility};
 
 #[derive(Serialize)]
 struct NewDisk {
@@ -58,57 +58,6 @@ impl<'a> CreateDisk<'a> {
 awaitable!(CreateDisk => Disk);
 
 #[derive(Serialize)]
-struct NewIndex {
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    schema: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    region: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    embed: Option<Value>,
-}
-
-#[must_use]
-pub struct CreateIndex<'a> {
-    sky: &'a Skywake,
-    body: NewIndex,
-}
-
-impl<'a> CreateIndex<'a> {
-    pub(crate) fn new(sky: &'a Skywake, name: &str) -> Self {
-        let body = NewIndex {
-            name: name.to_string(),
-            schema: None,
-            region: None,
-            embed: None,
-        };
-        CreateIndex { sky, body }
-    }
-
-    pub fn schema(mut self, schema: Value) -> Self {
-        self.body.schema = Some(schema);
-        self
-    }
-
-    pub fn region(mut self, region: impl Into<String>) -> Self {
-        self.body.region = Some(region.into());
-        self
-    }
-
-    pub fn embed(mut self, model: Option<&str>) -> Self {
-        self.body.embed = Some(model.map_or(Value::Bool(false), |model| json!({ "model": model })));
-        self
-    }
-
-    pub async fn send(self) -> Result<Index> {
-        let _: Value = self.sky.http.post("/indexes", &self.body).await?;
-        Ok(self.sky.index(&self.body.name))
-    }
-}
-
-awaitable!(CreateIndex => Index);
-
-#[derive(Serialize)]
 struct NewKey {
     name: String,
     role: Role,
@@ -142,7 +91,7 @@ impl<'a> CreateKey<'a> {
         self
     }
 
-    pub fn only(mut self, names: impl Into<crate::Names>) -> Self {
+    pub fn only(mut self, names: impl Into<Names>) -> Self {
         self.body.only = Some(names.into().into_vec());
         self
     }

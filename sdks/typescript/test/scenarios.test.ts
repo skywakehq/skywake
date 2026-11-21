@@ -12,7 +12,6 @@ import {
   PermissionError,
   Skywake,
   type Disk,
-  type Index,
 } from "../dist/index.js";
 
 const URL = process.env.SKYWAKE_SCENARIO_URL;
@@ -58,63 +57,9 @@ test("1. with only SKYWAKE_API_KEY set, whoami shows the environment", { skip },
   assert.equal(me.role, "admin");
 });
 
-let products: Index;
-
-test("2. one row upserted to a new index with no schema is found by query", { skip }, async () => {
-  products = sky.index("products");
-  await products.upsert({ id: "mug", text: "a blue coffee mug", price: 12, tags: ["kitchen"] });
-  const hits = await products.query("coffee mug");
-  assert.equal(hits[0]?.id, "mug");
-  assert.equal(hits[0]?.price, 12);
-  assert.ok(hits[0]!.score > 0);
-});
-
-test("3. 10,000 rows upserted in one call are all counted", { skip }, async () => {
-  const rows = Array.from({ length: 10_000 }, (_, i) => ({
-    id: `row-${i}`,
-    text: i % 2 ? `running shoe number ${i}` : `invoice ${i}`,
-    price: i % 100,
-    tags: [i % 2 ? "shoes" : "billing"],
-  }));
-  const done = await sky.index("bulk").upsert(rows);
-  assert.equal(done.count, 10_000);
-  assert.equal(await sky.index("bulk").count(), 10_000);
-  assert.equal(await sky.index("bulk").count({ filter: { tags: { contains: "shoes" } } }), 5_000);
-});
-
-test("4. a query takes a filter, a limit and keywords mode", { skip }, async () => {
-  const hits = await sky.index("bulk").query("shoe", {
-    mode: "keywords",
-    filter: { price: { lt: 10 } },
-    limit: 3,
-  });
-  assert.equal(hits.length, 3);
-  for (const hit of hits) {
-    assert.ok(hit.price < 10);
-    assert.match(hit.text, /shoe/);
-  }
-});
-
-test("5. update shows in get; delete makes get null", { skip }, async () => {
-  assert.equal(await products.update("mug", { price: 9 }), 1);
-  assert.equal((await products.get("mug"))?.price, 9);
-  assert.equal(await products.delete("mug"), 1);
-  assert.equal(await products.get("mug"), null);
-});
-
-test("6. a fork changes apart from main, and merging brings the change", { skip }, async () => {
-  await products.upsert({ id: "cup", text: "a white coffee cup", price: 5 });
-  const draft = await products.fork("draft");
-  await draft.update("cup", { price: 7 });
-  assert.equal((await draft.query("coffee cup"))[0]?.price, 7);
-  assert.equal((await products.query("coffee cup"))[0]?.price, 5);
-  await draft.mergeInto("main");
-  assert.equal((await products.get("cup"))?.price, 7);
-});
-
 let app: Disk;
 
-test("7. a file written to a new disk reads back and is listed", { skip }, async () => {
+test("2. a file written to a new disk reads back and is listed", { skip }, async () => {
   app = sky.disk("app");
   await app.write("README.md", "# App\n");
   assert.equal(await app.read("README.md"), "# App\n");
@@ -125,7 +70,7 @@ test("7. a file written to a new disk reads back and is listed", { skip }, async
   );
 });
 
-test("8. many files written together are one commit", { skip }, async () => {
+test("3. many files written together are one commit", { skip }, async () => {
   const before = (await collect(app.log())).length;
   await app.write(
     { "src/a.ts": "export const a = 1;\n", "src/b.ts": "export const b = 2;\n", "notes.txt": "hi" },
@@ -136,7 +81,7 @@ test("8. many files written together are one commit", { skip }, async () => {
   assert.equal(log[0]!.message, "three files");
 });
 
-test("9. both sides changing one file make the merge a MergeConflict", { skip }, async () => {
+test("4. both sides changing one file make the merge a MergeConflict", { skip }, async () => {
   const work = await app.fork("agent-1");
   await work.write("notes.txt", "from the agent");
   await app.write("notes.txt", "from main");
@@ -150,7 +95,7 @@ test("9. both sides changing one file make the merge a MergeConflict", { skip },
   assert.equal(await app.read("notes.txt"), "from the agent");
 });
 
-test("10. grep, find and query on a disk find a file", { skip }, async () => {
+test("5. grep, find and query on a disk find a file", { skip }, async () => {
   await app.write("docs/coffee.md", "How to brew coffee at home.\n");
   const lines = await app.grep("brew");
   assert.deepEqual(
@@ -170,27 +115,22 @@ test("10. grep, find and query on a disk find a file", { skip }, async () => {
   assert.equal(hits[0]?.path, "docs/coffee.md");
 });
 
-test("11. read with at returns the old content after a change", { skip }, async () => {
+test("6. read with at returns the old content after a change", { skip }, async () => {
   const old = await app.head();
   await app.write("README.md", "# App, changed\n");
   assert.equal(await app.read("README.md", { at: old! }), "# App\n");
   assert.equal(await app.read("README.md"), "# App, changed\n");
 });
 
-test("12. keys stay in their environment and their role", { skip }, async () => {
+test("7. keys stay in their environment and their role", { skip }, async () => {
   const staging = new Skywake({ key: keys.staging, environment: "prod" });
-  await assert.rejects(staging.index("products").query("coffee"), PermissionError);
-  const reader = new Skywake({ key: keys.read });
-  assert.equal((await reader.index("products").get("cup"))?.price, 7);
-  await assert.rejects(reader.index("products").upsert({ id: "x", text: "nope" }), PermissionError);
+  await assert.rejects(staging.disk("app").read("README.md"), PermissionError);
+  const reader = new Skywake({ key: keys.read }).disk("app");
+  assert.equal(await reader.read("README.md"), "# App, changed\n");
+  await assert.rejects(reader.write("nope.md", "nope"), PermissionError);
 });
 
-test("13. a wrong name is NotFound with a suggestion", { skip }, async () => {
-  await assert.rejects(sky.index("prodcts").query("coffee"), (error: NotFound) => {
-    assert.ok(error instanceof NotFound);
-    assert.match(error.hint ?? "", /products/);
-    return true;
-  });
+test("8. a wrong name is NotFound with a suggestion", { skip }, async () => {
   await assert.rejects(sky.disk("ap").read("README.md"), (error: NotFound) => {
     assert.ok(error instanceof NotFound);
     assert.match(error.hint ?? "", /`app`/);
@@ -199,18 +139,15 @@ test("13. a wrong name is NotFound with a suggestion", { skip }, async () => {
 });
 
 test(
-  "14. destroying a branch, then the index and the disk, empties the lists",
+  "9. destroying a branch, then the disk, empties the lists",
   { skip },
   async () => {
-    await products.on("draft").destroy();
+    await app.on("agent-1").destroy();
     assert.deepEqual(
-      (await products.branches()).map((branch) => branch.name),
+      (await app.branches()).map((branch) => branch.name),
       ["main"],
     );
-    await app.on("agent-1").destroy();
-    for (const name of ["products", "bulk"]) await sky.index(name).destroy();
     await app.destroy();
-    assert.deepEqual(await names(sky.listIndexes()), []);
     assert.deepEqual(await names(sky.listDisks()), []);
   },
 );

@@ -50,26 +50,3 @@ export {
   type WriteOptions,
 } from "./disks/disk-handle.js";
 export type { FolderOptions } from "./disks/folders.js";
-export { Index } from "./indexes/index-handle.js";
-export type {
-  AggregateOptions,
-  DocId,
-  Fields,
-  IndexRows,
-  RowsOf,
-  Filter,
-  Group,
-  Hit,
-  IndexInfo,
-  IndexSchema,
-  IndexSettings,
-  IndexSummary,
-  Mode,
-  NewIndexOptions,
-  NewRow,
-  QueryOptions,
-  Row,
-  Target,
-  Upserted,
-  Version,
-} from "./indexes/types.js";

@@ -1,7 +1,7 @@
 ---
 title: Skywake
 icon: House
-description: Disks of files and search indexes for agents, with branches, on object storage.
+description: Shared disks of files for agents, with branches and search, on object storage.
 full: true
 ---
 
@@ -13,8 +13,8 @@ full: true
     { label: "API reference", href: "/reference/api" },
   ]}
 >
-  Skywake keeps disks of files and search indexes in object storage, and gives every agent its own
-  branch. A fork copies only a pointer, so no data is copied.
+  Skywake keeps disks of files in object storage, and gives every agent its own branch. A fork
+  copies only a pointer, so no data is copied.
 </Hero>
 
 Set `SKYWAKE_API_KEY`, then:
@@ -36,7 +36,6 @@ Set `SKYWAKE_API_KEY`, then:
     <Card href="./getting-started/index.mdx" />
     <Card href="./getting-started/install.mdx" />
     <Card href="./getting-started/first-branch.mdx" />
-    <Card href="./getting-started/first-index.mdx" />
   </Cards>
 </Section>
 
@@ -49,9 +48,10 @@ Set `SKYWAKE_API_KEY`, then:
       description="Files with branches: fork, merge, mount, autosave and protection."
     />
     <Card
-      href="./indexes/index.mdx"
-      title="Search indexes"
-      description="Rows searched by meaning, keywords and filters, with branches."
+      href="./filesystem/search.mdx"
+      title="Search"
+      icon="Search"
+      description="Turn search on for a disk, then query its files by meaning and keywords."
     />
     <Card
       href="./agents/mcp.mdx"

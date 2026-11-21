@@ -3,8 +3,6 @@ mod files;
 mod keys;
 mod mcp;
 mod places;
-mod rows;
-mod types;
 
 use anyhow::{Result, bail};
 
@@ -25,7 +23,6 @@ pub(crate) async fn run(global: &Global, command: Command) -> Result<()> {
     match command {
         Command::Whoami => account::whoami(session).await,
         Command::Disks => places::disks(session).await,
-        Command::Indexes => places::indexes(session).await,
         Command::Create { what } => places::create(session, what).await,
         Command::Destroy { target, confirm } => {
             places::destroy(session, &Target::place(&target)?, confirm.yes).await
@@ -64,13 +61,7 @@ pub(crate) async fn run(global: &Global, command: Command) -> Result<()> {
             target,
             more,
             message,
-        } => {
-            let parsed = Target::parse(&target)?;
-            match parsed.path {
-                Some(_) => files::delete(session, &parsed, more, message).await,
-                None => rows::delete(session, &Target::place(&target)?, more).await,
-            }
-        }
+        } => files::delete(session, &Target::parse(&target)?, more, message).await,
         Command::Grep {
             pattern,
             target,
@@ -97,35 +88,12 @@ pub(crate) async fn run(global: &Global, command: Command) -> Result<()> {
         Command::Download { target, dir, at } => {
             files::download(session, &Target::place(&target)?, &dir, at).await
         }
-        Command::Upsert {
-            target,
-            file,
-            format,
-        } => rows::upsert(session, &Target::place(&target)?, file, format).await,
-        Command::Get { target, id } => rows::get(session, &Target::place(&target)?, &id).await,
         Command::Query {
             target,
             text,
-            filter,
             limit,
-            mode,
-            vector,
-            sort,
-            fields,
-        } => {
-            let search = rows::Search {
-                text,
-                filter,
-                limit,
-                mode,
-                vector,
-                sort,
-                fields,
-            };
-            rows::query(session, &Target::place(&target)?, search).await
-        }
+        } => files::query(session, &Target::parse(&target)?, text, limit).await,
         Command::Keys { action } => keys::run(session, action).await,
-        Command::Types { out } => types::run(session, &out).await,
         Command::Gc { .. } | Command::Recover { .. } => {
             bail!("this works on a store with no server: add --local [DIR]")
         }

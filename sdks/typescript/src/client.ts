@@ -4,8 +4,6 @@ import { pages, type Page } from "./core/paging.js";
 import { retryingFetch, type RetryOptions } from "./core/retry.js";
 import { resolveSettings, type Asked } from "./core/settings.js";
 import { Disk, MAIN, type Visibility } from "./disks/disk-handle.js";
-import { Index } from "./indexes/index-handle.js";
-import type { Fields, IndexSummary, NewIndexOptions, RowsOf } from "./indexes/types.js";
 
 export interface Options extends RetryOptions, Asked {
   fetch?: typeof fetch;
@@ -55,32 +53,13 @@ export class Skywake {
     return new Disk(this.#http, name, options.branch ?? MAIN);
   }
 
-  index<N extends string, R extends Fields = RowsOf<N>>(
-    name: N,
-    options: { branch?: string } = {},
-  ): Index<R> {
-    return new Index<R>(this.#http, name, options.branch ?? MAIN);
-  }
-
   async createDisk(name: string, options: NewDiskOptions = {}): Promise<Disk> {
     await this.#http.post("/disks", { name, ...options });
     return this.disk(name);
   }
 
-  async createIndex<R extends Fields = Fields>(
-    name: string,
-    options: NewIndexOptions = {},
-  ): Promise<Index<R>> {
-    await this.#http.post("/indexes", { name, ...options });
-    return new Index<R>(this.#http, name, MAIN);
-  }
-
   listDisks(): AsyncGenerator<DiskSummary> {
     return this.#list<DiskSummary>("/disks");
-  }
-
-  listIndexes(): AsyncGenerator<IndexSummary> {
-    return this.#list<IndexSummary>("/indexes");
   }
 
   createKey(key: NewKey): Promise<CreatedKey> {

@@ -1,7 +1,7 @@
 # Skywake for Java
 
-Disks (files with branches) and indexes (rows searched by meaning, keywords and
-filters), for AI agents. Java 17+, with Jackson for JSON.
+Disks: shared, branchable file systems for AI agents, with search as a switch
+on each disk. Java 17+, with Jackson for JSON.
 
 ```xml
 <dependency>
@@ -14,12 +14,10 @@ filters), for AI agents. Java 17+, with Jackson for JSON.
 ```java
 Skywake sky = new Skywake();
 
-Index products = sky.index("products");
-products.upsert(Map.of("id", 1, "text", "red running shoes", "price", 89));
-List<Map<String, Object>> hits = products.query("shoes for running");
-
-Disk app = sky.disk("app");
+Disk app = sky.createDisk("app", new DiskOptions().search(true));
 app.write("notes.md", "hello");
+List<FileHit> hits = app.query("hello");
+
 Disk work = app.fork("agent-1");
 work.write("notes.md", "changed");
 work.mergeInto("main");
@@ -29,10 +27,10 @@ work.mergeInto("main");
   `SKYWAKE_ENV`, then the profile in `~/.config/skywake/credentials.toml` that
   `skywake login` writes. `Skywake.builder()` sets `key`, `url`, `environment`,
   `profile`, `retries` and `timeout` in code.
-- **Handles.** `sky.index(name)` and `sky.disk(name)` make no call; pass a
-  branch as the second argument. `fork` returns a handle on the new branch.
-- **Options** are small objects: `new QueryOptions().limit(5).mode(Mode.KEYWORDS)`.
-- **Lists** such as `listDisks()`, `rows()` and `log()` are `Iterable`s that
+- **Handles.** `sky.disk(name)` makes no call; pass a branch as the second
+  argument. `fork` returns a handle on the new branch.
+- **Options** are small objects: `new FileQueryOptions().limit(5).path("docs")`.
+- **Lists** such as `listDisks()` and `log()` are `Iterable`s that
   fetch a page at a time.
 - **Errors** extend `SkywakeException` (`status()`, `code()`, `hint()`,
   `requestId()`, `path()`): `AuthException`, `PermissionException`,

@@ -53,12 +53,12 @@ The first set ran on S3: an i4i.4xlarge in ap-southeast-2 against a bucket in th
 
 The second set ran on a simulated slow store, which waits 60 ms before every request and allows at most 64 requests in flight.
 
-| Set                                                        | Result                                                                  |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------- |
-| SIFT-1M (1M × 128), cold p50                               | 259 ms unfiltered, 267 ms at a 1% filter, 318 ms at 0.1% (recall 0.966) |
-| SIFT-1M, warm p50, local store / slow store                | 1.5 ms / 129 ms                                                         |
-| SIFT-1M, [filtered](./indexes/filters.mdx) recall@10 at 1% | 0.98                                                                    |
-| Cohere-10M (10M × 768), cold p50                           | 306 ms unfiltered (recall 0.94), 551 ms at 1%                           |
+| Set                                         | Result                                                                  |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
+| SIFT-1M (1M × 128), cold p50                | 259 ms unfiltered, 267 ms at a 1% filter, 318 ms at 0.1% (recall 0.966) |
+| SIFT-1M, warm p50, local store / slow store | 1.5 ms / 129 ms                                                         |
+| SIFT-1M, filtered recall@10 at 1%           | 0.98                                                                    |
+| Cohere-10M (10M × 768), cold p50            | 306 ms unfiltered (recall 0.94), 551 ms at 1%                           |
 
 ## Text index (BM25)
 
@@ -74,11 +74,11 @@ These runs used MS MARCO passages. Cold queries ran on the slow store, and warm 
 
 These runs used a MacBook Pro running three API servers, with 100,000 rows × 64 dimensions and 48 clients.
 
-| Phase                                                   |   QPS | p50 ms | p99 ms |
-| ------------------------------------------------------- | ----: | -----: | -----: |
-| unpinned                                                | 2,209 |   18.9 |   61.4 |
-| [pinned](./indexes/pinning-and-replicas.mdx), 1 replica | 1,841 |   24.5 |   52.1 |
-| pinned, 3 replicas                                      | 2,294 |   18.6 |   56.4 |
+| Phase              |   QPS | p50 ms | p99 ms |
+| ------------------ | ----: | -----: | -----: |
+| unpinned           | 2,209 |   18.9 |   61.4 |
+| pinned, 1 replica  | 1,841 |   24.5 |   52.1 |
+| pinned, 3 replicas | 2,294 |   18.6 |   56.4 |
 
 ## Run them yourself
 
@@ -91,7 +91,6 @@ scripts/bench.sh micro --quick    # also: index, filesystem, pinning, cloud
 ## Next
 
 <Cards>
-  <Card href="./indexes/vector.mdx" />
-  <Card href="./indexes/full-text.mdx" />
+  <Card href="./filesystem/search.mdx" />
   <Card href="./self-hosting/kubernetes.mdx" />
 </Cards>

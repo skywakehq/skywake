@@ -1,22 +1,22 @@
 ---
 title: Keep data in your own bucket
 icon: Database
-description: Point an environment at your S3 bucket, so its files and indexes live there and nowhere else.
+description: Point an environment at your S3 bucket, so its disks live there and nowhere else.
 ---
 
-An environment can keep its data in a bucket you own. The API still runs the branches, commits, searches and billing, but every byte of the environment's disks and indexes is written to your bucket. One bucket holds both:
+An environment can keep its data in a bucket you own. The API still runs the branches, commits, searches and billing, but every byte of the environment's disks, and of their search data, is written to your bucket. One bucket holds both:
 
 ```
 s3://acme-data/skywake/
   fs/ns_…/   a disk: refs/, objects/, chunks/, commits/, …
-  ix/ix_…/   an index: refs/, objects/, chunks/, blobs/, …
+  ix/ix_…/   a disk's search data: refs/, objects/, chunks/, blobs/, …
 ```
 
-Each folder says what it holds in a small `skywake.json`. Garbage collection checks that file and refuses any folder of the other kind, so disks and indexes never collect each other's data.
+Each folder says what it holds in a small `skywake.json`. Garbage collection checks that file and refuses any folder of the other kind, so files and search data never collect each other's.
 
 ## Choose the bucket before you make anything
 
-An environment's bucket can be set, changed or removed only while the environment holds no disks or indexes, and no folders still waiting to be deleted. Set it right after you create the environment.
+An environment's bucket can be set, changed or removed only while the environment holds no disks, and no folders still waiting to be deleted. Set it right after you create the environment.
 
 <include lang="bash" meta='tab="HTTP"'>
   ../../../examples/self-hosting/your-bucket.sh
@@ -69,9 +69,9 @@ The secret is sealed with the server's `SKYWAKE_API_SECRET_KEY` and never shown 
 
 ## What changes
 
-- New disks and indexes in the environment go to your bucket. Asking for a `region` in such an environment answers `400`.
+- New disks in the environment go to your bucket. Asking for a `region` in such an environment answers `400`.
 - With an AWS role, `skywake://` mounts get short-lived [scoped credentials](../security/scoped-credentials.mdx) from your role, limited to one disk's folder. With keys, there is no role to scope, so mounts and the CLI read and write through the API instead.
-- Destroying a disk or an index removes its folder from your bucket. The API keeps trying until it is gone, so remove the role or keys only after that.
+- Destroying a disk removes its folders from your bucket. The API keeps trying until it is gone, so remove the role or keys only after that.
 - Cache nodes are not used for your bucket yet; each server's own disk cache still is.
 
 ## Next

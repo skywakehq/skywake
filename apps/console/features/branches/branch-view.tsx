@@ -1,7 +1,7 @@
 "use client";
 
 import { useZero } from "@rocicorp/zero/react";
-import { ChevronsUpDown, GitBranch, GitFork, GitMerge, History, Layers, X } from "lucide-react";
+import { ChevronsUpDown, GitFork, GitMerge, History, Layers, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link, navigate } from "@/components/shell/router";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -29,9 +29,9 @@ import { ForkDialog, useForkDialog } from "./branch-actions";
 import { branchStatus } from "./branches";
 import { FileDiff, Note } from "./diff";
 import { FileBrowser } from "./file-browser";
-import { Ago, Avatar, Button, Empty, Hash, Kbd, plural, Rows } from "@/components/kit";
+import { Ago, Button, DiskMark, Empty, Hash, Kbd, plural, Rows } from "@/components/kit";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger } from "@/components/menu";
-import { LiveDot, StatusPill } from "@/components/status";
+import { StatusPill } from "@/components/status";
 
 const ALL = "all";
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -101,10 +101,7 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
     );
   }
 
-  const agent =
-    fleet.agents.find((a) => a.branch === branch && a.live) ??
-    fleet.agents.find((a) => a.branch === branch);
-  const status = branchStatus(info, review, check, agent);
+  const status = branchStatus(info, review, check);
   // Other tries of the same task: branches that differ only in the last part.
   const folder = branch.includes("/") ? branch.slice(0, branch.lastIndexOf("/") + 1) : null;
   const tries = folder
@@ -112,27 +109,20 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
         .filter((b) => b.name.startsWith(folder) && !b.name.slice(folder.length).includes("/"))
         .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
     : [];
-  const holds = agent?.claims.map((c) => c.path || "/") ?? [];
 
   return (
     <>
-      <div className="shrink-0 border-b px-6 py-5">
-        <div className="flex items-center gap-4">
-          {agent ? (
-            <Avatar name={agent.label} className="size-11 text-base ring-0" />
-          ) : (
-            <span className="grid size-11 shrink-0 place-items-center bg-muted text-muted-foreground">
-              <GitBranch className="size-5" />
-            </span>
-          )}
+      <div className="shrink-0 px-8 pt-8 pb-5 max-sm:px-4 max-sm:pt-6">
+        <div className="flex items-center gap-3">
+          <DiskMark className="h-8" />
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">
-              <h1 className="truncate text-[22px] leading-7 font-semibold tracking-[-0.02em]">
+              <h1 className="truncate text-[22px] leading-8 font-medium tracking-[-0.025em]">
                 {branch}
               </h1>
               <StatusPill status={status} />
             </div>
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               {info.forkedFrom && (
                 <>
                   <GitFork className="size-3.5" />
@@ -150,25 +140,6 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
                     >
                       @ <Hash value={forkPoint} />
                     </Link>
-                  )}
-                </>
-              )}
-              {agent && (
-                <>
-                  <span className="text-faint">·</span>
-                  {agent.live && <LiveDot />}
-                  <span className="font-medium text-foreground">{agent.label}</span>
-                  <span>
-                    {agent.live ? "at work" : "ended"}{" "}
-                    <Ago
-                      time={agent.live ? (agent.last?.at ?? agent.created) : agent.expires}
-                      className="text-muted-foreground"
-                    />
-                  </span>
-                  {holds.length > 0 && (
-                    <span>
-                      · holds <span className="text-foreground">{holds.join(", ")}</span>
-                    </span>
                   )}
                 </>
               )}
@@ -207,14 +178,13 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
       <AnimatePresence initial={false}>
         {review?.state === "open" && <ReviewBar key="review" review={review} check={check} />}
       </AnimatePresence>
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-6 px-8 pb-6 max-sm:px-4">
         <Timeline
           commits={commits}
           whole={whole}
           selected={at}
           forkedFrom={info.forkedFrom}
           created={info.created}
-          agentOf={fleet.agentOf}
           onSelect={(hash) => show({ at: hash, path: null })}
         />
         <section className="min-w-0 flex-1 overflow-y-auto">
@@ -225,9 +195,9 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.22, ease }}
-                className="overflow-hidden border-b bg-amber/5"
+                className="overflow-hidden bg-amber/5"
               >
-                <div className="flex h-11 items-center gap-3 px-5 text-sm">
+                <div className="flex h-11 items-center gap-3 rounded-xl px-4 text-sm">
                   <History className="size-3.5 text-amber" />
                   <span>
                     Viewing <Hash value={selected.hash} className="text-foreground" />,{" "}
@@ -250,15 +220,15 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
           {at === ALL && review ? (
             <WholeHeader review={review} />
           ) : (
-            selected && <CommitHeader commit={selected} agent={fleet.agentOf(selected)} />
+            selected && <CommitHeader commit={selected} />
           )}
-          <div className="flex h-10 items-center gap-1 border-b px-4">
+          <div className="flex h-10 items-center gap-1">
             {(["changes", "files"] as const).map((name) => (
               <button
                 key={name}
                 onClick={() => show({ tab: name, path: null })}
                 className={cn(
-                  "relative isolate h-7 rounded-md px-2.5 text-sm capitalize transition-colors",
+                  "relative isolate h-8 rounded-full px-3.5 text-sm capitalize transition-colors",
                   tab === name
                     ? "font-medium text-foreground"
                     : "text-muted-foreground hover:text-foreground",
@@ -268,7 +238,7 @@ export function BranchView({ ns, branch }: { ns: string; branch: string }) {
                   <motion.span
                     layoutId="branch-tab"
                     transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                    className="absolute inset-0 -z-10 rounded-md bg-selected"
+                    className="absolute inset-0 -z-10 rounded-full bg-active"
                   />
                 )}
                 {name}
@@ -341,7 +311,6 @@ function Timeline({
   selected,
   forkedFrom,
   created,
-  agentOf,
   onSelect,
 }: {
   commits: Commit[];
@@ -349,17 +318,16 @@ function Timeline({
   selected?: string;
   forkedFrom?: string | null;
   created: number;
-  agentOf: (commit?: Commit) => string | undefined;
   onSelect: (hash: string) => void;
 }) {
   const people = usePeople();
   const item = (active: boolean) =>
     cn(
-      "relative flex w-full gap-3 px-4 py-2 text-left transition-colors",
-      active ? "bg-selected" : "hover:bg-accent",
+      "relative flex w-full gap-3 rounded-xl px-3 py-2 text-left transition-colors",
+      active ? "bg-active" : "hover:bg-hover",
     );
   return (
-    <ol className="hidden w-[300px] shrink-0 overflow-y-auto border-r py-2 md:block">
+    <ol className="panel hidden w-[300px] shrink-0 overflow-y-auto p-2 md:block">
       {whole && (
         <li>
           <button onClick={() => onSelect(ALL)} className={item(selected === ALL)}>
@@ -385,7 +353,7 @@ function Timeline({
           >
             <span
               aria-hidden
-              className="absolute top-0 bottom-0 left-[23px] w-px bg-line-strong"
+              className="absolute top-0 bottom-0 left-[16px] w-px bg-hairline"
               style={i === 0 ? { top: 18 } : undefined}
             />
             <button
@@ -394,8 +362,8 @@ function Timeline({
             >
               <span
                 className={cn(
-                  "relative mt-1.5 size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground",
-                  i === 0 ? "bg-foreground" : "bg-background",
+                  "relative mt-1.5 size-[9px] shrink-0 rounded-full",
+                  i === 0 ? "bg-foreground" : "bg-faint",
                 )}
               />
               <span className="min-w-0 flex-1">
@@ -404,7 +372,7 @@ function Timeline({
                   <span className="truncate text-sm">{commit.message || "No message"}</span>
                 </span>
                 <span className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="truncate">{agentOf(commit) ?? people(commit.actor)}</span>
+                  <span className="truncate">{people(commit.actor)}</span>
                   <Hash value={commit.hash} className="text-faint" />
                   <Ago time={commit.at} className="ml-auto" />
                 </span>
@@ -414,7 +382,7 @@ function Timeline({
         ))}
       </AnimatePresence>
       {forkedFrom && (
-        <li className="flex gap-3 px-4 py-2 text-xs text-muted-foreground">
+        <li className="flex gap-3 px-3 py-2 text-xs text-muted-foreground">
           <GitFork className="mt-0.5 size-[9px] shrink-0" />
           <span>
             Forked from <span>{forkedFrom}</span> <Ago time={created} />
@@ -425,14 +393,13 @@ function Timeline({
   );
 }
 
-function CommitHeader({ commit, agent }: { commit: Commit; agent?: string }) {
+function CommitHeader({ commit }: { commit: Commit }) {
   const people = usePeople();
   return (
-    <div className="border-b px-5 py-4">
+    <div className="pb-4">
       <p className="text-base font-medium">{commit.message || "No message"}</p>
       <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-        <span className="text-foreground">{agent ?? people(commit.actor)}</span>
-        {agent && <span>{people(commit.actor)}</span>}
+        <span className="text-foreground">{people(commit.actor)}</span>
         <Hash value={commit.hash} />
         <span>{new Date(commit.at).toLocaleString()}</span>
       </p>
@@ -442,7 +409,7 @@ function CommitHeader({ commit, agent }: { commit: Commit; agent?: string }) {
 
 function WholeHeader({ review }: { review: Review }) {
   return (
-    <div className="border-b px-5 py-4">
+    <div className="pb-4">
       <p className="text-base font-medium">All changes on this branch</p>
       <p className="mt-1 text-sm text-muted-foreground">
         Against <span className="text-foreground">{review.into}</span> where it forked, across{" "}
@@ -475,11 +442,11 @@ function Changes({
   return (
     <ul>
       {changes.map((change) => (
-        <li key={change.path} className="border-b border-border/60">
+        <li key={change.path}>
           <button
             onClick={() => onOpen(open === change.path ? "" : change.path)}
             className={cn(
-              "flex h-9 w-full items-center gap-3 px-5 text-left transition-colors hover:bg-accent",
+              "-mx-3 flex h-9 w-[calc(100%+1.5rem)] items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-hover",
               open === change.path && "bg-accent",
             )}
           >
@@ -504,7 +471,7 @@ function Changes({
                 transition={{ duration: 0.22, ease }}
                 className="overflow-hidden"
               >
-                <div className="border-t border-border/60 bg-card py-2">
+                <div className="bg-card py-2">
                   <FileDiff
                     ns={ns}
                     branch={branch}
@@ -560,17 +527,17 @@ function ReviewBar({ review, check }: { review: Review; check: Check }) {
       animate={{ height: "auto", opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
       transition={{ duration: 0.25, ease }}
-      className="shrink-0 overflow-hidden border-b"
+      className="shrink-0 overflow-hidden"
     >
       <div
         className={cn(
-          "flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 px-5 py-2.5 text-sm",
-          conflicts.length ? "bg-destructive/[0.04]" : "bg-card",
+          "mx-8 mb-5 flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-5 py-2.5 text-sm max-sm:mx-4",
+          conflicts.length ? "bg-destructive/[0.06]" : "bg-(--panel)",
         )}
       >
         <span
           className={cn(
-            "grid size-7 place-items-center rounded-full border bg-background",
+            "grid size-7 place-items-center rounded-full bg-muted",
             conflicts.length ? "text-destructive" : "text-foreground",
           )}
         >

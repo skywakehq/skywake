@@ -1,21 +1,65 @@
 @import "@skywake/ui/globals.css";
 
-/* Dark mode is a soft grey, not pure black: the page sits a step lighter than the sidebar. */
+@theme inline {
+  --color-hairline: var(--hairline);
+}
+
+/* The site's colours: a warm yellow signal, and in dark a near-black page. */
+:root {
+  --signal: #b86e00;
+  --ring: #b86e00;
+  --sidebar-ring: #b86e00;
+  --sun: #ffc53d;
+  --sun-deep: #e59a12;
+  --lift: 0 1px 2px rgb(0 0 0 / 0.05), 0 14px 32px -14px rgb(0 0 0 / 0.2);
+  --panel: color-mix(in oklab, var(--foreground) 3.5%, transparent);
+  --panel-hover: color-mix(in oklab, var(--foreground) 6%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+
 .dark {
-  --background: #101113;
-  --primary-foreground: #101113;
-  --card: #141517;
-  --popover: #17181a;
+  --signal: #ffc53d;
+  --ring: #ffc53d;
+  --sidebar-ring: #ffc53d;
+  --lift: 0 20px 40px -18px rgb(0 0 0 / 0.75);
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --primary: #f7f8f8;
+  --primary-foreground: #08090a;
+  --card: #0f1011;
+  --popover: #141516;
   --secondary: #1a1b1e;
   --muted: #1a1b1e;
-  --accent: #1d1e21;
-  --sidebar: #0b0c0d;
-  --sidebar-primary-foreground: #101113;
-  --surface-1: #141517;
-  --surface-2: #17181a;
+  --muted-foreground: #8a8f98;
+  --accent: #1a1b1e;
+  --sidebar: #08090a;
+  --sidebar-primary-foreground: #08090a;
+  --surface-1: #0f1011;
+  --surface-2: #141516;
   --surface-3: #1a1b1e;
   --surface-4: #1d1e21;
   --surface-5: #212225;
+}
+
+/* The site's surfaces. A panel is a soft tray, a tile is a raised card on it. */
+.panel {
+  border-radius: 1.25rem;
+  background: var(--panel);
+}
+a.panel,
+button.panel {
+  transition: background-color 0.2s;
+}
+a.panel:hover,
+button.panel:hover {
+  background: var(--panel-hover);
+}
+.tile {
+  border-radius: 0.9rem;
+  background: var(--background);
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    var(--lift);
 }
 
 @layer base {

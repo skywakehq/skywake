@@ -36,21 +36,21 @@ The CLI shows a code and opens the console at `/cli/CODE`. Check that the browse
 
 Each role can do everything the role before it can, and more.
 
-| Role    | Disks                                                                                                    | Indexes                                                           |
-| ------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `read`  | Read, list, grep, find and query files; read history and diffs.                                          | Get, query, count and aggregate rows; list branches and versions. |
-| `write` | Also write, delete and move files; fork, merge, revert and restore.                                      | Also upsert, update and delete rows; fork, merge and restore.     |
-| `admin` | Also create, configure and destroy disks; merge into [protected branches](../filesystem/protection.mdx). | Also create, configure, copy and destroy indexes.                 |
+| Role    | Disks                                                                                                                                 |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`  | Read, list, grep, find and query files; read history and diffs.                                                                       |
+| `write` | Also write, delete and move files; fork, merge, revert and restore.                                                                   |
+| `admin` | Also create, configure and destroy disks, including turning search on; merge into [protected branches](../filesystem/protection.mdx). |
 
 Managing keys and reading the [audit log](./audit-log.mdx) need an organization admin.
 
-If a key lacks what a call needs, the call fails with `PermissionError` (`403`), and the message says which role it needs. Creating a disk or an index, including by the first write to a new name, needs `admin`. That is why the example creates `app` with the admin key before the agent writes to it.
+If a key lacks what a call needs, the call fails with `PermissionError` (`403`), and the message says which role it needs. Creating a disk, including by the first write to a new name, needs `admin`. That is why the example creates `app` with the admin key before the agent writes to it.
 
 ## Environments and names
 
 A key works in one environment, such as `prod` or `staging`. Requests with it go to that environment, and names like `app` mean the disk in that environment.
 
-`only` narrows a key to some disks and indexes in its environment: names, or prefixes that end in `*`, such as `["app", "docs-*"]`. The default is every name (`["*"]`). A key can't reach more than the key that makes it.
+`only` narrows a key to some disks in its environment: names, or prefixes that end in `*`, such as `["app", "docs-*"]`. The default is every name (`["*"]`). A key can't reach more than the key that makes it.
 
 An organization admin can make an **all-environments** key with `environment: null` (CLI `--all-environments`). Requests with it name the environment: `new Skywake({ environment: "staging" })`, the `SKYWAKE_ENV` variable, `--env` in the CLI, or the `Skywake-Environment` header. With none of these, they go to `default`.
 

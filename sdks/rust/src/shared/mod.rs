@@ -1,6 +1,7 @@
 pub(crate) mod batches;
 pub(crate) mod bytes;
 pub(crate) mod http;
+pub(crate) mod names;
 pub(crate) mod paging;
 pub(crate) mod retry;
 pub(crate) mod time;

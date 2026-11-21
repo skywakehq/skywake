@@ -38,7 +38,7 @@ To read the log, you need to be an organization admin, for example with an [`adm
 
 ## What is recorded
 
-- Every API call is recorded: reads, writes and refused calls. Each event is named after the operation that ran, such as `createBranch` or `queryIndex`. A v2 call is recorded under the v1 operations it runs, so writing a file shows up as `commitFiles`.
+- Every API call is recorded: reads, writes and refused calls. Each event is named after the operation that ran, such as `createBranch` or `readFile`. A v2 call is recorded under the v1 operations it runs, so writing a file shows up as `commitFiles`.
 - Console sign-ins are recorded too: sign-ins, sign-outs, two-factor, passkeys and member changes, including refused ones. They appear as `auth.signInEmail` and so on. A sign-in is recorded in every organization the person belongs to.
 - Your data is never recorded. The log holds no request or response bodies, no query strings, and no keys. `details` holds only what identifies the change, such as a new branch's head.
 
@@ -58,17 +58,17 @@ Recording never slows a request down. Events are written in the background, at m
 
 ## Events
 
-| Field                               | Meaning                                                                                 |
-| ----------------------------------- | --------------------------------------------------------------------------------------- |
-| `actor`, `actorKind`                | `key:ID` for an API key, the person's id for the console, `admin` for the operator.     |
-| `org`, `owner`                      | The caller's organization, and the one that owns what was used, when it differs.        |
-| `action`, `outcome`, `status`       | What was called and how it ended.                                                       |
-| `method`, `route`, `resource`       | The request. `resource` holds the route's disk (as `namespace`), index, branch or path. |
-| `details`                           | What changed, when the call changed something.                                          |
-| `ip`, `userAgent`                   | Where the call came from. Through the console, this is the person's own browser.        |
-| `requestId`, `clientRequestId`      | Our id for the request, and the `X-Request-Id` the caller sent.                         |
-| `durationMs`, `bytesIn`, `bytesOut` | How long it took and how much data moved.                                               |
-| `chain`, `seq`, `prev`, `hash`      | The tamper seal, described below.                                                       |
+| Field                               | Meaning                                                                             |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `actor`, `actorKind`                | `key:ID` for an API key, the person's id for the console, `admin` for the operator. |
+| `org`, `owner`                      | The caller's organization, and the one that owns what was used, when it differs.    |
+| `action`, `outcome`, `status`       | What was called and how it ended.                                                   |
+| `method`, `route`, `resource`       | The request. `resource` holds the route's disk (as `namespace`), branch or path.    |
+| `details`                           | What changed, when the call changed something.                                      |
+| `ip`, `userAgent`                   | Where the call came from. Through the console, this is the person's own browser.    |
+| `requestId`, `clientRequestId`      | Our id for the request, and the `X-Request-Id` the caller sent.                     |
+| `durationMs`, `bytesIn`, `bytesOut` | How long it took and how much data moved.                                           |
+| `chain`, `seq`, `prev`, `hash`      | The tamper seal, described below.                                                   |
 
 `resource` uses v1 full names, with the environment first: `prod/app` is the disk `app` in `prod`, and plain `app` is in `default`. When someone from another organization uses one of your public disks, you see that call in your log too, with your organization's id as `owner`.
 

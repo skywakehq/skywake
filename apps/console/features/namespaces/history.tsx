@@ -8,7 +8,7 @@ import { branchPath } from "@/lib/paths";
 import { usePeople } from "@/hooks/use-people";
 import { ForkDialog, useForkDialog } from "@/features/branches/branch-actions";
 import { NamespacePage } from "./namespace-header";
-import { Ago, Avatar, Button, cx, Empty, Glide, Hash, Panel, Rows } from "@/components/kit";
+import { Ago, Avatar, Button, cx, Empty, Glide, Hash, Rows } from "@/components/kit";
 
 function day(time: number) {
   const date = new Date(time);
@@ -34,33 +34,30 @@ export function History({ ns }: { ns: string }) {
       main={main?.name}
       head={main?.head}
       commits={fleet.commits.length}
-      onFork={main ? () => openFork(main.name) : undefined}
     >
-      <Panel title={main ? `${main.name}, newest first` : "History"} count={commits.length}>
+      <div>
         {fleet.loading && !commits.length && <Rows count={10} />}
-        <Glide>
+        <Glide fill="rounded-xl bg-hover">
           <ol>
             {commits.map((commit, i) => {
               const heading = day(commit.at);
               const showDay = i === 0 || day(commits[i - 1]!.at) !== heading;
-              const who = fleet.agentOf(commit) ?? people(commit.actor);
+              const who = people(commit.actor);
               return (
                 <Fragment key={commit.hash}>
                   {showDay && (
-                    <li className="sticky top-0 z-20 border-b bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground backdrop-blur">
+                    <li className="px-3 pt-5 pb-2 text-xs font-medium text-muted-foreground first:pt-0">
                       {heading}
                     </li>
                   )}
-                  <li data-glide className="group relative flex min-h-14 items-center gap-3 px-4">
-                    <span
-                      aria-hidden
-                      className="absolute bottom-0 left-[29px] w-px bg-border"
-                      style={{ top: i === 0 ? "50%" : 0 }}
-                    />
+                  <li
+                    data-glide
+                    className="group relative flex min-h-14 items-center gap-3 rounded-xl px-3"
+                  >
                     <span
                       className={cx(
-                        "relative z-10 grid size-7 shrink-0 place-items-center rounded-full border bg-card text-muted-foreground",
-                        commit.merged && "border-green/40 bg-green/10 text-green",
+                        "relative z-10 grid size-7 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground",
+                        commit.merged && "bg-green/15 text-green",
                       )}
                     >
                       {commit.merged ? (
@@ -74,7 +71,7 @@ export function History({ ns }: { ns: string }) {
                         {commit.message || "No message"}
                       </p>
                       <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        <Avatar name={who} className="size-4 text-[8px] ring-0" />
+                        <Avatar name={who} className="size-4 text-[8px]" />
                         <span className="truncate">{who}</span>
                         <Hash value={commit.hash} className="text-faint" />
                       </p>
@@ -103,12 +100,11 @@ export function History({ ns }: { ns: string }) {
         {!fleet.loading && !commits.length && (
           <Empty
             title={`No merges into ${main?.name ?? "main"} yet`}
-            columns={["Merge", "Agent", "When"]}
           >
             Each merge shows here with the agent it came from.
           </Empty>
         )}
-      </Panel>
+      </div>
       {fork && <ForkDialog ns={ns} from={fork.from} at={fork.at} open onOpenChange={closeFork} />}
     </NamespacePage>
   );

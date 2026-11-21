@@ -1,15 +1,12 @@
 ---
 title: What is Skywake
 icon: Sparkles
-description: Skywake stores disks of files and search indexes in object storage, and both can be forked and merged.
+description: Skywake stores disks of files in object storage. Agents fork a disk, work on their branch, and merge back.
 ---
 
-Skywake stores two things:
+Skywake stores **disks**: shared folders of files, with branches and history, that agents read, write and mount.
 
-- A **disk** holds files, with branches and history.
-- An **index** holds rows that you search by meaning, keywords and filters.
-
-You get a disk or an index by its name, such as `app` or `products`, and call a few verbs on it. Both can be **forked** into an instant copy and **merged** back. A fork copies no data, however big the disk or index is.
+You get a disk by its name, such as `app`, and call a few verbs on it. A disk can be **forked** into an instant copy and **merged** back. A fork copies no data, however big the disk is.
 
 ## Disks
 
@@ -23,15 +20,13 @@ You can work with a disk in several ways:
 
 When a fork is ready, you [merge](../filesystem/diff-and-merge.mdx) it back. The merge is three-way, and text files are merged line by line. If both sides changed the same lines, the merge lists the conflicting files and saves nothing.
 
-A disk can be searched too. When your environment has an embedding model, `app.query("where is auth handled")` finds files by meaning, with nothing to set up.
+## Search
 
-## Indexes
-
-An index is a table of rows. Each row is `{ id, ...fields }`. The first write creates the index and works out its schema from the row. Text fields are embedded for you, so one `query` searches by meaning and keywords together, with filters and sorting. Indexes have branches too: you can fork one, write to the fork, and `main` never sees those writes until you merge. See [search indexes](../indexes/index.mdx), or make [your first index](./first-index.mdx).
+Search is a switch on a disk. Make the disk with search on (`skywake create disk app --search`), or turn it on later, and `app.query("where is auth handled")` finds files by meaning and keywords. See [search](../filesystem/search.mdx).
 
 ## Environments and keys
 
-An organization has environments, such as `prod`, `staging` and `dev`. Each is a separate world of disks, indexes and keys, so `products` in `prod` and `products` in `staging` are different indexes. A key belongs to one environment, so a name alone says which disk or index you mean. See [install](./install.mdx) to sign in.
+An organization has environments, such as `prod`, `staging` and `dev`. Each is a separate world of disks and keys, so `app` in `prod` and `app` in `staging` are different disks. A key belongs to one environment, so a name alone says which disk you mean. See [install](./install.mdx) to sign in.
 
 ## How it sits on object storage
 
@@ -51,13 +46,13 @@ refs/<branch>            the branch head: its current commit
 
 ## The pieces
 
-| Piece        | What it does                                                                            |
-| ------------ | --------------------------------------------------------------------------------------- |
-| `skywake`    | The CLI: disks, indexes, branches, mounts, keys, and `skywake mcp` for agents.          |
-| `skywaked`   | One daemon per Linux machine. It runs every mount and its chunk cache.                  |
-| API          | Organizations, environments, keys, disks and indexes. Postgres holds the control plane. |
-| Console      | The web app: sign-in, the fork tree, merges, API keys.                                  |
-| SDKs and MCP | Clients for the API in seven languages, and an MCP server for agents.                   |
+| Piece        | What it does                                                                   |
+| ------------ | ------------------------------------------------------------------------------ |
+| `skywake`    | The CLI: disks, branches, search, mounts, keys, and `skywake mcp` for agents.  |
+| `skywaked`   | One daemon per Linux machine. It runs every mount and its chunk cache.         |
+| API          | Organizations, environments, keys and disks. Postgres holds the control plane. |
+| Console      | The web app: sign-in, the fork tree, merges, API keys.                         |
+| SDKs and MCP | Clients for the API in seven languages, and an MCP server for agents.          |
 
 ## Next
 

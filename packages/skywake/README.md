@@ -7,7 +7,7 @@ npm install skywake
 ```
 
 ```ts
-import { Skywake } from "skywake"; // the SDK: disks and search indexes
+import { Skywake } from "skywake"; // the SDK: disks, branches and search
 import { shell } from "skywake/bash"; // a bash shell for agents over a disk
 import { bashTool } from "skywake/ai"; // that shell as a Vercel AI SDK tool
 ```
@@ -19,15 +19,12 @@ import { Skywake } from "skywake";
 
 const sky = new Skywake();
 
-const products = sky.index("products");
-await products.upsert({ id: 1, text: "red running shoes", price: 89 });
-await products.query("shoes for running", { filter: { price: { lt: 100 } } });
-
-const app = sky.disk("app");
+const app = await sky.createDisk("app", { search: true });
 await app.write("notes.md", "hello");
 const work = await app.fork("agent-1");
 await work.write("notes.md", "changed");
 await work.mergeInto("main");
+await app.query("where are the notes");
 ```
 
 For agents, give the shell or the tool a disk handle:
@@ -59,29 +56,17 @@ dependencies of this package. Elsewhere, build the `skywake-cli` crate from sour
 `~/.config/skywake/credentials.toml`; `SKYWAKE_API_KEY` and `SKYWAKE_URL` override it.
 
 ```bash
-skywake upsert products products.jsonl     # or .csv, .parquet, or stdin with -
-skywake query products "running shoes" --filter "price < 100" --limit 5
-skywake fork products draft
-skywake upsert products@draft changes.jsonl
-skywake merge products@draft
-
+skywake create disk app --search
 skywake upload ./project app -m "base"
 skywake fork app agent-1
 skywake write app@agent-1/notes.md notes.md
 skywake diff app@agent-1
 skywake merge app@agent-1
+skywake query app "where is auth handled"
 ```
 
 `NAME@BRANCH` names a branch, and no `@` means `main`. Every command takes `--json`, `--env` and
 `--profile`, and destructive ones ask first unless `--yes`. `skywake --help` lists every command.
-
-A row has `id`, then its fields: `{"id": 1, "text": "red running shoes", "price": 89}`. The first
-upsert creates the index and works out its schema. Upserts replace rows by id, so after a failure,
-running it again is safe.
-
-A filter is written in words: `=`, `!=`, `<`, `<=`, `>`, `>=`, `in (a, b)`, `not in (..)`, joined
-with `and`, `or`, `not` and brackets, such as `(tag = a or tag = b) and price < 10`. Quote values
-with spaces. The API's JSON form works too.
 
 ## MCP
 

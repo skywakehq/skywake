@@ -5,7 +5,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Button, Choice, Field, Input, Page } from "@/components/kit";
 import { navigate } from "@/components/shell/router";
 import { useEnvironments } from "@/features/environments/use-environments";
-import { Select } from "@/features/indexes/fields";
+import { Select } from "@/components/fields";
 import { act } from "@/features/settings/settings";
 import { useEnvironment } from "@/hooks/use-ns";
 import { withBase } from "@/lib/zone";
@@ -154,7 +154,7 @@ function Asking({
       description={`The CLI on ${login.device} asks for a key. Allow it only if your terminal shows this code.`}
     >
       <form onSubmit={submit} className="grid max-w-md gap-6">
-        <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-lg bg-muted px-4 py-3">
           <Terminal className="size-4 text-muted-foreground" />
           <code className="font-mono text-2xl tracking-[0.2em]">{login.code}</code>
         </div>

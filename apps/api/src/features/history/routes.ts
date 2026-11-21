@@ -12,7 +12,6 @@ import { changeable, readable } from "../../http/request.ts";
 import { admitsFiles, filesChanged } from "../billing/require.ts";
 import { whileWritable, withProtection } from "../branches/protection.ts";
 import * as parts from "../files/parts.ts";
-import { assertLiveSession } from "../sessions/rules.ts";
 import * as commits from "./commits.ts";
 import { covers, resetEdits, revertEdits } from "./undo.ts";
 
@@ -54,11 +53,11 @@ async function commitEdits(
   { caller, ns }: { caller: Caller; ns: Namespace },
   branch: string,
   before: string,
-  commit: { message: string; session?: string; edits: FileEdit[] },
+  commit: { message: string; edits: FileEdit[] },
 ) {
   const { db } = c.var.services;
   const head = await whileWritable(db, ns, branch, () =>
-    ns.engine.commitFiles(branch, commit.message, commit.edits, commit.session),
+    ns.engine.commitFiles(branch, commit.message, commit.edits),
   );
   if (head === before) return c.json({ head, changed: false }, 200);
   await filesChanged(c, ns.folder);
@@ -72,7 +71,6 @@ const shown = (commit: CommitInfo) => ({
   hash: commit.hash,
   message: commit.message,
   time: commit.time,
-  session: commit.session ?? null,
   merged: commit.merged ?? null,
 });
 
@@ -149,10 +147,9 @@ export const historyFeature: Feature = {
       }
       const { caller, ns } = await changeable(c, namespace, "write");
       const { db, turns, log } = c.var.services;
-      await assertLiveSession(db, ns, body.session);
       const resolved = resolve.length > 0 ? await resolutions(c, ns, resolve) : undefined;
       const message = body.message ?? `Merge ${body.from} into ${body.into}`;
-      const merge = () => ns.engine.merge(body.into, body.from, message, body.session, resolved);
+      const merge = () => ns.engine.merge(body.into, body.from, message, undefined, resolved);
       const allowed = atLeast(caller.role, "admin")
         ? merge
         : () =>
@@ -175,10 +172,9 @@ export const historyFeature: Feature = {
 
     api.openapi(routes.revertCommit, async (c) => {
       const { namespace, branch } = c.req.valid("param");
-      const { commit: hash, message, session } = c.req.valid("json");
+      const { commit: hash, message } = c.req.valid("json");
       const writer = await changeable(c, namespace, "write");
       const { ns } = writer;
-      await assertLiveSession(c.var.services.db, ns, session);
       const before = await ns.engine.head(branch);
       const { commit, edits, conflicts } = await revertEdits(ns.engine, before, hash);
       if (conflicts.length > 0) {
@@ -189,23 +185,20 @@ export const historyFeature: Feature = {
       const title = commit.message.split("\n")[0];
       return commitEdits(c, writer, branch, before, {
         message: message ?? `Revert "${title}"`,
-        session,
         edits,
       });
     });
 
     api.openapi(routes.resetBranch, async (c) => {
       const { namespace, branch } = c.req.valid("param");
-      const { to, message, session } = c.req.valid("json");
+      const { to, message } = c.req.valid("json");
       const writer = await changeable(c, namespace, "write");
       const { ns } = writer;
-      await assertLiveSession(c.var.services.db, ns, session);
       const before = await ns.engine.head(branch);
       const edits = await resetEdits(ns.engine, before, to);
       note(c, { details: { to } });
       return commitEdits(c, writer, branch, before, {
         message: message ?? `Reset to ${to.slice(0, 12)}`,
-        session,
         edits,
       });
     });

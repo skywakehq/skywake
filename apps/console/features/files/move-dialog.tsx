@@ -85,8 +85,8 @@ function Picker({
         </DialogTitle>
         <DialogDescription className="text-sm">Choose a folder.</DialogDescription>
       </DialogHeader>
-      <div className="overflow-hidden rounded-lg border">
-        <div className="flex h-9 items-center gap-1 border-b px-2 text-sm">
+      <div className="overflow-hidden rounded-lg bg-muted/50">
+        <div className="flex h-9 items-center gap-1 px-2 text-sm">
           <button
             disabled={!parts.length}
             onClick={() => setAt(parts.slice(0, -1).join("/"))}

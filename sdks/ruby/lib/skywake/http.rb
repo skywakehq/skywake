@@ -18,10 +18,6 @@ module Skywake
       @transport = transport
     end
 
-    def within(environment)
-      Http.new(@base, @headers.merge("skywake-environment" => environment), @transport)
-    end
-
     def raw(method, path, query: nil, json: nil, bytes: nil)
       headers = @headers.dup
       body = nil

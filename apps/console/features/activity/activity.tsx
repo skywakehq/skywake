@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { Link } from "@/components/shell/router";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { nameInEnv } from "@/lib/names";
 import { useFleet } from "@/features/fleet/fleet";
 import { branchPath, nsPath } from "@/lib/paths";
@@ -65,16 +65,6 @@ export function Activity({ env }: { env: string }) {
   const [kind, setKind] = useState<keyof typeof KINDS>("all");
   const many = fleet.namespaces.length > 1;
 
-  // Commits name their agent; other events only know the key.
-  const agents = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const commit of fleet.commits) {
-      const name = fleet.agentOf(commit);
-      if (name) names.set(commit.hash, name);
-    }
-    return names;
-  }, [fleet]);
-
   const trend = (test: (event: Event) => boolean) =>
     perDay(
       fleet.events.filter(test).map((event) => event.at),
@@ -96,14 +86,14 @@ export function Activity({ env }: { env: string }) {
       rows.push(
         <li
           key={`day ${heading}`}
-          className="sticky top-0 z-20 border-b bg-background/95 px-4 py-2 text-xs font-medium text-muted-foreground backdrop-blur"
+          className="sticky top-0 z-20 bg-card/95 px-4 py-2 text-xs font-medium text-muted-foreground backdrop-blur"
         >
           {heading}
         </li>,
       );
       lastDay = heading;
     }
-    const who = (event.head && agents.get(event.head)) || people(event.actor);
+    const who = people(event.actor);
     rows.push(
       <motion.li
         key={event.id}
@@ -114,11 +104,11 @@ export function Activity({ env }: { env: string }) {
         data-glide
         className="relative flex min-h-12 items-center gap-3 px-4 text-sm"
       >
-        <span className="absolute top-0 bottom-0 left-[29px] w-px bg-border" />
+        <span className="absolute top-0 bottom-0 left-[29px] w-px bg-hairline" />
         <span
           className={cx(
-            "relative z-10 grid size-7 shrink-0 place-items-center rounded-full border bg-card text-muted-foreground [&_svg]:size-3.5",
-            event.kind === "merge" && "border-green/40 bg-green/10 text-green",
+            "relative z-10 grid size-7 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground [&_svg]:size-3.5",
+            event.kind === "merge" && "bg-green/15 text-green",
             event.kind === "delete" && "text-destructive",
           )}
         >
@@ -170,7 +160,7 @@ export function Activity({ env }: { env: string }) {
         ) : fleet.loading ? (
           <Rows count={10} />
         ) : (
-          <Empty title="No activity yet" columns={["Event", "Disk", "When"]}>
+          <Empty title="No activity yet">
             Commits, forks and merges show here the moment they land.
           </Empty>
         )}

@@ -167,12 +167,6 @@ test("lists anyone may read come in pages", { skip }, async () => {
       ],
     });
   }
-  const sessions = [];
-  for (const label of ["s1", "s2", "s3"]) {
-    const session = (await s.call("POST", `${ns}/sessions`, key, { label })).body;
-    sessions.push(session.id);
-    await s.call("POST", `${main}/claims`, key, { path: label, session: session.id });
-  }
   const get = async (path: string) => {
     const answer = await s.call("GET", path, key);
     assert.equal(answer.status, 200, JSON.stringify(answer.body));
@@ -198,12 +192,6 @@ test("lists anyone may read come in pages", { skip }, async () => {
   const paths = (items: { path: string }[]) => items.map((item) => item.path);
   assert.deepEqual(paths(await get(`${main}/diff?from=b1&limit=1`)), ["a.txt"]);
   assert.deepEqual(paths(await get(`${main}/diff?from=b1&after=a.txt`)), ["f2.txt", "f3.txt"]);
-
-  const ids = (items: { id: string }[]) => items.map((item) => item.id);
-  assert.deepEqual(ids(await get(`${ns}/sessions?limit=2`)), sessions.slice(0, 2));
-  assert.deepEqual(ids(await get(`${ns}/sessions?after=${sessions[1]}`)), sessions.slice(2));
-  assert.deepEqual(paths(await get(`${main}/claims?limit=2`)), ["s1", "s2"]);
-  assert.deepEqual(paths(await get(`${main}/claims?after=s2`)), ["s3"]);
 });
 
 test("a lost create from a source that moved is kept", { skip }, async () => {

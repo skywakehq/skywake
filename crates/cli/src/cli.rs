@@ -8,7 +8,7 @@ use skywake_daemon::client_root;
 #[command(
     name = "skywake",
     version,
-    about = "Skywake: disks of files and search indexes, with branches, for agents."
+    about = "Skywake: shared disks of files for agents, with branches and search."
 )]
 pub(crate) struct Cli {
     #[command(flatten)]
@@ -136,14 +136,12 @@ pub(crate) enum Command {
 
     #[command(about = "List disks.")]
     Disks,
-    #[command(about = "List indexes.")]
-    Indexes,
-    #[command(about = "Make a disk or an index with settings chosen up front.")]
+    #[command(about = "Make a disk with settings chosen up front.")]
     Create {
         #[command(subcommand)]
         what: Create,
     },
-    #[command(about = "Delete a disk or an index, or with @BRANCH only that branch.")]
+    #[command(about = "Delete a disk, or with @BRANCH only that branch.")]
     Destroy {
         #[arg(value_name = "NAME[@BRANCH]")]
         target: String,
@@ -180,13 +178,13 @@ pub(crate) enum Command {
     },
     #[command(
         visible_alias = "rm",
-        about = "Delete files from a disk, or rows from an index by id.",
-        after_help = "Examples:\n  skywake delete app/notes.md app/old.md\n  skywake delete products 1 2 3"
+        about = "Delete files from a disk.",
+        after_help = "Examples:\n  skywake delete app/notes.md app/old.md"
     )]
     Delete {
-        #[arg(value_name = "DISK[@BRANCH]/PATH|INDEX[@BRANCH]")]
+        #[arg(value_name = "DISK[@BRANCH]/PATH")]
         target: String,
-        #[arg(value_name = "PATH|ID")]
+        #[arg(value_name = "PATH")]
         more: Vec<String>,
         #[arg(long, short, help = "The commit message.")]
         message: Option<String>,
@@ -272,54 +270,15 @@ pub(crate) enum Command {
     Status,
 
     #[command(
-        about = "Add or replace rows from JSON lines, CSV or Parquet (a file, or stdin with `-`)."
-    )]
-    Upsert {
-        #[arg(value_name = "INDEX[@BRANCH]")]
-        target: String,
-        #[arg(value_name = "FILE|-")]
-        file: Option<PathBuf>,
-        #[arg(
-            long,
-            value_enum,
-            help = "Default: from the file's extension, else JSON lines."
-        )]
-        format: Option<Format>,
-    },
-    #[command(about = "Print one row.")]
-    Get {
-        #[arg(value_name = "INDEX[@BRANCH]")]
-        target: String,
-        id: String,
-    },
-    #[command(
-        about = "Search an index, or a disk's files, by meaning and keywords.",
-        after_help = "Examples:\n  skywake query products \"running shoes\" --filter \"price < 100\"\n  skywake query app \"where is auth handled\""
+        about = "Search a disk's files by meaning and keywords. The disk needs search on.",
+        after_help = "Examples:\n  skywake query app \"where is auth handled\"\n  skywake query app@agent-1/docs \"rate limits\" --limit 5"
     )]
     Query {
-        #[arg(value_name = "INDEX|DISK[@BRANCH]")]
+        #[arg(value_name = "DISK[@BRANCH][/PATH]")]
         target: String,
         text: Option<String>,
-        #[arg(long, help = "Such as `tag = shoes and price < 100`, or JSON.")]
-        filter: Option<String>,
         #[arg(long)]
         limit: Option<u32>,
-        #[arg(long, value_enum)]
-        mode: Option<QueryMode>,
-        #[arg(
-            long,
-            value_name = "JSON",
-            help = "A vector, as a JSON list of numbers."
-        )]
-        vector: Option<String>,
-        #[arg(
-            long,
-            value_name = "FIELD[:desc]",
-            help = "Order by a field instead of by score."
-        )]
-        sort: Option<String>,
-        #[arg(long, value_delimiter = ',', help = "Only these fields.")]
-        fields: Vec<String>,
     },
 
     #[command(about = "Make a branch from another, instantly.")]
@@ -341,9 +300,9 @@ pub(crate) enum Command {
         #[arg(long, help = "Report conflicts without merging.")]
         dry_run: bool,
     },
-    #[command(about = "List a disk's or an index's branches.")]
+    #[command(about = "List a disk's branches.")]
     Branches { name: String },
-    #[command(about = "Show a disk's commits or an index's versions, newest first.")]
+    #[command(about = "Show a disk's commits, newest first.")]
     Log {
         #[arg(value_name = "NAME[@BRANCH]")]
         target: String,
@@ -372,13 +331,6 @@ pub(crate) enum Command {
     Mcp {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
-    },
-    #[command(
-        about = "Write TypeScript types for every index, so `sky.index(name)` knows its rows."
-    )]
-    Types {
-        #[arg(long, short, default_value = "skywake.d.ts")]
-        out: PathBuf,
     },
 
     #[command(about = "Delete data no branch uses any more (with --local).")]
@@ -414,25 +366,6 @@ pub(crate) enum Create {
         #[arg(long, help = "Let anyone read it.")]
         public: bool,
     },
-    #[command(about = "Make an index.")]
-    Index {
-        name: String,
-        #[arg(
-            long,
-            help = "The columns, as a JSON file: {\"vectors\": [..], \"attributes\": [..]}."
-        )]
-        schema: Option<PathBuf>,
-        #[arg(long)]
-        region: Option<String>,
-        #[arg(
-            long,
-            conflicts_with = "no_embed",
-            help = "The model that embeds text for search by meaning."
-        )]
-        embed: Option<String>,
-        #[arg(long, help = "Keywords and filters only, no search by meaning.")]
-        no_embed: bool,
-    },
 }
 
 #[derive(Subcommand)]
@@ -446,7 +379,7 @@ pub(crate) enum Keys {
         #[arg(
             long,
             value_delimiter = ',',
-            help = "Only these disks and indexes; `*` ends a prefix."
+            help = "Only these disks; `*` ends a prefix."
         )]
         only: Vec<String>,
         #[arg(long, help = "A key for every environment (organization admins).")]
@@ -470,24 +403,10 @@ pub(crate) enum FindKind {
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-pub(crate) enum QueryMode {
-    Auto,
-    Meaning,
-    Keywords,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum RoleArg {
     Read,
     Write,
     Admin,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub(crate) enum Format {
-    Jsonl,
-    Csv,
-    Parquet,
 }
 
 fn parse_owner(text: &str) -> Result<(u32, u32), String> {

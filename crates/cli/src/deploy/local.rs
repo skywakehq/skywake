@@ -654,7 +654,7 @@ pub(crate) fn doomed(settings: &Settings) -> Result<Vec<String>> {
     let stack = Stack::of(settings)?;
     Ok(vec![
         format!("the containers of `{}`", stack.project),
-        "its Postgres and S3 volumes: every disk, index and key in it".into(),
+        "its Postgres and S3 volumes: every disk and key in it".into(),
         format!("{} (settings and secrets)", tilde(&stack.dir)),
         format!("the `{}` profile's saved key", settings.name),
     ])

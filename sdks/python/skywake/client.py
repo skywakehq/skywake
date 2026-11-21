@@ -4,7 +4,6 @@ from ._drive import AsyncDriver, SyncDriver, call, compact, listing, op, pages, 
 from ._settings import resolve_settings
 from ._transport import AsyncTransport, SyncTransport
 from .disk import MAIN, Disk
-from .index import Index
 
 
 def _headers(key, environment):
@@ -31,29 +30,15 @@ class _Client:
     def disk(self, name, branch=None):
         return Disk(self._driver, name, branch or MAIN)
 
-    def index(self, name, branch=None):
-        return Index(self._driver, name, branch or MAIN)
-
     @op
     def create_disk(self, name, *, region=None, search=None, visibility=None):
         body = compact({"name": name, "region": region, "search": search, "visibility": visibility})
         yield from call("POST", "/disks", body=body)
         return self.disk(name)
 
-    @op
-    def create_index(self, name, *, schema=None, region=None, embed=None):
-        yield from call(
-            "POST", "/indexes", body=compact({"name": name, "schema": schema, "region": region, "embed": embed})
-        )
-        return self.index(name)
-
     @listing
     def list_disks(self):
         return (yield from pages("/disks"))
-
-    @listing
-    def list_indexes(self):
-        return (yield from pages("/indexes"))
 
     @op
     def create_key(self, name, role, *, environment=None, only=None, expires_in_days=None):

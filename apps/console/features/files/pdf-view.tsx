@@ -82,7 +82,7 @@ export default function PdfView({ url, onFail }: { url: string; onFail: () => vo
         )}
       </div>
       {pages > 0 && (
-        <div className="rounded-md absolute bottom-4 left-1/2 flex h-9 -translate-x-1/2 items-center gap-1 border bg-card px-1.5 text-xs tabular-nums">
+        <div className="rounded-md absolute bottom-4 left-1/2 flex h-9 -translate-x-1/2 items-center gap-1 bg-popover px-1.5 shadow-[var(--lift)] text-xs tabular-nums">
           <span className="px-2 text-muted-foreground">
             {page} / {pages}
           </span>

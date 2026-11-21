@@ -373,7 +373,7 @@ function Choose({
       title={paying ? "Change plan" : "Upgrade"}
       description="Usage is billed by the meter. Each plan's monthly minimum counts toward it."
     >
-      <div className="-mx-6 divide-y divide-border/60 border-y border-border/60">
+      <div className="-mx-6">
         {billing.plans
           .filter((offer) => offer.plan !== "free")
           .map((offer) => {
@@ -486,7 +486,7 @@ function InvoiceLines({ org, month }: { org: string; month: string }) {
 
   if (lines === null) return null;
   return (
-    <div className="divide-y divide-border/60 border-t border-border/60 bg-muted/30">
+    <div className="bg-muted/30">
       {lines.map((line) => (
         <div
           key={`${line.index}/${line.item}`}

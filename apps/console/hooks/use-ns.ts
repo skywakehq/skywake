@@ -36,8 +36,7 @@ export function useNamespace(): string | undefined {
 export function useEnvironment(): string | undefined {
   const route = useRoute();
   const ns = useNamespace();
-  const env =
-    "env" in route ? route.env : ns ? envOf(ns) : "index" in route ? envOf(route.index) : undefined;
+  const env = "env" in route ? route.env : ns ? envOf(ns) : undefined;
   useRemember(LAST_ENV, env);
   return env ?? remembered(LAST_ENV);
 }

@@ -218,10 +218,6 @@ export const FileChange = z
 export const NewCommit = z
   .object({
     message: z.string().min(1).max(10_000),
-    session: z
-      .string()
-      .optional()
-      .openapi({ description: "The session making the change. The commit records it." }),
     changes: z.array(FileChange).max(10_000),
   })
   .openapi("NewCommit");

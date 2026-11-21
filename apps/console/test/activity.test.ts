@@ -43,12 +43,10 @@ test("members see commits, merges, forks and new disks", () => {
     hash,
     parent: null,
     message: "",
-    session: null,
     merged,
     actor: "user:a",
     changes: [],
     at,
-    agent: null,
   });
   const commits = [commit("c1", "try", 2), commit("c2", "main", 3, "c1")];
   const branches = [

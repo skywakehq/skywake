@@ -10,7 +10,6 @@ import { admitsDownload, admitsFiles, downloaded, filesChanged } from "../billin
 import { whileWritable } from "../branches/protection.ts";
 import * as commits from "../history/commits.ts";
 import { grepIndexed } from "../links/grep.ts";
-import { assertLiveSession } from "../sessions/rules.ts";
 import * as parts from "./parts.ts";
 
 export const PIECE = 4 * 1024 * 1024;
@@ -113,10 +112,9 @@ export const filesFeature: Feature = {
 
     api.openapi(routes.commitFiles, async (c) => {
       const { namespace, branch } = c.req.valid("param");
-      const { message, session, changes } = c.req.valid("json");
+      const { message, changes } = c.req.valid("json");
       const { caller, ns } = await changeable(c, namespace, "write");
       const { db } = c.var.services;
-      await assertLiveSession(db, ns, session);
       if (changes.some(addsData)) await admitsFiles(c, ns.org);
       const uploaded = await parts.chunks(
         db,
@@ -143,7 +141,7 @@ export const filesFeature: Feature = {
       });
       const before = await ns.engine.head(branch);
       const head = await whileWritable(db, ns, branch, () =>
-        ns.engine.commitFiles(branch, message, edits, session),
+        ns.engine.commitFiles(branch, message, edits),
       );
       if (head === before) return c.json({ head, changed: false }, 200);
       await filesChanged(c, ns.folder);

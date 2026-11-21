@@ -4,8 +4,8 @@ import { type Caller, caller } from "@/server/caller";
 
 // File contents, folder listings and merge checks come from skywake-api when
 // the browser asks; they are too big to sync. File uploads and commits go
-// straight through too, and so does everything about search indexes, which
-// Zero does not sync. Other changes go through Zero.
+// straight through too, and so do a disk's search settings, which Zero does
+// not sync. Other changes go through Zero.
 
 const apiPath = (path: string[], search = "") =>
   `/${path.map(encodeURIComponent).join("/")}${search}`;
@@ -98,7 +98,7 @@ export async function POST(request: Request, { params }: RouteContext<"/api/skyw
     );
 
   const body = await request.json().catch(() => null);
-  const allowed = path[0] === "indexes" || path.at(-1) === "commits" || body?.dry_run;
+  const allowed = path.at(-1) === "commits" || body?.dry_run;
   if (!allowed) return Response.json({ error: "not allowed here" }, { status: 400 });
   const sent = body === null ? undefined : JSON.stringify(body);
   // A copy to another organization needs the person's role there too.
@@ -108,27 +108,16 @@ export async function POST(request: Request, { params }: RouteContext<"/api/skyw
   return pass(await skywake(who, apiPath(path), { method: "POST", body: sent }, orgs));
 }
 
-/** A namespace's linked index: `namespaces/<ns>/index`, nothing else of a namespace. */
-const isIndexLink = (path: string[]) =>
+/** A disk's search settings: `namespaces/<ns>/index`, nothing else of a namespace. */
+const isSearchSettings = (path: string[]) =>
   path.length === 3 && path[0] === "namespaces" && path[2] === "index";
 
-/** Links an index to a namespace, or nothing else. */
+/** Changes a disk's search settings, or nothing else. */
 export async function PUT(request: Request, { params }: RouteContext<"/api/skywake/[...path]">) {
   const who = await caller(request.headers);
   if (!who) return new Response("sign in first", { status: 401 });
   const { path } = await params;
-  if (!isIndexLink(path)) return Response.json({ error: "not allowed here" }, { status: 400 });
+  if (!isSearchSettings(path)) return Response.json({ error: "not allowed here" }, { status: 400 });
   const body = JSON.stringify(await request.json().catch(() => null));
   return pass(await skywake(who, apiPath(path), { method: "PUT", body }));
-}
-
-/** Deletes an index, one of its branches, a namespace's index link, or nothing else. */
-export async function DELETE(request: Request, { params }: RouteContext<"/api/skywake/[...path]">) {
-  const who = await caller(request.headers);
-  if (!who) return new Response("sign in first", { status: 401 });
-  const { path } = await params;
-  if (path[0] !== "indexes" && !isIndexLink(path)) {
-    return Response.json({ error: "not allowed here" }, { status: 400 });
-  }
-  return pass(await skywake(who, apiPath(path), { method: "DELETE" }));
 }

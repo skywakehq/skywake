@@ -132,26 +132,6 @@ test("only an admin key for every namespace sees keys and the audit log", { skip
   assert.equal((await s.call("GET", "/audit", key)).status, 200);
 });
 
-test("another organization cannot end a session or drop its claims", { skip }, async () => {
-  const s = await server();
-  const owner = await s.ready();
-  const other = await s.ready();
-  const sessions = "/namespaces/prod%2Fapp/sessions";
-  const started = await s.call("POST", sessions, owner.key, { label: "agent" });
-  const id = started.body.id;
-  const claim = { path: "src", session: id };
-  const claims = "/namespaces/prod%2Fapp/branches/main/claims";
-  assert.equal((await s.call("POST", claims, owner.key, claim)).status, 200);
-
-  // The other organization names the session in its own namespace of the same name.
-  assert.equal((await s.call("DELETE", `${sessions}/${id}`, other.key)).status, 404);
-  const held = await s.call("GET", claims, owner.key);
-  assert.deepEqual(
-    held.body.map((row: any) => row.path),
-    ["src"],
-  );
-});
-
 test("only an admin merges into a protected branch", { skip }, async () => {
   const s = await server();
   const { key } = await s.ready();
@@ -190,21 +170,6 @@ test("an expired key is refused", { skip }, async () => {
     sql`UPDATE api.keys SET expires = now() - interval '1 minute' WHERE id = ${made.body.id}`,
   );
   assert.equal((await s.call("GET", "/namespaces", made.body.key)).status, 401);
-});
-
-test("only the organization sees who started a session", { skip }, async () => {
-  const s = await server();
-  const owner = await s.org();
-  const other = await s.org();
-  await s.call("POST", "/namespaces", owner.key, { name: "docs", visibility: "public" });
-  await s.call("POST", "/namespaces/docs/sessions", owner.key, { label: "agent" });
-  const actors = async (key?: string) =>
-    (await s.call("GET", `/namespaces/${owner.id}:docs/sessions`, key)).body.map(
-      (session: { actor: string | null }) => session.actor,
-    );
-  assert.match((await actors(owner.key))[0], /^key:/);
-  assert.deepEqual(await actors(other.key), [null]);
-  assert.deepEqual(await actors(), [null]);
 });
 
 /** Makes the engine's `method` wait at a gate, and tells when `count` calls reach it. */
@@ -320,21 +285,6 @@ test("a console token without an expiry is refused", { skip }, async () => {
   assert.equal((await s.call("GET", "/namespaces", await token(id, "owner"))).status, 200);
   const forever = await token(id, "owner", "test", null);
   assert.equal((await s.call("GET", "/namespaces", forever)).status, 401);
-});
-
-test("sessions starting and ending are in the audit log", { skip }, async () => {
-  const s = await server();
-  const { key } = await s.ready();
-  const started = await s.call("POST", "/namespaces/prod%2Fapp/sessions", key, { label: "a" });
-  await s.call("DELETE", `/namespaces/prod%2Fapp/sessions/${started.body.id}`, key);
-  const events = (await s.call("GET", "/audit?limit=2", key)).body.events;
-  assert.deepEqual(
-    events.map((e: any) => [e.action, e.details?.session ?? e.resource.id]),
-    [
-      ["endSession", started.body.id],
-      ["startSession", started.body.id],
-    ],
-  );
 });
 
 test("a person's keys, and the keys those made, go when the person leaves", { skip }, async () => {
