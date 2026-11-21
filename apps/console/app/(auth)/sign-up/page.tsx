@@ -11,6 +11,7 @@ import {
   check,
   next,
   useKeepNext,
+  useSignedInSkip,
 } from "@/features/auth/auth-form";
 import { authClient } from "@/features/auth/auth-client";
 import { CheckEmail } from "@/features/auth/check-email";
@@ -29,6 +30,8 @@ function SignUp() {
   // An invitation's link fills in the email it was sent to.
   const invited = useSearchParams().get("email") ?? "";
   const [sent, setSent] = useState("");
+  // An invitation may be for another account, so it stays.
+  useSignedInSkip(Boolean(invited));
 
   async function signUp(form: FormData) {
     const email = String(form.get("email"));

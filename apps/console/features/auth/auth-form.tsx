@@ -2,8 +2,9 @@
 
 import { useSearchParams } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
-import { type ComponentProps, type FormEvent, type ReactNode, useState } from "react";
+import { type ComponentProps, type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { cx } from "@/components/kit";
+import { authClient } from "@/features/auth/auth-client";
 import { withBase } from "@/lib/zone";
 
 /** A form that shows the error its action throws, and waits while it runs. */
@@ -139,4 +140,12 @@ export function useKeepNext() {
 
 export function next() {
   return withBase(new URLSearchParams(location.search).get("next") ?? "/");
+}
+
+/** Sends someone who is already signed in on to where they were going. */
+export function useSignedInSkip(skip = false) {
+  const { data } = authClient.useSession();
+  useEffect(() => {
+    if (data && !skip) location.replace(next());
+  }, [data, skip]);
 }
