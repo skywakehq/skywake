@@ -1,0 +1,62 @@
+# The hosted service on one machine: compose.yaml plus HTTPS through Caddy,
+# Postgres on Neon, billing, email, GitHub sign-in and a disk cache.
+#
+#   docker compose -f compose.yaml -f compose.hosted.yaml up -d
+#
+# Only Caddy is reachable from outside, on 80 and 443.
+
+services:
+  api:
+    ports: !reset []
+    environment:
+      SKYWAKE_API_TRUST_PROXY: "1"
+      SKYWAKE_API_CONSOLE_URL: ${CONSOLE_URL}
+      SKYWAKE_API_BILLING: stripe
+      SKYWAKE_API_BILLING_LIVE: ${STRIPE_LIVE:-false}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?set STRIPE_SECRET_KEY in .env}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?set STRIPE_WEBHOOK_SECRET in .env}
+      SKYWAKE_INDEX_CACHE_DIR: /cache
+      SKYWAKE_INDEX_CACHE_GB: ${CACHE_GB:-40}
+      SKYWAKE_FILES_MEMORY_MB: ${FILES_MEMORY_MB:-2048}
+    volumes: [cache:/cache]
+
+  console:
+    ports: !reset []
+    environment:
+      TRUSTED_PROXIES: 172.30.0.0/24
+      MAX_USERS: ${MAX_USERS:-100}
+      RESEND_API_KEY: ${RESEND_API_KEY:?set RESEND_API_KEY in .env}
+      EMAIL_FROM: ${EMAIL_FROM:?set EMAIL_FROM in .env}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+  zero:
+    ports: !reset []
+    environment:
+      # Neon has no superuser, so Zero can't watch for schema changes. After a
+      # release changes the tables, it rebuilds its copy instead of stopping.
+      ZERO_AUTO_RESET: "true"
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on: [console, api, zero]
+    environment:
+      CONSOLE_HOST: ${CONSOLE_HOST:?set CONSOLE_HOST in .env}
+      API_HOST: ${API_HOST:?set API_HOST in .env}
+      ZERO_HOST: ${ZERO_HOST:?set ZERO_HOST in .env}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+
+networks:
+  default:
+    ipam:
+      config: [{ subnet: 172.30.0.0/24 }]
+
+volumes:
+  cache:
+  caddy:

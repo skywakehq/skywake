@@ -1,0 +1,17 @@
+{$CONSOLE_HOST} {
+	# The sync server shares the console's host, so the browser sends it the sign-in cookie.
+	handle_path /zero/* {
+		reverse_proxy zero:4848
+	}
+	handle {
+		reverse_proxy console:3100
+	}
+}
+
+{$API_HOST} {
+	reverse_proxy api:8080
+}
+
+{$ZERO_HOST} {
+	reverse_proxy zero:4848
+}
