@@ -98,7 +98,8 @@ export async function POST(request: Request, { params }: RouteContext<"/api/skyw
     );
 
   const body = await request.json().catch(() => null);
-  const allowed = path.at(-1) === "commits" || body?.dry_run;
+  // Commits, and a merge's dry run (which saves nothing).
+  const allowed = path.at(-1) === "commits" || (path.at(-1) === "merges" && body?.dry_run === true);
   if (!allowed) return Response.json({ error: "not allowed here" }, { status: 400 });
   const sent = body === null ? undefined : JSON.stringify(body);
   // A copy to another organization needs the person's role there too.

@@ -7,7 +7,7 @@ import { jwt, organization, twoFactor } from "better-auth/plugins";
 import { invitation, resetPassword, send, verifyEmail } from "@skywake/email";
 import { learnCaller, recordAuth } from "./audit";
 import { authPool } from "./db";
-import { leaverOf, revokeKeysOf } from "./member-keys";
+import { demoted, leaverOf, revokeKeysOf } from "./member-keys";
 import { renameFirst, reserveOrg } from "./org-names";
 import { EMAIL, hosted, MAX_USERS, SOCIAL } from "./hosted";
 import { domainOf, openSecrets, PRIVATE_IDP_ORIGINS, sealSecrets, ssoOrgsFor } from "./sso-policy";
@@ -129,6 +129,8 @@ export const auth = betterAuth({
   trustedOrigins: PRIVATE_IDP_ORIGINS,
   // Connections are managed only through /api/sso, which checks more.
   disabledPaths: [
+    // API tokens come only from the server's own signJWT, never from a session.
+    "/token",
     "/sso/register",
     "/sso/update-provider",
     "/sso/delete-provider",
@@ -210,10 +212,20 @@ export const auth = betterAuth({
         // A person's API keys go with them.
         afterRemoveMember: ({ member, organization }) =>
           revokeKeysOf(organization.id, member.userId),
+        // ...and so do the keys made with power they no longer have.
+        afterUpdateMemberRole: async ({ member, previousRole, organization }) => {
+          if (demoted(previousRole, member.role)) {
+            await revokeKeysOf(organization.id, member.userId, fetch, "Their role changed");
+          }
+        },
       },
     }),
     // The API checks these tokens against our public keys.
-    jwt({ jwt: { issuer: ISSUER, audience: ISSUER, expirationTime: "5m" } }),
+    // Only the server signs them (signJWT), for the API: no session hands one out.
+    jwt({
+      jwt: { issuer: ISSUER, audience: ISSUER, expirationTime: "5m" },
+      disableSettingJwtHeader: true,
+    }),
     passkey({ rpName: "Skywake" }),
     twoFactor(),
     ssoPlugin,
@@ -285,7 +297,10 @@ async function refuseIfFull(email: string) {
   if (!MAX_USERS) return;
   const { rows } = await authPool.query<{ full: boolean }>(
     `SELECT (SELECT count(*) FROM "user") >= $1
-        AND NOT EXISTS (SELECT 1 FROM invitation WHERE lower(email) = lower($2) AND status = 'pending')
+        AND NOT EXISTS (
+          SELECT 1 FROM invitation
+          WHERE lower(email) = lower($2) AND status = 'pending' AND "expiresAt" > now()
+        )
         AS full`,
     [MAX_USERS, email],
   );

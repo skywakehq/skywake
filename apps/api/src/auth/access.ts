@@ -62,7 +62,7 @@ export class Access {
 
   /** An index of the caller's own organization. Indexes are never public. */
   async index(caller: Caller, name: string, role: Role): Promise<SearchIndex> {
-    allow(caller, role, name);
+    allow(caller, role, name, "index");
     const row = await this.#row(caller.org, name, role);
     if (!row) throw notFound(`index \`${name}\``);
     await this.#stores.ready(row.region);

@@ -16,6 +16,8 @@ const siteUrl = process.env.SITE_URL ?? "https://skywake.dev";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@skywake/ui"],
+  // The share images read their fonts from @skywake/ui at run time.
+  outputFileTracingIncludes: { "/**": ["../../packages/ui/src/og/fonts/*"] },
   allowedDevOrigins: ["192.168.*.*", "10.*.*.*"],
   cacheComponents: true,
   // app/global-not-found.tsx: the 404 for URLs outside any language.
@@ -44,6 +46,8 @@ const nextConfig: NextConfig = {
         permanent: true,
       },
       { source: "/:page(filesystem|search|benchmarks)", destination: "/", permanent: true },
+      // The site's llms.txt covers the pages; the docs have the full text.
+      { source: "/llms-full.txt", destination: `${docsLink}/llms-full.txt`, permanent: false },
     ];
   },
   async rewrites() {

@@ -15,7 +15,8 @@
     "./lib/shape-context": "./src/lib/shape-context.tsx",
     "./lib/size-context": "./src/lib/size-context.tsx",
     "./lib/surface-context": "./src/lib/surface-context.tsx",
-    "./lib/*": "./src/lib/*.ts"
+    "./lib/*": "./src/lib/*.ts",
+    "./og": "./src/og/card.tsx"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@skywake/config": "workspace:*",
+    "@types/node": "^24.19.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9",

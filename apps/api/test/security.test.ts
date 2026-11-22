@@ -227,6 +227,16 @@ test("key scopes match by environment, then by name or prefix", () => {
   assert.ok(!mayUse({ ...caller("prod/*"), only: ["docs-*"] }, "prod/app"));
 });
 
+test("a disk's key reaches the disk's index, but no disk named like it", () => {
+  const disk = { org: "o", role: "read" as const, actor: "key:k", expires: null };
+  const key = { ...disk, ...scopeOfPattern("app") };
+  assert.ok(mayUse(key, "app.files", "index"));
+  assert.ok(!mayUse(key, "app.files"));
+  assert.ok(!mayUse(key, "app.files", "namespace"));
+  assert.ok(!mayUse(key, "app2.files", "index"));
+  assert.ok(!mayUse(key, "app.files.files", "index"));
+});
+
 test("key scopes are whole parts of names", { skip }, async () => {
   const s = await server();
   const { key } = await s.org();

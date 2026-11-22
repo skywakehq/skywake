@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { getMessages } from "@/content/messages";
-import { imageSlug, type PagePath } from "@/content/pages";
+import type { PagePath } from "@/content/pages";
 import { site } from "@/content/site";
 import { defaultLocale, isLocale, localeOg, locales, localizePath, type Locale } from "@/lib/i18n";
 
@@ -15,31 +15,29 @@ export function languages(path: string) {
   };
 }
 
-// `path` has no locale. `image` is a slug under /og. `absolute` skips the "· Skywake" title suffix.
+// `path` has no locale. `absolute` skips the "· Skywake" title suffix. The share image
+// comes from the page's own opengraph-image and twitter-image files.
 export function buildMetadata({
   locale,
   path,
   title,
   description,
-  image: slug,
   absolute = false,
 }: {
   locale: Locale;
   path: string;
   title: string;
   description: string;
-  image: string;
   absolute?: boolean;
 }): Metadata {
   const url = localizePath(locale, path);
-  const image = { url: `/og/${slug}`, width: 1200, height: 630, alt: title };
   return {
     title: absolute ? { absolute: title } : title,
     description,
     alternates: {
       canonical: url,
       languages: languages(path),
-      types: { "text/plain": "/llms.txt" },
+      types: { "text/markdown": "/llms.txt" },
     },
     openGraph: {
       type: "website",
@@ -49,9 +47,8 @@ export function buildMetadata({
       url,
       title,
       description,
-      images: [image],
     },
-    twitter: { card: "summary_large_image", title, description, images: [image] },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -70,7 +67,6 @@ export function pageMetadata(path: PagePath) {
       path,
       title,
       description,
-      image: imageSlug(path),
       absolute: path === "/",
     });
   };

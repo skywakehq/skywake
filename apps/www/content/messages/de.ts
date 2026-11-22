@@ -39,13 +39,13 @@ export const de: HomeMessages = {
     theme: "Zwischen hell und dunkel wechseln",
   },
   footer: {
-    blurb:
-      "Eine gemeinsame Festplatte für KI-Agenten, mit eingebauter Suche. Open Source.",
+    blurb: "Eine gemeinsame Festplatte für KI-Agenten, mit eingebauter Suche. Open Source.",
     product: "Produkt",
     project: "Projekt",
     legal: "Rechtliches",
     useCases: "Anwendungsfälle",
     openSource: "Open Source",
+    agentFilesystem: "Agent-Dateisystem",
     privacy: "Datenschutz",
     terms: "Nutzungsbedingungen",
     star: "Auf GitHub mit Stern markieren",
@@ -208,8 +208,7 @@ export const de: HomeMessages = {
     selfHost: "Selbst hosten mit der Dokumentation",
     star: "Auf GitHub mit Stern markieren",
     openTitle: "Jetzt mit Skywake bauen.",
-    openLine:
-      "Eine gemeinsame Festplatte für alle Ihre Agenten, mit eingebauter Suche.",
+    openLine: "Eine gemeinsame Festplatte für alle Ihre Agenten, mit eingebauter Suche.",
     openCta: "Loslegen",
     form: {
       email: "E-Mail",

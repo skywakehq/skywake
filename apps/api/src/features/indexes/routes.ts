@@ -8,6 +8,7 @@ import { pageOf } from "../../http/page.ts";
 import { addressOf, indexFor, signedIn } from "../../http/request.ts";
 import { requires } from "../billing/require.ts";
 import * as orgs from "../orgs/queries.ts";
+import * as sso from "../sso/queries.ts";
 import { deleteIndex, MAIN, makeIndex } from "./lifecycle.ts";
 import * as indexes from "./queries.ts";
 import { addAttributes, dropAttributes, engineSchema } from "./schemas.ts";
@@ -25,6 +26,14 @@ async function memberOf(c: Ctx, caller: Caller, org: string): Promise<Caller> {
     throw notFound(`organization \`${org}\``);
   }
   await c.var.services.allowlists.check(org, addressOf(c, caller));
+  // The person signed in for their own organization; the other may need its single sign-on.
+  const { db } = c.var.services;
+  const mustUseSso = caller.email
+    ? await sso.required(db, org, caller.email)
+    : await sso.anyRequired(db, org);
+  if (mustUseSso && caller.sso !== org) {
+    throw forbidden("this organization needs you to sign in with single sign-on");
+  }
   return { ...caller, org, role, memberships: undefined };
 }
 
@@ -33,7 +42,7 @@ export const indexesFeature: Feature = {
     api.openapi(routes.listIndexes, async (c) => {
       const caller = await signedIn(c);
       const all = await indexes.list(c.var.services.db, caller.org);
-      const reachable = all.filter((row) => mayUse(caller, row.name));
+      const reachable = all.filter((row) => mayUse(caller, row.name, "index"));
       return c.json(
         pageOf(reachable, (row) => row.name, c.req.valid("query")).map(indexes.shown),
         200,

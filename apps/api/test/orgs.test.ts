@@ -91,6 +91,18 @@ test("an index is copied to another organization of the same person", { skip }, 
   const reader = await token(source.id, "read", "test", "1m", { orgs: { [target.id]: "owner" } });
   assert.equal((await copy(reader)).status, 403);
 
+  // An organization that needs single sign-on takes a copy only from someone who used it there.
+  await s.call("PUT", `/orgs/${target.id}/sso`, ADMIN, { required_domains: ["example.com"] });
+  const ada = (sso?: string) =>
+    token(source.id, "owner", "test", "1m", {
+      orgs: { [target.id]: "owner" },
+      email: "ada@example.com",
+      ...(sso ? { sso } : {}),
+    });
+  assert.equal((await copy(await ada())).status, 403);
+  assert.equal((await copy(await ada(source.id))).status, 403);
+  await s.call("PUT", `/orgs/${target.id}/sso`, ADMIN, { required_domains: [] });
+
   const made = await copy(await both("owner"));
   assert.equal(made.status, 201, JSON.stringify(made.body));
   const got = await s.call("GET", "/indexes/docs/branches/main/documents/1", target.key);

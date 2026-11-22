@@ -31,8 +31,10 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
     description: home.description,
     applicationName: site.name,
     keywords: [
-      "S3 filesystem",
+      "agent filesystem",
       "filesystem for AI agents",
+      "shared disk for agents",
+      "S3 filesystem",
       "agent sandbox storage",
       "copy-on-write filesystem",
       "object storage filesystem",

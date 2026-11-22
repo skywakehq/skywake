@@ -50,14 +50,26 @@ impl<'a> Download<'a> {
         let (folders, files): (Vec<_>, Vec<_>) = all
             .into_iter()
             .partition(|entry| entry.kind == Kind::Folder);
+        // Links come last, so no file is written through a link made by this download.
+        let (links, files): (Vec<_>, Vec<_>) = files
+            .into_iter()
+            .partition(|entry| entry.kind == Kind::Symlink);
         for folder in &folders {
-            tokio::fs::create_dir_all(local(&root, &folder.path)?).await?;
+            let folder = local(&root, &folder.path)?;
+            no_link_on_the_way(&root, &folder, true)?;
+            tokio::fs::create_dir_all(folder).await?;
         }
         stream::iter(files)
             .map(|entry| fetch(self.disk, &root, entry, &at))
             .buffer_unordered(CONCURRENCY)
             .try_collect::<()>()
             .await?;
+        for entry in links {
+            let file = local(&root, &entry.path)?;
+            no_link_on_the_way(&root, &file, false)?;
+            remove_if_there(&file).await?;
+            symlink(entry.target.as_deref().unwrap_or(""), &file)?;
+        }
         Ok(Some(at))
     }
 }
@@ -93,20 +105,64 @@ fn local(root: &Path, name: &str) -> io::Result<PathBuf> {
     Ok(file)
 }
 
+/// Refuses a path under `root` that goes through a symlink, such as one left by
+/// an earlier download into the same folder: a write there could land anywhere.
+/// `itself` checks the last part too, for a folder about to be made.
+fn no_link_on_the_way(root: &Path, path: &Path, itself: bool) -> io::Result<()> {
+    let Ok(below) = path.strip_prefix(root) else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "outside the folder",
+        ));
+    };
+    let parts: Vec<_> = below.components().collect();
+    let checked = if itself {
+        parts.len()
+    } else {
+        parts.len().saturating_sub(1)
+    };
+    let mut at = root.to_path_buf();
+    for part in &parts[..checked] {
+        at.push(part);
+        match std::fs::symlink_metadata(&at) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                let message = format!(
+                    "{} is a symlink; download into an empty folder",
+                    at.display()
+                );
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, message));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+async fn remove_if_there(file: &Path) -> io::Result<()> {
+    match tokio::fs::remove_file(file).await {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
 async fn fetch(disk: &Disk, root: &Path, entry: Entry, at: &str) -> Result<()> {
     let file = local(root, &entry.path)?;
-    if entry.kind == Kind::Symlink {
-        let _ = tokio::fs::remove_file(&file).await;
-        symlink(entry.target.as_deref().unwrap_or(""), &file)?;
-        return Ok(());
-    }
+    no_link_on_the_way(root, &file, false)?;
     let mut body = disk
         .read(&entry.path)
         .at(at)
         .response()
         .await?
         .bytes_stream();
-    let mut out = tokio::fs::File::create(&file).await?;
+    // A new file, never one that is there: a symlink in its place would be followed.
+    remove_if_there(&file).await?;
+    let mut out = tokio::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&file)
+        .await?;
     while let Some(chunk) = body.try_next().await? {
         out.write_all(&chunk).await?;
     }

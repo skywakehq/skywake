@@ -39,13 +39,13 @@ export const fr: HomeMessages = {
     theme: "Basculer entre thème clair et sombre",
   },
   footer: {
-    blurb:
-      "Un disque partagé pour agents IA, recherche incluse. Open source.",
+    blurb: "Un disque partagé pour agents IA, recherche incluse. Open source.",
     product: "Produit",
     project: "Projet",
     legal: "Mentions légales",
     useCases: "Cas d'usage",
     openSource: "Open source",
+    agentFilesystem: "Système de fichiers pour agents",
     privacy: "Confidentialité",
     terms: "Conditions",
     star: "Étoiler sur GitHub",

@@ -7,7 +7,12 @@ type Send = typeof fetch;
  * keys made, through the API's admin route. Called when they leave or are
  * removed, so no key outlives their place in the organization.
  */
-export async function revokeKeysOf(org: string, user: string, send: Send = fetch) {
+export async function revokeKeysOf(
+  org: string,
+  user: string,
+  send: Send = fetch,
+  why = "They left the organization",
+) {
   const url = `${process.env.SKYWAKE_API_URL}/orgs/${encodeURIComponent(org)}/members/${encodeURIComponent(user)}/keys`;
   const response = await send(url, {
     method: "DELETE",
@@ -16,8 +21,7 @@ export async function revokeKeysOf(org: string, user: string, send: Send = fetch
   if (!response?.ok) {
     // They are out of the organization already; say their keys still work.
     throw new APIError("INTERNAL_SERVER_ERROR", {
-      message:
-        "They left the organization, but their API keys could not be revoked. Delete them under API keys.",
+      message: `${why}, but their API keys could not be revoked. Delete them under API keys.`,
     });
   }
 }
@@ -35,3 +39,14 @@ export function leaverOf(ctx: AfterHook) {
   const user = ctx.context.session?.user.id;
   return typeof org === "string" && user ? { org, user } : null;
 }
+
+// What each role may do through the API: owners and admins administer, members write.
+const RANK: Record<string, number> = { owner: 2, admin: 2, member: 1 };
+const rankOf = (role: string) =>
+  Math.max(0, ...role.split(",").map((one) => RANK[one.trim()] ?? 0));
+
+/**
+ * Whether a role change takes away power. The keys a person made carry the role
+ * they had then, so they go when the person is given less.
+ */
+export const demoted = (previous: string, next: string) => rankOf(next) < rankOf(previous);

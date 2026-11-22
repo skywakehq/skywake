@@ -24,6 +24,7 @@ export const en: HomeMessages = {
     legal: "Legal",
     useCases: "Use cases",
     openSource: "Open source",
+    agentFilesystem: "Agent filesystem",
     privacy: "Privacy",
     terms: "Terms",
     star: "Star on GitHub",

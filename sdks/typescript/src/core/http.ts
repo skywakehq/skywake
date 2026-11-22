@@ -9,9 +9,14 @@ export interface Request {
   bytes?: Uint8Array;
 }
 
-export const segment = (name: string) => encodeURIComponent(name);
-export const filePath = (path: string) =>
-  path.replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/");
+// A URL drops `.` and `..` parts, so such a part would climb out of the disk's own path.
+function part(name: string) {
+  if (name === "." || name === "..") throw new TypeError(`\`${name}\` can't be part of a path`);
+  return encodeURIComponent(name);
+}
+
+export const segment = (name: string) => part(name);
+export const filePath = (path: string) => path.replace(/^\/+/, "").split("/").map(part).join("/");
 
 export class Http {
   readonly #base: string;

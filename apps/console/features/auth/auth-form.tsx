@@ -5,7 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { type ComponentProps, type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { cx } from "@/components/kit";
 import { authClient } from "@/features/auth/auth-client";
-import { withBase } from "@/lib/zone";
+import { safeNext, withBase } from "@/lib/zone";
 
 /** A form that shows the error its action throws, and waits while it runs. */
 export function AuthForm({
@@ -91,7 +91,8 @@ const BUTTON =
   "inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[14px] font-medium transition disabled:opacity-50";
 const VARIANTS = {
   primary: "bg-foreground text-background hover:opacity-85",
-  outline: "bg-foreground/[0.03] text-foreground ring-1 ring-foreground/[0.1] hover:bg-foreground/[0.07]",
+  outline:
+    "bg-foreground/[0.03] text-foreground ring-1 ring-foreground/[0.1] hover:bg-foreground/[0.07]",
   quiet:
     "text-muted-foreground ring-1 ring-foreground/[0.1] hover:bg-foreground/[0.05] hover:text-foreground",
 };
@@ -141,8 +142,9 @@ export function useKeepNext() {
   return (path: string) => (after ? `${path}?next=${encodeURIComponent(after)}` : path);
 }
 
+/** Where to go after signing in: a path on this console, never another site or a script. */
 export function next() {
-  return withBase(new URLSearchParams(location.search).get("next") ?? "/");
+  return withBase(safeNext(new URLSearchParams(location.search).get("next")));
 }
 
 /** Sends someone who is already signed in on to where they were going. */

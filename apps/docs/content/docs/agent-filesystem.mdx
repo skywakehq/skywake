@@ -1,0 +1,68 @@
+---
+title: What is an agent filesystem?
+icon: BookOpen
+description: Why AI agents need a filesystem of their own, what a shared disk for many agents has to do, and how Skywake does it.
+---
+
+An agent filesystem is a place where AI agents keep their files: the code they edit, the notes they take, the datasets they build, the reports they write. It looks like an ordinary folder to the agent, but it is built for many agents working at once, on many machines, with a way to see and undo everything they changed.
+
+We built Skywake because we kept running into the same wall. Agents are good at files. They were trained on shells, repositories and documents, so `ls`, `cat`, `grep` and `sed` are the tools they use best. The trouble starts when you run more than one of them, or run them somewhere other than your laptop.
+
+## Why a plain disk isn't enough
+
+A local folder works for one agent on one machine. It stops working when:
+
+- **The agent moves.** Sandboxes and containers come and go. When one dies, its disk goes with it, and the next run starts from nothing.
+- **Several agents share one folder.** Ten agents writing to the same directory overwrite each other, and nobody can tell which agent wrote what.
+- **You need to check the work.** An agent changed 300 files. Which ones? Can you keep half and throw away the rest?
+- **Copies get expensive.** Giving each agent its own copy of a 20,000-file workspace means copying it, which takes minutes and stores the same bytes again for every agent.
+
+Putting the files in S3 directly fixes durability but not the rest. Object storage has no folders that tools can use, no cheap copies, and no history you can diff. Network filesystems like NFS or EFS are shared, but everyone writes into the same files, with no way to isolate one agent's changes from another's.
+
+## What an agent filesystem has to do
+
+From running agents on Skywake, this is the list we ended up with:
+
+1. **Shared and durable.** The files outlive any one machine, and any machine can pick them up.
+2. **A private copy per agent, for free.** Each agent works on its own branch, so agents never wait for each other or overwrite each other.
+3. **Diff and merge.** You see exactly what an agent changed, and merge the parts you want back into the shared copy.
+4. **History and undo.** Every change is a commit. A bad run is one restore away.
+5. **Plain tools.** The agent uses a normal folder, a bash shell, or MCP tools. No new file API to teach it.
+6. **Fast enough to forget about.** Builds, installs and test runs on it feel like a local disk.
+7. **Search.** Agents find things by meaning and by keyword, not only by path.
+
+## How Skywake does it
+
+Skywake keeps **disks** in your own object storage: AWS S3, Cloudflare R2, or anything else with conditional writes. A disk has branches, like a git repository, and every disk starts with `main`.
+
+- **Forks copy a pointer, never the data.** Forking a branch of 20,000 files takes about 10 ms, whatever its size, and the files both branches share are stored once. See [Branches and forks](./filesystem/branches.mdx).
+- **Diff and merge work like git.** [`diff`](./filesystem/diff-and-merge.mdx) shows what a branch changed, and `merge` brings it back, with conflicts reported per file.
+- **Mount a branch as a folder.** On Linux, [`skywake mount`](./filesystem/mount.mdx) serves a branch as a live local folder, so `npm ci` or `cargo build` run on it as they would on your laptop. A synced write is never lost, even if the machine is killed.
+- **Agents get tools.** The [MCP server](./agents/mcp.mdx) gives any MCP agent file tools, a bash shell and search on a disk, and by default forks a branch of its own for each session. There is also a [bash tool](./agents/bash.mdx) for the AI SDK, a [CLI](./agents/cli.mdx), an HTTP API, and SDKs in seven languages.
+- **Search lives next to the files.** [Indexes](./indexes/index.mdx) give you vector, full-text and hybrid search on the same bucket, with branches and time travel too.
+
+It is open source under Apache-2.0, and you can [run it yourself](./self-hosting/what-to-run.mdx) for free.
+
+## A shared disk for many agents
+
+The pattern we use most looks like this:
+
+1. Keep the shared truth on `main`: the repository, the knowledge base, the dataset.
+2. Fork `main` for each agent run. The fork is instant, so you can start hundreds.
+3. Let each agent work on its own branch, through a mount, bash or MCP.
+4. Diff each branch, keep what's good, merge it back. Destroy the rest.
+
+Two writers on the same branch don't silently clobber each other either. Moving a branch is a conditional write, so the second writer gets a `Conflict` and can retry. In practice, giving each agent its own fork means this never comes up.
+
+## When you don't need one
+
+If you run one agent on one machine and it writes a handful of files you never look at again, a local folder is fine. An agent filesystem starts to pay off when agents run in sandboxes, run in parallel, share what they know, or do work you need to review before it lands.
+
+## Next
+
+<Cards>
+  <Card href="./getting-started/index.mdx" />
+  <Card href="./getting-started/first-branch.mdx" />
+  <Card href="./agents/mcp.mdx" />
+  <Card href="./filesystem/mount.mdx" />
+</Cards>

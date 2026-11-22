@@ -114,3 +114,21 @@ async fn paths_with_unsafe_parts_are_refused_by_the_file_api() {
         assert!(matches!(result, Err(Error::InvalidPath(_))), "{path:?}");
     }
 }
+
+#[tokio::test]
+async fn checkout_never_makes_a_setuid_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let base = tempdir().unwrap();
+    let repo = Repo::new(Arc::new(InMemory::new()));
+    let setuid = Entry::File {
+        size: 2,
+        modified_ns: 0,
+        mode: 0o6755,
+        data: Data::Inline(b"hi".to_vec()),
+    };
+    branch_with(&repo, Tree::from([("tool".to_string(), setuid)])).await;
+    let out = base.path().join("out");
+    repo.checkout("main", &out).await.unwrap();
+    let mode = fs::metadata(out.join("tool")).unwrap().permissions().mode();
+    assert_eq!(mode & 0o7777, 0o755);
+}

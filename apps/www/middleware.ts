@@ -13,11 +13,16 @@ function detectLocale(request: NextRequest) {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Agents that ask the home page for Markdown get llms.txt, the site in Markdown.
+  const home = pathname === "/" || isLocale(pathname.slice(1));
+  if (home && (request.headers.get("accept") ?? "").includes("text/markdown")) {
+    return NextResponse.rewrite(new URL("/llms.txt", request.url));
+  }
+
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.includes(".") ||
-    pathname.startsWith("/og") ||
     pathname.startsWith("/docs") ||
     pathname.startsWith("/dashboard")
   ) {
@@ -42,6 +47,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon|robots.txt|sitemap.xml|llms.txt).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon|robots.txt|sitemap.xml|llms.txt|llms-full.txt|.well-known).*)",
   ],
 };

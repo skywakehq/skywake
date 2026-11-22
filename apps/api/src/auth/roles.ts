@@ -18,6 +18,8 @@ export interface Caller {
   memberships?: Record<string, Role>;
   /** For a console token: the person's email, when the console knows it. */
   email?: string;
+  /** For a console token: the organization whose single sign-on the person used, if any. */
+  sso?: string;
 }
 
 const RANK: Record<Role, number> = { read: 0, write: 1, admin: 2 };
@@ -35,11 +37,16 @@ export const everyEnvironment = (caller: Caller) => caller.environment === null;
 export const mayUseEnvironment = (caller: Caller, environment: string) =>
   caller.environment === null || caller.environment === environment;
 
-export function mayUse(caller: Caller, name: string) {
+/** What a name names: the rule that a disk's key reaches `<disk>.files` holds for indexes only. */
+export type Kind = "namespace" | "index";
+
+export function mayUse(caller: Caller, name: string, kind: Kind = "namespace") {
   if (!mayUseEnvironment(caller, environmentOf(name))) return false;
   const local = nameIn(name);
   // A disk's search index, `<disk>.files`, goes with the disk: a key for the disk searches it.
-  const disk = local.endsWith(DISK_INDEX) ? local.slice(0, -DISK_INDEX.length) : undefined;
+  // Only the index: a namespace named `<disk>.files` is another disk, out of that key's reach.
+  const disk =
+    kind === "index" && local.endsWith(DISK_INDEX) ? local.slice(0, -DISK_INDEX.length) : undefined;
   return caller.only.some(
     (pattern) => globMatches(pattern, local) || (disk !== undefined && globMatches(pattern, disk)),
   );
@@ -68,7 +75,7 @@ export function allowEnvironment(caller: Caller, role: Role, environment: string
   }
 }
 
-export function allow(caller: Caller, role: Role, name?: string) {
+export function allow(caller: Caller, role: Role, name?: string, kind: Kind = "namespace") {
   if (!atLeast(caller.role, role)) throw forbidden(`this needs the \`${role}\` role`);
   if (name === undefined) return;
   const environment = environmentOf(name);
@@ -77,5 +84,5 @@ export function allow(caller: Caller, role: Role, name?: string) {
       `this key works in \`${caller.environment}\`; \`${name}\` is in \`${environment}\``,
     );
   }
-  if (!mayUse(caller, name)) throw forbidden(`no access to \`${name}\``);
+  if (!mayUse(caller, name, kind)) throw forbidden(`no access to \`${name}\``);
 }

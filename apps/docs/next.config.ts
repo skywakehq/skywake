@@ -9,7 +9,11 @@ const config: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: new URL("../..", import.meta.url).pathname,
   // The search index reads the API's document when it starts.
-  outputFileTracingIncludes: { "/api/search": ["../../packages/contract/generated/openapi.json"] },
+  outputFileTracingIncludes: {
+    "/api/search": ["../../packages/contract/generated/openapi.json"],
+    // The share images read their fonts from @skywake/ui.
+    "/og/**": ["../../packages/ui/src/og/fonts/*"],
+  },
   basePath,
   // Behind another app, this zone's `/_next` files must not clash with that
   // app's: they get a prefix of their own, which this server also answers.

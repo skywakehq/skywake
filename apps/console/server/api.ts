@@ -33,6 +33,10 @@ export async function skywake(
   headers.set("authorization", `Bearer ${token}`);
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
   if (caller.userAgent) headers.set("user-agent", caller.userAgent);
+  // So the API's limit per address counts each person's own address, not the
+  // console's one address for everyone. It is read only when the API trusts
+  // the hop in front of it (SKYWAKE_API_TRUST_PROXY), which then is this console.
+  if (caller.ip) headers.set("x-forwarded-for", caller.ip);
   return fetch(`${base}${path}`, { ...init, headers, cache: "no-store" });
 }
 

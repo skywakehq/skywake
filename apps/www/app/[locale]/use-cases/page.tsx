@@ -4,6 +4,7 @@ import { UseCaseIndex } from "@/components/sections/use-case-index";
 import { getMessages } from "@/content/messages";
 import { pageMetadata } from "@/lib/metadata";
 import { pageLocale } from "@/lib/page";
+import { breadcrumbs, JsonLd } from "@/lib/structured-data";
 
 export const instant = false;
 
@@ -14,6 +15,7 @@ export default async function UseCases({ params }: PageProps<"/[locale]/use-case
   const t = getMessages(locale);
   return (
     <SitePage locale={locale} messages={t}>
+      <JsonLd data={breadcrumbs(locale, [{ name: t.footer.useCases, path: "/use-cases" }])} />
       <UseCaseIndex locale={locale} t={t} />
       <GetStarted t={t} />
     </SitePage>
