@@ -42,6 +42,9 @@ export const apiEnv = z.object({
   SKYWAKE_API_EMBED_URL: z.url().optional(),
   SKYWAKE_API_EMBED_KEY: z.string().optional(),
   SKYWAKE_API_EMBED_MODEL: z.string().min(1).optional(),
+  // A server close by that runs SKYWAKE_API_EMBED_MODEL, for search queries only. Writes still
+  // go to the provider; a query goes there too when this one fails.
+  SKYWAKE_API_QUERY_EMBED_URL: z.url().optional(),
   SKYWAKE_API_RERANK_URL: z.url().optional(),
   SKYWAKE_API_RERANK_KEY: z.string().optional(),
   SKYWAKE_API_PROVIDERS: z.string().default("{}"),

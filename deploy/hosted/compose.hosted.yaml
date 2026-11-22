@@ -23,6 +23,8 @@ services:
       # Search: the embedding provider's key, and the model new disks search with.
       SKYWAKE_API_PROVIDERS: ${SKYWAKE_API_PROVIDERS:?set SKYWAKE_API_PROVIDERS in .env}
       SKYWAKE_API_EMBED_MODEL: ${SKYWAKE_API_EMBED_MODEL:?set SKYWAKE_API_EMBED_MODEL in .env}
+      # Search queries embed on this machine instead of across the Pacific.
+      SKYWAKE_API_QUERY_EMBED_URL: http://embed:8080/v1
     volumes: [cache:/cache]
 
   console:
@@ -43,6 +45,39 @@ services:
       # Neon has no superuser, so Zero can't watch for schema changes. After a
       # release changes the tables, it rebuilds its copy instead of stopping.
       ZERO_AUTO_RESET: "true"
+
+  # Qwen3-Embedding-0.6B, the model new disks search with, for search queries
+  # only: about 80 ms on this machine's CPU against a second or more from the
+  # provider. Its vectors match the provider's (cosine 0.999). If it is down,
+  # queries go to the provider.
+  embed:
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:c2cf6c72d913b6c89a5f0929f2a866e6161e09e7dc187e0f3b0f21e923e26db3
+    restart: unless-stopped
+    command:
+      - --hf-repo
+      - Qwen/Qwen3-Embedding-0.6B-GGUF
+      - --hf-file
+      - Qwen3-Embedding-0.6B-Q8_0.gguf
+      - --embedding
+      - --pooling
+      - last
+      - --ctx-size
+      - "2048"
+      - --threads
+      - "2"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    environment:
+      LLAMA_CACHE: /models
+    volumes: [models:/models]
+    healthcheck:
+      test: [CMD, curl, -fs, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 300s
 
   caddy:
     image: caddy:2.10.2-alpine
@@ -65,3 +100,4 @@ networks:
 volumes:
   cache:
   caddy:
+  models:

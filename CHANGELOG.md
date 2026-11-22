@@ -3,6 +3,15 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.2 (2026-11-22)
+
+### Search
+
+- Search queries are embedded on the hosted machine, in about 80 ms instead
+  of one to four seconds from the provider, and a query asked again is
+  remembered. `SKYWAKE_API_QUERY_EMBED_URL` points any server at a nearby copy
+  of its embedding model; queries go to the provider when it is down.
+
 ## 0.4.1 (2026-11-22)
 
 ### Agents

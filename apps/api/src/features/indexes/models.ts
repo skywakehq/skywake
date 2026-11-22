@@ -2,7 +2,7 @@ import { indexes } from "@skywake/contract";
 
 import type { Provider, Vendors } from "../../config.ts";
 import { HttpError } from "../../http/errors.ts";
-import { headers, type Input, isImage, type Media, type Purpose, request } from "./providers.ts";
+import { byIndex, headers, type Input, isImage, type Media, type Purpose, request } from "./providers.ts";
 import { route } from "./vendors.ts";
 
 const BATCH: Record<Media, number> = { openai: 128, voyage: 128, cohere: 96, gemini: 6 };
@@ -12,6 +12,10 @@ const TRIES = 5;
 const BACKOFF_MS = 500;
 const WAIT_MAX_MS = 20_000;
 const REFUSED = [400, 404, 413, 422];
+/** A nearby query server answers in well under this, or the provider takes over. */
+const NEARBY_MS = 2_000;
+/** Search queries remembered, so asking again skips the model. */
+const QUERIES_KEPT = 2_000;
 
 export interface Ranked {
   index: number;
@@ -29,6 +33,8 @@ export class Models {
   readonly #rerank: Provider | undefined;
   readonly #vendors: Vendors;
   readonly #sizes = new Map<string, number>();
+  readonly #nearby: Provider | undefined;
+  readonly #queries = new Map<string, number[]>();
   readonly linkModel: string | undefined;
 
   constructor(providers: {
@@ -36,7 +42,9 @@ export class Models {
     rerank?: Provider;
     vendors?: Vendors;
     embedModel?: string;
+    queryEmbed?: Provider;
   }) {
+    this.#nearby = providers.queryEmbed;
     this.#embed = providers.embed;
     this.#rerank = providers.rerank;
     this.#vendors = providers.vendors ?? {};
@@ -56,6 +64,54 @@ export class Models {
     inputs: Input[],
     dims?: number,
     purpose: Purpose = "document",
+  ): Promise<number[][]> {
+    const [text] = inputs;
+    if (purpose !== "query" || inputs.length !== 1 || typeof text !== "string") {
+      return this.#remote(model, inputs, dims, purpose);
+    }
+    const key = `${model}\n${dims ?? ""}\n${text}`;
+    const kept = this.#queries.get(key);
+    if (kept) {
+      this.#queries.delete(key);
+      this.#queries.set(key, kept);
+      return [kept];
+    }
+    const vector =
+      (await this.#close(model, text, dims)) ??
+      (await this.#remote(model, inputs, dims, purpose))[0]!;
+    this.#queries.set(key, vector);
+    if (this.#queries.size > QUERIES_KEPT) {
+      this.#queries.delete(this.#queries.keys().next().value!);
+    }
+    return [vector];
+  }
+
+  /** The default model's vector for a query from the nearby server, or null to ask the provider. */
+  async #close(model: string, text: string, dims?: number): Promise<number[] | null> {
+    const known = indexes.embeddingModel(model);
+    const full = dims === undefined || (known && "dims" in known && dims === known.dims);
+    if (!this.#nearby || model !== this.linkModel || !full) return null;
+    try {
+      const response = await fetch(`${this.#nearby.url}/embeddings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model, input: [text] }),
+        signal: AbortSignal.timeout(NEARBY_MS),
+      });
+      if (!response.ok) return null;
+      const answer = (await response.json()) as { data?: unknown };
+      const [vector] = vectorsOf(byIndex(answer.data, "embedding"), 1);
+      return vector!;
+    } catch {
+      return null;
+    }
+  }
+
+  async #remote(
+    model: string,
+    inputs: Input[],
+    dims: number | undefined,
+    purpose: Purpose,
   ): Promise<number[][]> {
     const to = route("embed", model, this.#vendors, this.#embed, dims, inputs.some(isImage));
     const size = BATCH[to.media];
@@ -210,3 +266,4 @@ function retryAfter(value: string | null) {
 
 const unavailable = (kind: string, what: string) =>
   new HttpError(503, `the ${kind} provider ${what}`);
+
