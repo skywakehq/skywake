@@ -39,7 +39,7 @@ Skywake keeps **disks** in your own object storage: AWS S3, Cloudflare R2, or an
 - **Diff and merge work like git.** [`diff`](./filesystem/diff-and-merge.mdx) shows what a branch changed, and `merge` brings it back, with conflicts reported per file.
 - **Mount a branch as a folder.** On Linux, [`skywake mount`](./filesystem/mount.mdx) serves a branch as a live local folder, so `npm ci` or `cargo build` run on it as they would on your laptop. A synced write is never lost, even if the machine is killed.
 - **Agents get tools.** The [MCP server](./agents/mcp.mdx) gives any MCP agent file tools, a bash shell and search on a disk, and by default forks a branch of its own for each session. There is also a [bash tool](./agents/bash.mdx) for the AI SDK, a [CLI](./agents/cli.mdx), an HTTP API, and SDKs in seven languages.
-- **Search lives next to the files.** [Indexes](./indexes/index.mdx) give you vector, full-text and hybrid search on the same bucket, with branches and time travel too.
+- **Search lives next to the files.** [Indexes](./filesystem/search.mdx) give you vector, full-text and hybrid search on the same bucket, with branches and time travel too.
 
 It is open source under Apache-2.0, and you can [run it yourself](./self-hosting/what-to-run.mdx) for free.
 
