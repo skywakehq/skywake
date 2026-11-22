@@ -13,6 +13,8 @@ const config: NextConfig = {
   assetPrefix: basePath ? `${basePath}-static` : undefined,
   env: { CONSOLE_BASE_PATH: basePath },
   transpilePackages: ["@skywake/ui"],
+  // The share images read their fonts from @skywake/ui.
+  outputFileTracingIncludes: { "/**": ["../../packages/ui/src/og/fonts/*"] },
   // pg is a Node package; keep it out of the server bundle.
   serverExternalPackages: ["pg"],
   // No page may be framed: a framed "Approve" or "Make key" button could be clicked

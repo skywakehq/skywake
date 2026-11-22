@@ -10,6 +10,12 @@
         { "type": "toml", "path": "sdks/python/pyproject.toml", "jsonpath": "$.project.version" },
         { "type": "json", "path": "sdks/typescript/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "packages/skywake/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/skywake/server.json", "jsonpath": "$.version" },
+        {
+          "type": "json",
+          "path": "packages/skywake/server.json",
+          "jsonpath": "$.packages[0].version"
+        },
         {
           "type": "json",
           "path": "packages/skywake/npm/linux-x64/package.json",

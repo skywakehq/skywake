@@ -12,7 +12,17 @@ const mono = IBM_Plex_Mono({
   weight: ["400", "500"],
 });
 
-export const metadata: Metadata = { title: "Skywake" };
+export const metadata: Metadata = {
+  // Where people reach the console; the base path is added to every link.
+  metadataBase: new URL(process.env.BETTER_AUTH_URL ?? "https://skywake.dev"),
+  title: { template: "%s · Skywake", default: "Skywake console" },
+  description: "The Skywake console: disks, branches and search indexes for your AI agents.",
+  applicationName: "Skywake",
+  // The console is private; only sign-in and sign-up ask to be indexed.
+  robots: { index: false, follow: false },
+  openGraph: { type: "website", siteName: "Skywake" },
+  twitter: { card: "summary_large_image" },
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

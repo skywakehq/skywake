@@ -31,6 +31,7 @@ export type HomeMessages = {
     legal: string;
     useCases: string;
     openSource: string;
+    agentFilesystem: string;
     privacy: string;
     terms: string;
     star: string;

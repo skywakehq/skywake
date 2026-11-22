@@ -8,12 +8,21 @@ import { getMDXComponents } from "@/components/mdx";
 import { PageFrame } from "@/components/shell/page-frame";
 import { OperationIndex, OperationPage } from "@/components/sdk/operation-page";
 import { source, type Page } from "@/lib/source";
+import { jsonLd, pageStructuredData } from "@/lib/structured-data";
 import { absoluteUrl } from "@/lib/zone";
 
 export default async function DocPage(props: PageProps<"/[[...slug]]">) {
   const page = source.getPage((await props.params).slug);
   if (!page) notFound();
-  return <Body page={page} />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(pageStructuredData(page)) }}
+      />
+      <Body page={page} />
+    </>
+  );
 }
 
 /** Each source has its own renderer; the frame around them is the same. */
@@ -70,12 +79,38 @@ export function generateStaticParams() {
   return source.generateParams();
 }
 
+/** The same operation has a page in the API and the SDK references; the title says which. */
+function pageTitle(page: Page) {
+  const title = page.data.title ?? "";
+  if (page.type === "openapi") return `${title} · HTTP API`;
+  if (page.type === "sdk" && page.url !== "/reference/sdk") return `${title} · SDK`;
+  return title;
+}
+
+function fallbackDescription(page: Page) {
+  const title = page.data.title ?? "";
+  switch (page.type) {
+    case "openapi":
+      return `${title} with the Skywake HTTP API: the request, the response and an example.`;
+    case "cli":
+      return `${title}: what the command does, its flags and an example.`;
+    case "sdk":
+      return `${title} with the Skywake SDKs, in each language.`;
+    default:
+      return "Guides and reference for Skywake, a filesystem with branches and search for AI agents.";
+  }
+}
+
+// The docs home, as search results show it.
+const HOME_TITLE = "Skywake docs: a filesystem and search for AI agents";
+
 export async function generateMetadata(props: PageProps<"/[[...slug]]">): Promise<Metadata> {
   const { slug = [] } = await props.params;
   const page = source.getPage(slug);
   if (!page) notFound();
   const url = absoluteUrl(page.url);
-  const title = (slug.length && page.data.title) || "Skywake docs";
+  const title = slug.length ? pageTitle(page) : HOME_TITLE;
+  const description = page.data.description || fallbackDescription(page);
   const image = {
     url: absoluteUrl(["/og", ...slug].join("/")),
     width: 1200,
@@ -84,7 +119,7 @@ export async function generateMetadata(props: PageProps<"/[[...slug]]">): Promis
   };
   return {
     title: slug.length ? title : { absolute: title },
-    description: page.data.description,
+    description,
     alternates: {
       canonical: url,
       types: { "text/markdown": absoluteUrl(slug.length ? `${page.url}.md` : "/index.md") },
@@ -94,13 +129,13 @@ export async function generateMetadata(props: PageProps<"/[[...slug]]">): Promis
       siteName: "Skywake docs",
       url,
       title,
-      description: page.data.description,
+      description,
       images: [image],
     },
     twitter: {
       card: "summary_large_image",
       title,
-      description: page.data.description,
+      description,
       images: [image],
     },
   };

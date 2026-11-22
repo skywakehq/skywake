@@ -13,7 +13,7 @@ import { CtaRow } from "@/components/ui/cta-row";
 import { UseCases } from "@/components/sections/use-cases";
 import { getMessages } from "@/content/messages";
 import { pageMetadata } from "@/lib/metadata";
-import { structuredData } from "@/lib/structured-data";
+import { JsonLd, structuredData } from "@/lib/structured-data";
 import { pageLocale } from "@/lib/page";
 
 export const instant = false;
@@ -25,12 +25,7 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
   const t = getMessages(locale);
   return (
     <SitePage locale={locale} messages={t}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
-        }}
-      />
+      <JsonLd data={structuredData} />
       <FileJourney>
         <Hero t={t} />
         <Shared t={t} />

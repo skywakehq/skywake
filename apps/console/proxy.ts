@@ -16,6 +16,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   // The invite page works signed out too: it offers to sign in or up.
   matcher: [
-    "/((?!api|_next|sign-in|sign-up|two-factor|forgot-password|reset-password|invite|favicon.ico).*)",
+    "/((?!api|_next|sign-in|sign-up|two-factor|forgot-password|reset-password|invite|favicon.ico|opengraph-image|twitter-image).*)",
   ],
 };

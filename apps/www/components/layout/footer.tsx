@@ -31,6 +31,7 @@ export async function Footer({ locale, messages: t }: { locale: Locale; messages
       title: t.footer.project,
       links: [
         { href: site.docsUrl, label: t.nav.docs },
+        { href: `${site.docsUrl}/agent-filesystem`, label: t.footer.agentFilesystem },
         { href: "/#open-source", label: t.footer.openSource },
       ],
     },

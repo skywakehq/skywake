@@ -34,5 +34,3 @@ export const pages = {
 export type PagePath = keyof typeof pages;
 
 export const pagePaths = Object.keys(pages) as PagePath[];
-
-export const imageSlug = (path: PagePath) => (path === "/" ? "home" : path.slice(1));

@@ -1,6 +1,7 @@
 {
   "pages": [
     "index",
+    "agent-filesystem",
     "getting-started",
     "filesystem",
     "agents",

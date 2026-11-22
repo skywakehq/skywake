@@ -39,13 +39,13 @@ export const es: HomeMessages = {
     theme: "Cambiar entre modo claro y oscuro",
   },
   footer: {
-    blurb:
-      "Un disco compartido para agentes de IA, con búsqueda integrada. Open source.",
+    blurb: "Un disco compartido para agentes de IA, con búsqueda integrada. Open source.",
     product: "Producto",
     project: "Proyecto",
     legal: "Legal",
     useCases: "Casos de uso",
     openSource: "Open source",
+    agentFilesystem: "Sistema de archivos para agentes",
     privacy: "Privacidad",
     terms: "Términos",
     star: "Dar estrella en GitHub",
@@ -212,8 +212,7 @@ export const es: HomeMessages = {
     selfHost: "Instálalo tú mismo con la documentación",
     star: "Dar estrella en GitHub",
     openTitle: "Empieza a construir con Skywake.",
-    openLine:
-      "Un disco compartido para todos tus agentes, con búsqueda integrada.",
+    openLine: "Un disco compartido para todos tus agentes, con búsqueda integrada.",
     openCta: "Empezar",
     form: {
       email: "Correo electrónico",

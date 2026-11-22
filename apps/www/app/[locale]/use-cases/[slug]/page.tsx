@@ -9,6 +9,7 @@ import { getMessages } from "@/content/messages";
 import { findUseCase, useCases } from "@/content/use-cases";
 import { buildMetadata } from "@/lib/metadata";
 import { pageLocale } from "@/lib/page";
+import { breadcrumbs, guideArticle, JsonLd } from "@/lib/structured-data";
 
 export const instant = false;
 
@@ -28,7 +29,6 @@ export async function generateMetadata({
     path: `/use-cases/${slug}`,
     title: copy.title,
     description: copy.lead,
-    image: "use-cases",
   });
 }
 
@@ -38,8 +38,19 @@ export default async function UseCase({ params }: PageProps<"/[locale]/use-cases
   const item = findUseCase(slug);
   if (!item) notFound();
   const t = getMessages(locale);
+  const copy = t.guides.items[item.id]!;
+  const path = `/use-cases/${item.id}`;
   return (
     <SitePage locale={locale} messages={t}>
+      <JsonLd
+        data={[
+          guideArticle(locale, { path, title: copy.title, description: copy.lead }),
+          breadcrumbs(locale, [
+            { name: t.footer.useCases, path: "/use-cases" },
+            { name: copy.title, path },
+          ]),
+        ]}
+      />
       <Guide id={item.id} locale={locale} t={t} />
       <UseCaseRelated useCase={item} locale={locale} t={t} />
       <GetStarted t={t} />
