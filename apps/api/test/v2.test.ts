@@ -185,6 +185,18 @@ test("disk search: grep, find and query by meaning", { skip }, async () => {
   assert.equal(scoped.data[0].path, "docs/billing.md");
   assert.ok(scoped.data.every((h: any) => h.path.startsWith("docs/")));
 
+  // A key made for this disk alone searches it too.
+  const scopedKey = ok(
+    await api("POST", "/keys", { name: "agent", role: "read", environment: "prod", only: ["app"] }),
+    201,
+  );
+  const agent = client(s, scopedKey.key, "prod");
+  assert.equal(
+    ok(await agent("POST", "/disks/app/query", { text: "coffee" })).data[0].path,
+    "docs/coffee.md",
+  );
+  assert.equal((await agent("POST", "/disks/other/query", { text: "coffee" })).status, 403);
+
   const off = ok(await api("PATCH", "/disks/app", { search: false }));
   assert.equal(off.search, false);
   const refused = await api("POST", "/disks/app/query", { text: "coffee" });

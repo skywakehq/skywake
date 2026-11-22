@@ -2,7 +2,15 @@ import { indexes } from "@skywake/contract";
 
 import type { Provider, Vendors } from "../../config.ts";
 import { HttpError } from "../../http/errors.ts";
-import { byIndex, headers, type Input, isImage, type Media, type Purpose, request } from "./providers.ts";
+import {
+  byIndex,
+  headers,
+  type Input,
+  isImage,
+  type Media,
+  type Purpose,
+  request,
+} from "./providers.ts";
 import { route } from "./vendors.ts";
 
 const BATCH: Record<Media, number> = { openai: 128, voyage: 128, cohere: 96, gemini: 6 };
@@ -266,4 +274,3 @@ function retryAfter(value: string | null) {
 
 const unavailable = (kind: string, what: string) =>
   new HttpError(503, `the ${kind} provider ${what}`);
-
