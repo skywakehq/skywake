@@ -3,6 +3,7 @@ import { siGithub } from "simple-icons";
 
 import { Logo } from "@skywake/ui/components/logo";
 import { LocaleSwitcher } from "@/components/layout/locale-switcher";
+import { ConsoleLink } from "@/components/ui/console-link";
 import { SiteLink } from "@/components/ui/site-link";
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
@@ -15,8 +16,7 @@ import { ThemeToggle } from "./theme-toggle";
 
 const LINK =
   "px-3 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground";
-const CTA =
-  "inline-flex h-10 items-center gap-1.5 rounded-full bg-foreground px-4 text-sm font-medium whitespace-nowrap text-background transition-opacity hover:opacity-85";
+const CTA = "btn btn-primary h-10 gap-1.5 px-4";
 
 export async function Nav({ locale, messages: t }: { locale: Locale; messages: HomeMessages }) {
   const links = [
@@ -72,9 +72,12 @@ export async function Nav({ locale, messages: t }: { locale: Locale; messages: H
           <MobileMenu links={menuLinks} locale={locale} label={t.nav.menu} />
           <span className="ml-2">
             {site.cloudOpen ? (
-              <a href={site.consoleUrl} className={CTA}>
-                {t.nav.getStarted} <ArrowUpRight className="size-3.5" />
-              </a>
+              <ConsoleLink
+                className={CTA}
+                getStarted={t.nav.getStarted}
+                open={t.nav.open}
+                icon={<ArrowUpRight className="size-3.5" />}
+              />
             ) : (
               <SiteLink href="/#waitlist" locale={locale} className={CTA}>
                 {t.nav.joinWaitlist}

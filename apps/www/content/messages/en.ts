@@ -11,13 +11,14 @@ export const en: HomeMessages = {
     github: "GitHub",
     joinWaitlist: "Join waitlist",
     getStarted: "Get started",
+    open: "Open",
     language: "Language",
     menu: "Menu",
     sections: "Sections",
     theme: "Switch between light and dark",
   },
   footer: {
-    blurb: "A shared disk for AI agents, with search built in. Open source, on your own bucket.",
+    blurb: "A shared disk for AI agents, with search built in. Open source.",
     product: "Product",
     project: "Project",
     legal: "Legal",
@@ -29,7 +30,7 @@ export const en: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud is on the way. Join the waitlist",
-    titleBefore: "Infinite disks",
+    titleBefore: "Durable disks",
     titleAccent: "for AI agents.",
     getStartedCta: "Get started",
     waitlistCta: "Join the waitlist",
@@ -39,7 +40,7 @@ export const en: HomeMessages = {
 
   shared: {
     label: "Shared disk",
-    line: "Mount one folder on every machine. What one agent writes, the others can read.",
+    line: "Mount it on your laptop, a sandbox or a CI runner. A file saved on one shows up on all the others.",
     titleBefore: "One disk.",
     titleAccent: "Every agent.",
     write: "Write",
@@ -49,7 +50,7 @@ export const en: HomeMessages = {
   },
   searchDemo: {
     label: "Search",
-    line: "Every file is indexed as it's saved. Search by meaning, exact words, or both.",
+    line: "Every file is indexed when it's saved. Search in plain English, or for the exact text.",
     titleBefore: "Our disks are",
     titleAccent: "semantically searchable!",
     modes: ["Meaning", "Exact words", "Both"],
@@ -62,7 +63,7 @@ export const en: HomeMessages = {
   },
   bento: {
     label: "Features",
-    line: "Your tools work on it like any folder. Then it does what a folder can't.",
+    line: "ls, grep and git work on it like on any folder. On top of that you get crash safety, branches and search.",
     titleBefore: "Feels like a folder.",
     titleAccent: "Does a lot more.",
     items: [
@@ -76,7 +77,7 @@ export const en: HomeMessages = {
   },
   useCases: {
     label: "Use cases",
-    line: "Knowledge bases, agent memory, shared storage, coding agents and RL rollouts.",
+    line: "Pick one to see how agents share files in it.",
     heading: ["What you can build", "with Skywake."],
     more: "Explore all use cases",
     cta: "Learn more",
@@ -103,9 +104,26 @@ export const en: HomeMessages = {
       },
     ],
   },
+  compare: {
+    label: "Compare",
+    title: "Dropbox is for people. Skywake is for agents.",
+    line: "Put ten agents on one Dropbox folder and you get conflicted copies, no search, and nothing to roll back to. Skywake was built for exactly that.",
+    rows: [
+      "Store large files",
+      "Mount on a sandbox",
+      "Agent native",
+      "Parallel running agents",
+      "Vector and full-text search",
+      "Open source",
+    ],
+    yes: "Yes",
+    no: "No",
+    score: "Score",
+    cta: "Try it with your agents",
+  },
   benchmarks: {
     label: "Benchmarks",
-    line: "Measured on AWS, with the bucket in the same region. Every run is published with the command to repeat it.",
+    line: "Measured on AWS, with the client, the server and the bucket in the same region.",
     title: "Local-disk speed, measured from your bucket.",
     claims: [
       {
@@ -158,17 +176,17 @@ export const en: HomeMessages = {
   openSource: {
     label: "Open source",
     title: "Apache 2.0. Run it yourself today.",
-    line: "Self-host with Docker or Kubernetes, on your own object storage.",
+    line: "Set it up with Docker or Kubernetes and point it at your own storage bucket.",
     star: "Star on GitHub",
   },
   waitlist: {
     eyebrow: "Skywake Cloud",
     title: "Managed Skywake is coming. Get notified.",
-    line: "Join the waitlist for hosted files and search.",
+    line: "We'll run it for you. Leave your email and we'll tell you when it opens.",
     selfHost: "Self-host with the docs",
     star: "Star on GitHub",
     openTitle: "Start building with Skywake.",
-    openLine: "One shared disk for all your agents, with search built in, on your own bucket.",
+    openLine: "One shared disk for all your agents, with search built in.",
     openCta: "Get started",
     form: {
       email: "Email",

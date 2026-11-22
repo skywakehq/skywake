@@ -8,5 +8,5 @@ export const site = {
   consoleUrl: process.env.CONSOLE_LINK as string,
   repoUrl: "https://github.com/skywakehq/skywake",
   email: "hello@skywake.dev",
-  cloudOpen: process.env.CLOUD_OPEN === "1",
+  cloudOpen: process.env.CLOUD_OPEN !== "0",
 };

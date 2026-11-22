@@ -11,20 +11,20 @@ export function Numbers({ t }: { t: HomeMessages }) {
   const b = t.benchmarks;
   return (
     <>
-      <Head id="benchmarks" eyebrow={b.label} title={b.title} line={b.line} />
+      <Head id="benchmarks" title={b.title} line={b.line} />
       <Band>
         <ul className="grid gap-4 lg:grid-cols-3">
           {b.claims.map((claim, i) => {
             const Scene = SCENES[i]!;
             return (
               <li key={claim.title} className="panel reveal flex flex-col p-3">
-                <div className="flex h-52 items-center rounded-[1.5rem] bg-foreground/[0.03] p-5">
+                <div className="flex h-40 items-center rounded-[1.5rem] sm:h-52 bg-foreground/[0.03] p-5">
                   <Scene />
                 </div>
                 <div className="flex flex-1 flex-col p-5 pt-6">
                   <h3 className="t-h3 text-foreground">{claim.title}</h3>
                   <p className="mt-2 text-muted-foreground">{claim.line}</p>
-                  <p className="mt-auto pt-10 text-5xl leading-none font-medium tracking-[-0.05em] text-foreground tabular-nums">
+                  <p className="mt-auto pt-6 text-5xl sm:pt-10 leading-none font-medium tracking-[-0.05em] text-foreground tabular-nums">
                     {homeClaims[i]}
                   </p>
                   <p className="mt-2 text-sm text-muted-foreground">{claim.label}</p>
@@ -48,7 +48,7 @@ export function Numbers({ t }: { t: HomeMessages }) {
                     {verdict}
                   </p>
                 </div>
-                <dl className="mt-auto grid gap-4 pt-10">
+                <dl className="mt-auto grid gap-4 pt-6 sm:pt-10">
                   {bars.map((bar, j) => (
                     <div key={race.labels[j]} className="grid gap-2">
                       <div className="flex justify-between gap-4 text-sm">

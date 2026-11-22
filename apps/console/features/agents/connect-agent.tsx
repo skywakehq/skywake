@@ -18,6 +18,7 @@ import { envOf, nameInEnv } from "@/lib/names";
 import { withBase } from "@/lib/zone";
 import { AGENTS, type Agent, mcpJson, type Setup, starterPrompt } from "./agents";
 import { Confetti, useJustDone } from "./celebrate";
+import { useUsedKey } from "./used-key";
 
 const OPEN = "skywake:connect-agent";
 let pending: string | undefined;
@@ -99,29 +100,6 @@ function CopyBox({ text, mono = true }: { text: string; mono?: boolean }) {
 }
 
 type Made = { id: string; key: string };
-
-/** Whether the key has been used yet, asked every few seconds until it has. */
-function useKeySeen(id: string | undefined) {
-  const [seen, setSeen] = useState(false);
-  useEffect(() => {
-    if (!id || seen) return;
-    let live = true;
-    const ask = () =>
-      fetch(withBase("/api/keys"))
-        .then((response) => (response.ok ? response.json() : []))
-        .then((keys: { id: string; last_used?: string | null }[]) => {
-          if (live && keys.some((key) => key.id === id && key.last_used)) setSeen(true);
-        })
-        .catch(() => {});
-    const timer = setInterval(ask, 3000);
-    ask();
-    return () => {
-      live = false;
-      clearInterval(timer);
-    };
-  }, [id, seen]);
-  return seen;
-}
 
 function Step({
   n,
@@ -216,7 +194,7 @@ export function ConnectAgent({
   const [made, setMade] = useState<Made>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const seen = useKeySeen(made?.id);
+  const seen = !!useUsedKey({ id: made?.id, enabled: !!made });
   const disk = nameInEnv(ns);
   const wrote = made
     ? fleet.commits.find((commit) => commit.actor === `key:${made.id}`)
@@ -254,7 +232,9 @@ export function ConnectAgent({
       <DialogContent className="gap-0 p-0 sm:max-w-[600px]" showCloseButton={false}>
         <DialogHeader className="mb-0 px-7 pt-7">
           <DialogTitle className="text-base">
-            {wrote ? `${agent.name} saved ${file ?? "a file"} to ${disk}` : `Connect an agent to ${disk}`}
+            {wrote
+              ? `${agent.name} saved ${file ?? "a file"} to ${disk}`
+              : `Connect an agent to ${disk}`}
           </DialogTitle>
           <DialogDescription className="text-sm">
             It gets the disk&apos;s files, search and branches as tools, and works on a branch of
@@ -300,7 +280,10 @@ export function ConnectAgent({
                   onClick={makeKey}
                 >
                   <span className="inline-flex items-center gap-2">
-                    <AgentMark agent={agent} className="size-5 rounded-full ring-1 ring-[color-mix(in_oklab,currentColor_30%,transparent)]" />
+                    <AgentMark
+                      agent={agent}
+                      className="size-5 rounded-full ring-1 ring-[color-mix(in_oklab,currentColor_30%,transparent)]"
+                    />
                     Connect {agent.name}
                   </span>
                 </Button>
@@ -326,7 +309,11 @@ export function ConnectAgent({
                   <>
                     <p className="text-sm text-muted-foreground">
                       {agent.link ? "Or add" : "Add"} this to{" "}
-                      {agent.file ? <code className="font-mono">{agent.file}</code> : "its MCP config"}
+                      {agent.file ? (
+                        <code className="font-mono">{agent.file}</code>
+                      ) : (
+                        "its MCP config"
+                      )}
                       :
                     </p>
                     <CopyBox text={mcpJson(setup)} />
@@ -339,7 +326,10 @@ export function ConnectAgent({
             )}
           </Step>
 
-          <Step n={3} title="Give it something to do" done={!!wrote}>
+          <Step n={3} title="Check it works" done={!!wrote}>
+            <p className="text-sm text-muted-foreground">
+              Start a new {agent.name} session, so it loads Skywake, and paste this:
+            </p>
             <CopyBox text={starterPrompt(disk)} mono={false} />
           </Step>
         </div>

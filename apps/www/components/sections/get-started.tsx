@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import type { CSSProperties } from "react";
 
 import { WaitlistForm } from "@/components/sections/waitlist-form";
+import { ConsoleLink } from "@/components/ui/console-link";
 import { Band } from "@/components/ui/frame";
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
@@ -32,7 +33,7 @@ export function GetStarted({ t }: { t: HomeMessages }) {
           <span key={width} className={`h-2 rounded-full bg-(--paper-ink)/15 ${width}`} />
         ))}
       </div>
-      <div className="relative flex flex-col items-center rounded-[2.25rem] bg-linear-to-b from-[#ffdf6e] to-[#f7b52c] px-6 py-20 text-center text-(--sun-ink) shadow-[inset_0_2px_0_rgb(255_255_255/0.65),0_-10px_30px_-18px_rgb(0_0_0/0.5)] lg:py-28">
+      <div className="relative flex min-h-[26rem] flex-col items-center justify-center rounded-[2.25rem] bg-linear-to-b from-[#ffdf6e] to-[#f7b52c] px-6 py-24 text-center text-(--sun-ink) shadow-[inset_0_2px_0_rgb(255_255_255/0.65),0_-10px_30px_-18px_rgb(0_0_0/0.5)] lg:min-h-[36rem] lg:py-32">
         {waitlist ? (
           <>
             <p className="text-sm font-medium opacity-70">{w.eyebrow}</p>
@@ -57,9 +58,12 @@ export function GetStarted({ t }: { t: HomeMessages }) {
             <h2 className="t-h2 max-w-[32ch] text-balance">{w.openTitle}</h2>
             <p className="t-lead mt-4 max-w-[40ch] opacity-75">{w.openLine}</p>
             <div style={INK} className="mt-10 flex flex-wrap justify-center gap-3">
-              <a href={site.consoleUrl} className="btn bg-background text-foreground">
-                {w.openCta} <ArrowUpRight className="size-3.5" />
-              </a>
+              <ConsoleLink
+                className="btn bg-background text-foreground"
+                getStarted={w.openCta}
+                open={t.nav.open}
+                icon={<ArrowUpRight className="size-3.5" />}
+              />
               {site.repoUrl && (
                 <a href={site.repoUrl} className="btn bg-background/10 text-background">
                   {w.star}

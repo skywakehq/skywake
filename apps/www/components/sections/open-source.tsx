@@ -1,7 +1,6 @@
 import { siGithub } from "simple-icons";
 
 import { BrandIcon } from "@/components/ui/brand-icon";
-import { Eyebrow } from "@/components/ui/eyebrow";
 import { Band } from "@/components/ui/frame";
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
@@ -18,8 +17,7 @@ export function OpenSource({ t }: { t: HomeMessages }) {
           <path d={HEART} className="echo" />
           <path d={HEART} className="beat" />
         </svg>
-        <Eyebrow className="mt-auto pt-10">{t.openSource.label}</Eyebrow>
-        <h2 className="t-h2 mt-4 max-w-[28ch] text-balance text-foreground">
+        <h2 className="t-h2 mt-auto pt-10 max-w-[28ch] text-balance text-foreground">
           {t.openSource.title}
         </h2>
         <p className="t-lead mt-4 max-w-[36ch] text-muted-foreground">{t.openSource.line}</p>

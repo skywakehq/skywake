@@ -10,7 +10,7 @@ export function UseCaseIndex({ locale, t }: { locale: Locale; t: HomeMessages })
   const g = t.guides;
   return (
     <>
-      <Head as="h1" eyebrow={g.eyebrow} title={g.title} line={g.accent} />
+      <Head as="h1" title={g.title} line={g.accent} />
       <Band>
         <UseCaseList items={useCases} locale={locale} t={t} columns="md:grid-cols-2" />
       </Band>

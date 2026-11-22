@@ -36,11 +36,38 @@ export function FolderBack({ className }: { className?: string }) {
   );
 }
 
-/** The front flap of a Finder folder, drawn over whatever is inside it. */
-export function FolderFront({ className }: { className?: string }) {
+/** The Skywake mark, in the folder's 100×82 units, sized and centred on the front flap. */
+function Mark({ fill, dy = 0, opacity }: { fill: string; dy?: number; opacity?: number }) {
+  return (
+    <g transform={`translate(38 ${38 + dy}) scale(1)`} fill={fill} opacity={opacity}>
+      <path d="M6.75 10.1a8 8 0 0 1 16 0Z" />
+      <rect x="6.75" y="12.1" width="16" height="2.2" rx="1.1" />
+      <rect x="3.75" y="15.9" width="13" height="2.2" rx="1.1" />
+      <rect x="1.25" y="19.7" width="9" height="2.2" rx="1.1" />
+    </g>
+  );
+}
+
+/**
+ * The Skywake mark pressed into the flap. Light from above leaves the top edge
+ * of the cut in shade and catches the lower lip, so the shape reads as sunk in.
+ */
+function Engraving() {
+  return (
+    <g aria-hidden>
+      <Mark fill="#fff6d6" dy={0.45} opacity={0.9} />
+      <Mark fill="#a8650a" dy={-0.35} opacity={0.55} />
+      <Mark fill="#eaa627" />
+    </g>
+  );
+}
+
+/** The front flap of a Finder folder, drawn over whatever is inside it, optionally with the mark engraved. */
+export function FolderFront({ className, engraved }: { className?: string; engraved?: boolean }) {
   return (
     <svg viewBox="0 0 100 82" aria-hidden className={className}>
       <FrontPaths />
+      {engraved && <Engraving />}
     </svg>
   );
 }

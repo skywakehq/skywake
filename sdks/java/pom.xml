@@ -6,7 +6,7 @@
 
   <groupId>dev.skywake</groupId>
   <artifactId>skywake</artifactId>
-  <version>0.4.0</version>
+  <version>0.4.1</version>
   <name>Skywake</name>
   <description>Skywake for Java: shared, branchable disks with search, for AI agents.</description>
   <url>https://skywake.dev</url>

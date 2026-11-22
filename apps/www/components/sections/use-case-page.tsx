@@ -24,7 +24,6 @@ export function UseCaseRelated({
     <>
       <Head
         id="related"
-        eyebrow={r.eyebrow}
         title={r.title}
         action={
           <Link href={localizePath(locale, "/use-cases")} className="btn btn-sm btn-secondary">

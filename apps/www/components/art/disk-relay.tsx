@@ -3,12 +3,13 @@
 import { Eye, FileText, Pencil } from "lucide-react";
 import {
   AnimatePresence,
+  animate,
   type MotionValue,
   motion,
   useMotionValue,
   useTransform,
 } from "motion/react";
-import { type RefObject, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   DROP_PX,
@@ -78,7 +79,6 @@ function FileMark({ writer, className }: { writer?: number; className: string })
 }
 
 const POP = { type: "spring", stiffness: 420, damping: 22 } as const;
-const TILT = [-2.5, 2, 2.5, -2];
 const PAPER_TILT = [-3, 2, -1.5, 3];
 const SPARKS = [-150, -115, -80, -45, -15, -165];
 
@@ -114,7 +114,7 @@ function useLayout(
   return layout;
 }
 
-function Wires({ layout, beat }: { layout: Layout; beat?: Beat }) {
+function Wires({ layout }: { layout: Layout }) {
   const { disk } = layout;
   return (
     <svg
@@ -123,7 +123,6 @@ function Wires({ layout, beat }: { layout: Layout; beat?: Beat }) {
     >
       {layout.agents.map((a, i) => {
         const d = `M${a.x} ${a.y} C${(a.x + disk.x) / 2} ${a.y} ${(a.x + disk.x) / 2} ${disk.y} ${disk.x} ${disk.y}`;
-        const on = involves(beat, i);
         return (
           <g key={i}>
             <path
@@ -134,18 +133,6 @@ function Wires({ layout, beat }: { layout: Layout; beat?: Beat }) {
               strokeWidth={2}
               strokeLinecap="round"
               strokeDasharray="0.1 8"
-            />
-            <path
-              d={d}
-              fill="none"
-              stroke="var(--sun)"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeDasharray="0.1 8"
-              className={cn(
-                "wire transition-opacity duration-300",
-                on ? "opacity-100" : "opacity-0",
-              )}
             />
           </g>
         );
@@ -238,11 +225,9 @@ function Session({
   return (
     <div
       className={cn(
-        "tile relative z-10 w-full p-3 transition-[box-shadow,scale] duration-300 sm:p-4 lg:max-w-[17rem]",
-        active && "scale-[1.03] shadow-[0_0_0_2px_var(--sun),var(--lift)]",
+        "relative z-10 w-full rounded-[0.9rem] bg-background p-3 ring-1 ring-(--hairline) sm:p-4 lg:max-w-[17rem]",
         className,
       )}
-      style={{ rotate: `${TILT[agent]}deg` }}
     >
       <div className="flex items-center gap-3">
         <motion.span
@@ -374,16 +359,28 @@ function Disk({
   drop?: Drop;
 }) {
   const tilt = useTransform(flap, [0, 1], [0, 40]);
+  // A squash each time a file lands, played on the live element: remounting
+  // it would also remount the papers inside and flash the folder.
+  const seen = useRef(landed);
+  useEffect(() => {
+    const el = mouthRef.current;
+    if (!el || landed <= seen.current) {
+      seen.current = landed;
+      return;
+    }
+    seen.current = landed;
+    const squash = animate(
+      el,
+      { scaleX: [1, 1.06, 0.98, 1], scaleY: [1, 0.92, 1.03, 1] },
+      { delay: FLIGHT_S - 0.1, duration: 0.5 },
+    );
+    return () => squash.stop();
+  }, [landed, mouthRef]);
   return (
     <div className="relative z-20 flex flex-col items-center pt-28 sm:pt-32">
-      <div className="absolute top-1/2 left-1/2 size-[130%] -translate-1/2 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--sun)_22%,transparent),transparent)]" />
       <motion.div
         ref={mouthRef}
         data-journey-target
-        key={landed}
-        initial={{ scaleX: 1, scaleY: 1 }}
-        animate={{ scaleX: [1, 1.06, 0.98, 1], scaleY: [1, 0.92, 1.03, 1] }}
-        transition={{ delay: FLIGHT_S - 0.1, duration: 0.5 }}
         className="relative aspect-[100/82] w-60 origin-bottom sm:w-72 lg:w-[22rem]"
       >
         <FolderBack className="absolute inset-0 size-full" />
@@ -395,7 +392,7 @@ function Disk({
           </AnimatePresence>
         </ul>
         <motion.div
-          className="absolute inset-0 drop-shadow-[0_-4px_8px_rgb(0_0_0/0.12)]"
+          className="absolute inset-0"
           style={{ rotateX: tilt, originY: 0.93, transformPerspective: 700 }}
         >
           <FolderFront className="absolute inset-0 size-full" />
@@ -405,8 +402,7 @@ function Disk({
           </div>
         </motion.div>
       </motion.div>
-      <div className="mt-2 h-3 w-48 rounded-[50%] bg-black/15 blur-md dark:bg-black/50" />
-      <p className="mt-3 flex items-center gap-2 rounded-full bg-(--soft) px-3 py-1.5 text-xs text-muted-foreground">
+      <p className="mt-5 flex items-center gap-2 rounded-full bg-(--soft) px-3 py-1.5 text-xs text-muted-foreground">
         <span className="relative flex size-2">
           <span className="absolute inset-0 animate-ping rounded-full bg-[#3dd68c] opacity-60" />
           <span className="size-2 rounded-full bg-[#3dd68c]" />
@@ -475,11 +471,11 @@ function Relay({
       aria-hidden
       className="relative grid grid-cols-2 gap-3 text-foreground lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-x-10 lg:gap-y-32"
     >
-      {layout && <Wires layout={layout} beat={now} />}
+      {layout && <Wires layout={layout} />}
       <div className="col-span-2 mb-6 lg:col-span-1 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mb-0 lg:self-center">
         <Disk
           files={files}
-          landed={held ? 0 : files.length}
+          landed={files.length}
           mouthRef={mouthRef}
           mounted={mounted}
           flap={flap}
@@ -520,7 +516,6 @@ export function DiskRelay(props: RelayProps) {
   const held = journey ? !journey.landed : false;
   return (
     <Relay
-      key={held ? "held" : "live"}
       {...props}
       held={held}
       flap={journey?.diskFlap ?? rest}

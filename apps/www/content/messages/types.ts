@@ -17,6 +17,8 @@ export type HomeMessages = {
     github: string;
     joinWaitlist: string;
     getStarted: string;
+    /** Replaces getStarted for people already signed in to the console. */
+    open: string;
     language: string;
     menu: string;
     sections: string;
@@ -81,6 +83,20 @@ export type HomeMessages = {
     more: string;
     cta: string;
     items: { name: string; title: string }[];
+  };
+  compare: {
+    label: string;
+    title: string;
+    line: string;
+    /** One per row of `compareRows` in content/compare, in the same order. */
+    rows: string[];
+    /** Screen-reader words for a tick and a cross. */
+    yes: string;
+    no: string;
+    /** Labels the last row, which counts each column's ticks. */
+    score: string;
+    /** The button under the table. */
+    cta: string;
   };
   benchmarks: {
     label: string;

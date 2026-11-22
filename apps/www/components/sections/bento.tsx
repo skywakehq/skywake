@@ -42,7 +42,6 @@ export function Bento({ t }: { t: HomeMessages }) {
       <Head
         id="features"
         line={b.line}
-        eyebrow={b.label}
         title={
           <>
             <Title before={b.titleBefore} accent={b.titleAccent} /> <Fire />

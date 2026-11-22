@@ -133,7 +133,9 @@ function Storage() {
         <span
           key={d.agent}
           className="absolute top-1/2 left-1/2"
-          style={{ translate: `calc(${d.from.x}px - 50%) calc(${d.from.y + 40}px - 50%)` }}
+          style={{
+            translate: `calc(${d.from.x / 150} * min(150px, 30vw) - 50%) calc(${d.from.y + 40}px - 50%)`,
+          }}
         >
           <motion.span
             className="block"
@@ -150,7 +152,7 @@ function Storage() {
         transition={{ delay: 0.55, duration: 0.35 }}
         className="relative translate-y-10 origin-bottom"
       >
-        <FolderIcon className="w-44 drop-shadow-[0_14px_18px_rgb(0_0_0/0.3)]" />
+        <FolderIcon className="w-36 sm:w-44" />
       </motion.div>
       {!still && (
         <motion.span

@@ -8,7 +8,12 @@ import { DESTROY, READ, WRITE, guarded, json, text } from "./results.ts";
 
 const disk = z.string().optional().describe("The disk. SKYWAKE_DISK by default.");
 
-export function fileTools(server: McpServer, places: Places, write: boolean) {
+/**
+ * Registers the disk tools. `write` says whether the key may write; it is asked
+ * while the client connects, so the write tools are there from the start and
+ * are taken away if the key turns out to be read-only.
+ */
+export function fileTools(server: McpServer, places: Places, write: Promise<boolean>) {
   server.registerTool(
     "read",
     {
@@ -122,8 +127,9 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
     "bash",
     { description: BASH_DESCRIPTION, inputSchema: { command: z.string(), disk } },
     guarded(async ({ command, disk }) => {
-      const shell = await places.shell(disk, write);
-      const ran = await shell.run(command, write ? { commit: command } : {});
+      const writes = await write;
+      const shell = await places.shell(disk, writes);
+      const ran = await shell.run(command, writes ? { commit: command } : {});
       const body = [ran.stdout, ran.stderr && `stderr:\n${ran.stderr}`, `exit ${ran.exitCode}`]
         .filter(Boolean)
         .join("\n");
@@ -131,71 +137,75 @@ export function fileTools(server: McpServer, places: Places, write: boolean) {
     }),
   );
 
-  if (!write) return;
-
-  server.registerTool(
-    "write",
-    {
-      description:
-        "Writes files, as one commit. Without SKYWAKE_BRANCH it writes to this session's own branch.",
-      inputSchema: {
-        files: z.record(z.string(), z.string()),
-        message: z.string().optional(),
-        disk,
+  const writers = [
+    server.registerTool(
+      "write",
+      {
+        description:
+          "Writes files, as one commit. Without SKYWAKE_BRANCH it writes to this session's own branch.",
+        inputSchema: {
+          files: z.record(z.string(), z.string()),
+          message: z.string().optional(),
+          disk,
+        },
+        annotations: WRITE,
       },
-      annotations: WRITE,
-    },
-    guarded(async ({ files, message, disk }) =>
-      json(await (await places.writing(disk)).write(files, { message })),
-    ),
-  );
-
-  server.registerTool(
-    "delete",
-    {
-      description: "Deletes files or folders, as one commit.",
-      inputSchema: { paths: z.array(z.string()), message: z.string().optional(), disk },
-      annotations: DESTROY,
-    },
-    guarded(async ({ paths, message, disk }) =>
-      json(await (await places.writing(disk)).delete(paths, { message })),
-    ),
-  );
-
-  server.registerTool(
-    "fork",
-    {
-      description: "Forks the branch in use into a new one, and works there from now on.",
-      inputSchema: { name: z.string(), disk },
-      annotations: WRITE,
-    },
-    guarded(async ({ name, disk }) => {
-      const forked = await (await places.reading(disk)).fork(name);
-      places.use(disk, forked.branch);
-      return json({ disk: forked.name, branch: forked.branch });
-    }),
-  );
-
-  server.registerTool(
-    "merge",
-    {
-      description:
-        "Merges the branch in use into another, main by default. Conflicts are listed, not guessed.",
-      inputSchema: {
-        into: z.string().optional(),
-        message: z.string().optional(),
-        prefer: z.enum(["ours", "theirs"]).optional(),
-        dry_run: z.boolean().optional(),
-        disk,
-      },
-      annotations: WRITE,
-    },
-    guarded(async ({ into, message, prefer, dry_run, disk }) =>
-      json(
-        await (
-          await places.writing(disk)
-        ).mergeInto(into ?? "main", { message, prefer, dryRun: dry_run }),
+      guarded(async ({ files, message, disk }) =>
+        json(await (await places.writing(disk)).write(files, { message })),
       ),
     ),
+
+    server.registerTool(
+      "delete",
+      {
+        description: "Deletes files or folders, as one commit.",
+        inputSchema: { paths: z.array(z.string()), message: z.string().optional(), disk },
+        annotations: DESTROY,
+      },
+      guarded(async ({ paths, message, disk }) =>
+        json(await (await places.writing(disk)).delete(paths, { message })),
+      ),
+    ),
+
+    server.registerTool(
+      "fork",
+      {
+        description: "Forks the branch in use into a new one, and works there from now on.",
+        inputSchema: { name: z.string(), disk },
+        annotations: WRITE,
+      },
+      guarded(async ({ name, disk }) => {
+        const forked = await (await places.reading(disk)).fork(name);
+        places.use(disk, forked.branch);
+        return json({ disk: forked.name, branch: forked.branch });
+      }),
+    ),
+
+    server.registerTool(
+      "merge",
+      {
+        description:
+          "Merges the branch in use into another, main by default. Conflicts are listed, not guessed.",
+        inputSchema: {
+          into: z.string().optional(),
+          message: z.string().optional(),
+          prefer: z.enum(["ours", "theirs"]).optional(),
+          dry_run: z.boolean().optional(),
+          disk,
+        },
+        annotations: WRITE,
+      },
+      guarded(async ({ into, message, prefer, dry_run, disk }) =>
+        json(
+          await (
+            await places.writing(disk)
+          ).mergeInto(into ?? "main", { message, prefer, dryRun: dry_run }),
+        ),
+      ),
+    ),
+  ];
+  write.then(
+    (yes) => yes || writers.forEach((tool) => tool.remove()),
+    () => {},
   );
 }
