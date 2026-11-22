@@ -27,6 +27,7 @@ export interface Config {
   heads?: { nodes: string[]; token: string };
   embed?: Provider;
   embedModel?: string;
+  queryEmbed?: Provider;
   rerank?: Provider;
   vendors?: Vendors;
   prices?: Partial<Prices>;
@@ -153,6 +154,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     heads: heads(values.SKYWAKE_HEADS, values.SKYWAKE_CACHE_NODES, values.SKYWAKE_CACHE_TOKEN),
     embed: provider(values.SKYWAKE_API_EMBED_URL, values.SKYWAKE_API_EMBED_KEY),
     embedModel: values.SKYWAKE_API_EMBED_MODEL,
+    queryEmbed: values.SKYWAKE_API_EMBED_MODEL
+      ? provider(values.SKYWAKE_API_QUERY_EMBED_URL, undefined)
+      : undefined,
     rerank: provider(values.SKYWAKE_API_RERANK_URL, values.SKYWAKE_API_RERANK_KEY),
     vendors: vendors(values.SKYWAKE_API_PROVIDERS),
     prices: prices(values.SKYWAKE_API_PRICES),

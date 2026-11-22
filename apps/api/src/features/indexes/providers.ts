@@ -131,7 +131,7 @@ function dataUrl(image: string, vendor: string) {
   throw new HttpError(400, `${vendor} models take images as base64 \`data:image/...\` URLs`);
 }
 
-function byIndex(data: unknown, field: string): unknown[] {
+export function byIndex(data: unknown, field: string): unknown[] {
   if (!Array.isArray(data)) return [];
   const sorted = data.every((item) => typeof item?.index === "number")
     ? [...data].sort((a, b) => a.index - b.index)
