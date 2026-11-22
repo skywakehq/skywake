@@ -19,7 +19,6 @@ export default async function NotFound() {
       </div>
       <Head
         as="h1"
-        eyebrow={t.notFound.label}
         title={<Title before={t.notFound.title} accent={t.notFound.line} />}
         action={
           <Link href={localizePath(locale)} className="btn btn-primary">

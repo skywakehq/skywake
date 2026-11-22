@@ -4,7 +4,7 @@ export const pages = {
   "/": {
     title: "Skywake: A shared disk for AI agents, with search built in",
     description:
-      "An open-source shared disk for AI agents. Mount it on any machine, let every agent read and write the same files, and search them by meaning or exact words. On your own S3 bucket.",
+      "An open-source shared disk for AI agents. Mount it on any machine, let every agent read and write the same files, and search them by meaning or exact words.",
     priority: 1,
   },
   "/use-cases": {

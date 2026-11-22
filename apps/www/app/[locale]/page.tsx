@@ -1,5 +1,6 @@
 import { FileJourney } from "@/components/art/file-journey";
 import { SitePage } from "@/components/layout/site-page";
+import { Compare } from "@/components/sections/compare";
 import { Cost } from "@/components/sections/cost";
 import { GetStarted } from "@/components/sections/get-started";
 import { Bento } from "@/components/sections/bento";
@@ -8,6 +9,7 @@ import { Numbers } from "@/components/sections/numbers";
 import { OpenSource } from "@/components/sections/open-source";
 import { SearchSection } from "@/components/sections/search";
 import { Shared } from "@/components/sections/shared";
+import { CtaRow } from "@/components/ui/cta-row";
 import { UseCases } from "@/components/sections/use-cases";
 import { getMessages } from "@/content/messages";
 import { pageMetadata } from "@/lib/metadata";
@@ -33,11 +35,17 @@ export default async function Home({ params }: PageProps<"/[locale]">) {
         <Hero t={t} />
         <Shared t={t} />
       </FileJourney>
-      <SearchSection t={t} />
+      <CtaRow t={t} className="mt-12" />
+      {/* Promise, then the aha, then what you'd use it for, proof, depth, objections, and the ask. */}
       <UseCases t={t} locale={locale} />
-      <Bento t={t} />
       <Numbers t={t} />
+      <CtaRow t={t} className="mt-14" />
+      <SearchSection t={t} />
+      <Bento t={t} />
+      <CtaRow t={t} className="mt-12" />
+      <Compare t={t} />
       <Cost t={t} />
+      <CtaRow t={t} className="mt-12" />
       <OpenSource t={t} />
       <GetStarted t={t} />
     </SitePage>

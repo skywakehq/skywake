@@ -43,7 +43,7 @@ export const AGENTS: Agent[] = [
 export function AgentLogo({ agent, className = "size-6" }: { agent: Agent; className?: string }) {
   return (
     <span
-      className={`grid shrink-0 place-items-center rounded-[24%] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12),0_1px_2px_rgb(0_0_0/0.3)] ${className}`}
+      className={`grid shrink-0 place-items-center rounded-[24%] shadow-[inset_0_0_0_1px_rgb(127_127_127/0.2)] ${className}`}
       style={{ background: agent.tile }}
     >
       <svg viewBox="0 0 24 24" aria-hidden className="size-[60%]" style={{ fill: agent.ink }}>

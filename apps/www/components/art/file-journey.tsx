@@ -14,6 +14,7 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -24,10 +25,10 @@ export const PAPER = { left: 0.1, top: 0.12, width: 0.8, height: 0.7 };
 export const PAPER_RISE = 0.85;
 export const DROP_PX = 180;
 
-const OPEN: [number, number] = [0, 70];
-const OUT = 170;
-const CLOSE: [number, number] = [200, 270];
-const SETTLE = 200;
+const OPEN: [number, number] = [0, 40];
+const OUT = 100;
+const CLOSE: [number, number] = [120, 180];
+const SETTLE = 100;
 
 type Box = { x: number; y: number; w: number; h: number };
 type Geo = {
@@ -108,6 +109,8 @@ export function JourneyPaper() {
 const span = (y: number, [a, b]: [number, number]) => Math.min(1, Math.max(0, (y - a) / (b - a)));
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const ease = (t: number) => t * t * (3 - 2 * t);
+/** Eases out only: already moving at the start, so it picks up the climb's speed. */
+const glide = (t: number) => t * (0.6 + t * (1.8 - 1.4 * t));
 
 function hermite(at: number, a: number, b: number, y0: number, y1: number, m0: number, m1: number) {
   const h = b - a;
@@ -126,8 +129,13 @@ function height(g: Geo, at: number) {
   const drop = (g.slot - g.to.y) / (g.done - g.land);
   const travel = (g.to.y - g.from.y) / (g.land - OUT);
   const arrive = (travel + drop) / 2;
-  if (at <= OUT) return hermite(Math.max(at, 0), 0, OUT, g.rest, g.from.y, 0, 0);
-  if (at <= g.land) return hermite(at, OUT, g.land, g.from.y, g.to.y, 0, arrive);
+  // The climb and the flight are shaped on screen (page position minus scroll),
+  // which is what the eye follows. The climb tops out level as the file leaves
+  // the folder, while it is already moving sideways, then the flight falls
+  // smoothly into the disk. No point where it hangs, and the peak stays in view.
+  if (at <= OUT) return hermite(Math.max(at, 0), 0, OUT, g.rest, g.from.y - OUT, -1, 0) + at;
+  if (at <= g.land)
+    return hermite(at, OUT, g.land, g.from.y - OUT, g.to.y - g.land, 0, arrive - 1) + at;
   return hermite(Math.min(at, g.done), g.land, g.done, g.to.y, g.slot, arrive, 0);
 }
 
@@ -192,11 +200,12 @@ export function FileJourney({ children }: { children: ReactNode }) {
       if (!g) return;
       const now = height(g, at);
       const t = span(at, [OUT, g.land]);
-      const sway = Math.sin(t * Math.PI * 2) * Math.sin(t * Math.PI);
+      // Already swinging as it leaves the folder, so the level top of the climb never reads as a pause.
+      const sway = Math.sin(t * Math.PI) * (1 - t);
       heroY.set(at < OUT ? now - g.rest : g.from.y - g.rest);
       heroOpacity.set(at < OUT ? 1 : 0);
       opacity.set(at >= OUT && at < g.land ? 1 : 0);
-      x.set(mix(g.from.x, g.to.x, ease(t)) + sway * g.arc);
+      x.set(mix(g.from.x, g.to.x, glide(t)) + sway * g.arc);
       y.set(now);
       rotate.set(sway * 12);
       scale.set(mix(1, g.to.w / g.from.w, ease(t)));
@@ -217,7 +226,13 @@ export function FileJourney({ children }: { children: ReactNode }) {
     if (still || !root) return;
     const update = () => {
       geo.current = measure(root);
-      if (geo.current) setSize({ w: geo.current.from.w, h: geo.current.from.h });
+      const g = geo.current;
+      if (g)
+        setSize((old) =>
+          old && Math.abs(old.w - g.from.w) < 0.5 && Math.abs(old.h - g.from.h) < 0.5
+            ? old
+            : { w: g.from.w, h: g.from.h },
+        );
       apply(window.scrollY);
     };
     update();
@@ -226,10 +241,15 @@ export function FileJourney({ children }: { children: ReactNode }) {
     return () => observer.disconnect();
   }, [still, apply]);
 
+  const journey = useMemo(
+    () => ({ heroFlap, heroY, heroOpacity, diskFlap, diskY, diskOpacity, landed }),
+    [heroFlap, heroY, heroOpacity, diskFlap, diskY, diskOpacity, landed],
+  );
+
   if (still) return children;
 
   return (
-    <JourneyContext value={{ heroFlap, heroY, heroOpacity, diskFlap, diskY, diskOpacity, landed }}>
+    <JourneyContext value={journey}>
       <div ref={ref} className="relative">
         {children}
         {size && (

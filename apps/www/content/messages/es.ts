@@ -5,7 +5,7 @@ export const es: HomeMessages = {
     "/": {
       title: "Skywake: un disco compartido para agentes de IA, con búsqueda integrada",
       description:
-        "Un disco compartido y open source para agentes de IA. Móntalo en cualquier máquina, todos los agentes leen y escriben los mismos archivos, y puedes buscar en ellos. En tu propio bucket S3.",
+        "Un disco compartido y open source para agentes de IA. Móntalo en cualquier máquina, todos los agentes leen y escriben los mismos archivos, y puedes buscar en ellos.",
     },
     "/use-cases": {
       title: "Casos de uso: bases de conocimiento, memoria de agentes, agentes de código y más",
@@ -32,6 +32,7 @@ export const es: HomeMessages = {
     github: "GitHub",
     joinWaitlist: "Lista de espera",
     getStarted: "Empezar",
+    open: "Abrir",
     language: "Idioma",
     menu: "Menú",
     sections: "Secciones",
@@ -39,7 +40,7 @@ export const es: HomeMessages = {
   },
   footer: {
     blurb:
-      "Un disco compartido para agentes de IA, con búsqueda integrada. Open source, en tu propio bucket.",
+      "Un disco compartido para agentes de IA, con búsqueda integrada. Open source.",
     product: "Producto",
     project: "Proyecto",
     legal: "Legal",
@@ -51,7 +52,7 @@ export const es: HomeMessages = {
   },
   hero: {
     badge: "Skywake Cloud está en camino. Únete a la lista de espera",
-    titleBefore: "Discos infinitos",
+    titleBefore: "Discos duraderos",
     titleAccent: "para agentes de IA.",
     getStartedCta: "Empezar",
     waitlistCta: "Únete a la lista de espera",
@@ -61,7 +62,7 @@ export const es: HomeMessages = {
 
   shared: {
     label: "Disco compartido",
-    line: "Monta una carpeta en cada máquina. Lo que escribe un agente, los demás lo pueden leer.",
+    line: "Móntala en tu portátil, en un sandbox o en un runner de CI. Un archivo guardado en uno aparece en todos los demás.",
     titleBefore: "Un disco.",
     titleAccent: "Todos los agentes.",
     write: "Escribir",
@@ -71,7 +72,7 @@ export const es: HomeMessages = {
   },
   searchDemo: {
     label: "Búsqueda",
-    line: "Cada archivo se indexa al guardarse. Busca por significado, palabras exactas o ambos.",
+    line: "Cada archivo se indexa al guardarse. Busca con tus propias palabras o por el texto exacto.",
     titleBefore: "¡Nuestros discos se buscan",
     titleAccent: "por significado!",
     modes: ["Significado", "Palabras exactas", "Ambas"],
@@ -84,7 +85,7 @@ export const es: HomeMessages = {
   },
   bento: {
     label: "Funciones",
-    line: "Tus herramientas funcionan como en cualquier carpeta. Y hace lo que una carpeta no puede.",
+    line: "ls, grep y git funcionan como en cualquier carpeta. Además tienes protección ante caídas, ramas y búsqueda.",
     titleBefore: "Se siente como una carpeta.",
     titleAccent: "Hace mucho más.",
     items: [
@@ -98,7 +99,7 @@ export const es: HomeMessages = {
   },
   useCases: {
     label: "Casos de uso",
-    line: "Bases de conocimiento, memoria de agentes, almacenamiento compartido, agentes de código y rollouts de RL.",
+    line: "Elige uno para ver cómo los agentes comparten archivos en él.",
     heading: ["Lo que puedes construir", "con Skywake."],
     more: "Ver todos los casos de uso",
     cta: "Saber más",
@@ -125,9 +126,26 @@ export const es: HomeMessages = {
       },
     ],
   },
+  compare: {
+    label: "Comparativa",
+    title: "Dropbox es para personas. Skywake es para agentes.",
+    line: "Pon diez agentes en una carpeta de Dropbox y tendrás copias en conflicto, nada de búsqueda y nada a lo que volver. Skywake está hecho justo para eso.",
+    rows: [
+      "Guarda archivos grandes",
+      "Móntalo en un sandbox",
+      "Nativo para agentes",
+      "Agentes en paralelo",
+      "Búsqueda vectorial y de texto completo",
+      "Código abierto",
+    ],
+    yes: "Sí",
+    no: "No",
+    score: "Puntuación",
+    cta: "Pruébalo con tus agentes",
+  },
   benchmarks: {
     label: "Benchmarks",
-    line: "Medido en AWS, con el bucket en la misma región. Cada ejecución está publicada con el comando para repetirla.",
+    line: "Medido en AWS, con el cliente, el servidor y el bucket en la misma región.",
     title: "Velocidad de disco local, medida desde tu bucket.",
     claims: [
       {
@@ -184,18 +202,18 @@ export const es: HomeMessages = {
   openSource: {
     label: "Open source",
     title: "Apache 2.0. Ejecútalo tú mismo hoy.",
-    line: "Instálalo en tu infraestructura con Docker o Kubernetes, sobre tu propio almacenamiento de objetos.",
+    line: "Instálalo con Docker o Kubernetes y conéctalo a tu propio bucket de almacenamiento.",
     star: "Dar estrella en GitHub",
   },
   waitlist: {
     eyebrow: "Skywake Cloud",
     title: "Skywake gestionado está en camino. Entérate primero.",
-    line: "Únete a la lista de espera para archivos y búsqueda alojados.",
+    line: "Nosotros lo gestionamos por ti. Deja tu email y te avisamos cuando abra.",
     selfHost: "Instálalo tú mismo con la documentación",
     star: "Dar estrella en GitHub",
     openTitle: "Empieza a construir con Skywake.",
     openLine:
-      "Un disco compartido para todos tus agentes, con búsqueda integrada, en tu propio bucket.",
+      "Un disco compartido para todos tus agentes, con búsqueda integrada.",
     openCta: "Empezar",
     form: {
       email: "Correo electrónico",

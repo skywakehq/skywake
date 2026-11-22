@@ -14,13 +14,12 @@ export function UseCases({ t, locale }: { t: HomeMessages; locale: Locale }) {
   const u = t.useCases;
   const href = localizePath(locale, "/use-cases");
   return (
-    <Band id="use-cases" className="pt-24 lg:pt-36">
+    <Band id="use-cases" className="pt-16 sm:pt-24 lg:pt-36">
       <UseCaseScroller
         head={
           <Head
             className="pt-0 pb-8 lg:pt-0 lg:pb-10"
             line={u.line}
-            eyebrow={u.label}
             title={<Title before={u.heading[0]} accent={u.heading[1]} />}
           />
         }

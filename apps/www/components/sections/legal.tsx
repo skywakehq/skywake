@@ -25,7 +25,16 @@ export function Legal({ t, page }: { t: HomeMessages; page: "privacy" | "terms" 
 
   return (
     <>
-      <Head as="h1" eyebrow={legal.updated} title={title} line={intro} />
+      <Head
+        as="h1"
+        title={title}
+        line={
+          <>
+            {intro}
+            <span className="t-small mt-3 block">{legal.updated}</span>
+          </>
+        }
+      />
       <Band className="panel px-6 py-12 sm:px-10 lg:py-16">
         <div className="t-body mx-auto max-w-[68ch] text-muted-foreground [&_a]:text-foreground [&_a]:underline">
           {sections.map((section, i) => (

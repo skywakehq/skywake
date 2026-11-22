@@ -10,7 +10,8 @@ const dashboard = {
 };
 
 const docsLink = process.env.DOCS_LINK ?? (docs.url ? docs.path : "https://skywake.dev/docs");
-const consoleLink = process.env.CONSOLE_LINK ?? (dashboard.url ? dashboard.path : "");
+// With no console zone wired up (local dev), buttons still point at where it would live.
+const consoleLink = process.env.CONSOLE_LINK ?? dashboard.path;
 const siteUrl = process.env.SITE_URL ?? "https://skywake.dev";
 
 const nextConfig: NextConfig = {
@@ -32,8 +33,8 @@ const nextConfig: NextConfig = {
     DOCS_LINK: docsLink,
     CONSOLE_LINK: consoleLink,
     SITE_URL: siteUrl,
-    // Skywake Cloud: off shows the waitlist, on (`1`) links to the console.
-    CLOUD_OPEN: process.env.CLOUD_OPEN ?? "",
+    // Skywake Cloud: on by default, linking to the console; `0` shows the waitlist instead.
+    CLOUD_OPEN: process.env.CLOUD_OPEN ?? "1",
   },
   async redirects() {
     return [

@@ -1,49 +1,66 @@
 import { ArrowRight } from "lucide-react";
 
 import { FolderShot } from "@/components/art/folder-shot";
+import { ConsoleLink } from "@/components/ui/console-link";
+import { AGENTS } from "@/components/ui/agent-logos";
 import { InfinityLoop } from "@/components/ui/infinity-loop";
 import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
 
+/** The agents named under the hero: the few most people use. */
+const POPULAR = ["Claude Code", "Codex", "Cursor", "Gemini", "Copilot", "Windsurf"];
+
 export function Hero({ t }: { t: HomeMessages }) {
-  const primary = site.cloudOpen
-    ? { href: site.consoleUrl, label: t.hero.getStartedCta }
-    : { href: "#waitlist", label: t.hero.waitlistCta };
+  const button = "btn btn-primary";
   return (
-    <section className="relative isolate overflow-hidden pb-24">
+    <section className="relative isolate overflow-hidden pb-12 sm:pb-24">
       <div className="flex flex-col items-center px-6 pt-14 text-center sm:px-10 lg:pt-20">
-        {!site.cloudOpen && (
-          <a
-            href="#waitlist"
-            className="t-small mb-8 inline-flex items-center gap-2 rounded-full bg-(--soft) py-1.5 pr-3 pl-3 ring-1 ring-(--hairline) backdrop-blur"
-          >
-            <span aria-hidden className="size-1.5 rounded-full bg-signal" />
-            <span className="shimmer-text">{t.hero.badge}</span>
-            <ArrowRight className="size-3.5 text-muted-foreground" />
-          </a>
-        )}
         <h1 className="t-hero text-foreground">
           {t.hero.titleBefore}
           <InfinityLoop className="mx-[0.14em] inline-block h-[0.6em] w-auto -translate-y-[0.04em] align-baseline" />
           <span className="text-muted-foreground">{t.hero.titleAccent}</span>
         </h1>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href={primary.href}
-            className="inline-flex h-11 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-85"
-          >
-            {primary.label}
-            <ArrowRight className="size-4" />
-          </a>
+          {site.cloudOpen ? (
+            <ConsoleLink
+              className={button}
+              getStarted={t.hero.getStartedCta}
+              open={t.nav.open}
+              icon={<ArrowRight className="size-4" />}
+            />
+          ) : (
+            <a href="#waitlist" className={button}>
+              {t.hero.waitlistCta}
+              <ArrowRight className="size-4" />
+            </a>
+          )}
           <a
             href={site.docsUrl}
-            className="inline-flex h-11 items-center rounded-full bg-background/40 px-5 text-sm font-medium text-foreground ring-1 ring-border backdrop-blur transition-colors hover:bg-(--soft)"
+            className="btn btn-secondary"
           >
             {t.hero.docsCta}
           </a>
         </div>
-        <div className="mt-16 w-full">
-          <FolderShot worksWith={t.hero.worksWith} />
+        <div className="mt-12 grid w-full justify-items-center sm:mt-16">
+          <FolderShot />
+        </div>
+        <div className="mt-10 grid w-full max-w-5xl justify-items-center sm:mt-16">
+          <ul
+            aria-label={t.hero.worksWith}
+            className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4"
+          >
+            {AGENTS.filter((agent) => POPULAR.includes(agent.name)).map((agent) => (
+              <li
+                key={agent.name}
+                className="flex items-center gap-2 text-[15px] font-medium tracking-tight text-muted-foreground/80 transition-colors hover:text-foreground"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden className="size-[18px] fill-current">
+                  <path d={agent.icon.path} />
+                </svg>
+                {agent.name}
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

@@ -4,12 +4,13 @@ import type { HomeMessages } from "@/content/messages";
 import { site } from "@/content/site";
 import { FolderIcon } from "@/components/ui/folder-icon";
 import { Band } from "@/components/ui/frame";
+import { ConsoleLink } from "@/components/ui/console-link";
 import { Head } from "@/components/ui/statement";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
   { href: site.docsUrl, featured: false },
-  { href: "#waitlist", featured: true },
+  { href: site.cloudOpen ? site.consoleUrl : "#waitlist", featured: true },
 ];
 
 /** Pricing while the cloud is in private beta: free self-hosting, and the cloud to come. */
@@ -18,7 +19,7 @@ export function Plans({ t }: { t: HomeMessages }) {
   const options = p.options.map((option, i) => ({ ...option, ...LINKS[i]! }));
   return (
     <>
-      <Head as="h1" id="pricing" eyebrow={p.eyebrow} title={p.title} line={p.line} />
+      <Head as="h1" id="pricing" title={p.title} line={p.line} />
       <Band>
         <ol className="grid gap-4 md:grid-cols-2">
           {options.map((option) => (
@@ -47,6 +48,14 @@ export function Plans({ t }: { t: HomeMessages }) {
                 ))}
               </ul>
               <div className="mt-auto pt-12">
+                {option.featured && site.cloudOpen ? (
+                  <ConsoleLink
+                    className="btn btn-primary"
+                    getStarted={t.nav.getStarted}
+                    open={t.nav.open}
+                    icon={<ArrowRight className="size-4" />}
+                  />
+                ) : (
                 <a
                   href={option.href}
                   className={`btn ${option.featured ? "btn-primary" : "btn-secondary"}`}
@@ -58,6 +67,7 @@ export function Plans({ t }: { t: HomeMessages }) {
                     <ArrowUpRight className="size-4" />
                   )}
                 </a>
+                )}
               </div>
             </li>
           ))}

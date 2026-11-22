@@ -31,7 +31,6 @@ export function Cost({ t }: { t: HomeMessages }) {
     <>
       <Head
         id="cost"
-        eyebrow={t.cost.label}
         title={
           <>
             {figure(`${Math.round((1 - oursGb / copiesGb) * 100)}%`)} {words.storage} {words.and}{" "}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLenis } from "lenis/react";
 import { ArrowRight } from "lucide-react";
 import {
   AnimatePresence,
@@ -11,7 +12,7 @@ import {
   useTransform,
 } from "motion/react";
 import Link from "next/link";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { FolderIcon } from "@/components/ui/folder-icon";
 import { cn } from "@/lib/utils";
@@ -65,7 +66,9 @@ export function UseCaseScroller({
   cta: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const tabs = useRef<HTMLUListElement>(null);
   const still = useReducedMotion() ?? false;
+  const lenis = useLenis();
   const [open, setOpen] = useState(0);
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
 
@@ -73,27 +76,39 @@ export function UseCaseScroller({
     setOpen(Math.min(items.length - 1, Math.max(0, Math.floor(progress * items.length))));
   });
 
+  // On phones the tabs scroll sideways: keep the open one in view.
+  useEffect(() => {
+    const list = tabs.current;
+    const tab = list?.children[open] as HTMLElement | undefined;
+    if (!list || !tab || list.scrollWidth <= list.clientWidth) return;
+    list.scrollTo({ left: tab.offsetLeft - 16, behavior: still ? "auto" : "smooth" });
+  }, [open, still]);
+
   const jump = (i: number) => {
     const el = ref.current;
     if (!el) return;
     const top = el.getBoundingClientRect().top + window.scrollY;
     const span = el.offsetHeight - window.innerHeight;
-    window.scrollTo({
-      top: top + (span * (i + 0.5)) / items.length,
-      behavior: still ? "auto" : "smooth",
-    });
+    const target = top + (span * (i + 0.5)) / items.length;
+    if (lenis) lenis.scrollTo(target);
+    else window.scrollTo({ top: target, behavior: still ? "auto" : "smooth" });
   };
 
   const item = items[open]!;
   return (
-    <div ref={ref} style={{ height: `${items.length * 40 + 100}vh` }} className="relative">
+    <div
+      ref={ref}
+      style={{ height: `calc(${items.length} * var(--per-item) + 100vh)` }}
+      className="relative [--per-item:22vh] lg:[--per-item:40vh]"
+    >
       <div className="sticky top-24 flex h-[calc(100svh-7rem)] min-h-[40rem] flex-col pb-6">
         {head}
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)] lg:grid-rows-1">
           <div className="flex min-w-0 flex-col gap-4">
             <ul
+              ref={tabs}
               role="tablist"
-              className="flex gap-1 overflow-x-auto [scrollbar-width:none] lg:flex-col"
+              className="flex gap-1 overflow-x-auto [scrollbar-width:none] max-lg:[mask-image:linear-gradient(to_right,black_85%,transparent)] lg:flex-col"
             >
               {items.map((entry, i) => (
                 <li key={entry.key} className="shrink-0">
@@ -144,7 +159,7 @@ export function UseCaseScroller({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -16, transition: { duration: 0.15 } }}
                 transition={{ duration: 0.3 }}
-                className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-6 sm:p-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-rows-1 lg:items-center lg:gap-10 lg:p-12"
+                className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-6 pt-14 sm:p-8 sm:pt-16 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:grid-rows-1 lg:items-center lg:gap-10 lg:p-12"
               >
                 <div>
                   <h3 className="t-h2 max-w-[16ch] text-balance text-foreground">{item.title}</h3>

@@ -12,7 +12,6 @@ export function Shared({ t }: { t: HomeMessages }) {
       <Head
         id="shared"
         line={s.line}
-        eyebrow={s.label}
         title={
           <Title
             before={s.titleBefore}

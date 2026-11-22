@@ -23,7 +23,6 @@ export function SearchSection({ t }: { t: HomeMessages }) {
       <Head
         id="search"
         line={s.line}
-        eyebrow={s.label}
         title={
           <Title
             before={s.titleBefore}
