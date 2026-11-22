@@ -20,6 +20,9 @@ services:
       SKYWAKE_INDEX_CACHE_DIR: /cache
       SKYWAKE_INDEX_CACHE_GB: ${CACHE_GB:-40}
       SKYWAKE_FILES_MEMORY_MB: ${FILES_MEMORY_MB:-2048}
+      # Search: the embedding provider's key, and the model new disks search with.
+      SKYWAKE_API_PROVIDERS: ${SKYWAKE_API_PROVIDERS:?set SKYWAKE_API_PROVIDERS in .env}
+      SKYWAKE_API_EMBED_MODEL: ${SKYWAKE_API_EMBED_MODEL:?set SKYWAKE_API_EMBED_MODEL in .env}
     volumes: [cache:/cache]
 
   console:
