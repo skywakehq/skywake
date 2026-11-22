@@ -117,6 +117,7 @@ export class Authenticator {
       address: claims.ip,
       memberships: Object.fromEntries(memberships),
       ...(claims.email ? { email: claims.email } : {}),
+      ...(claims.sso ? { sso: claims.sso } : {}),
     };
   }
 }

@@ -15,6 +15,22 @@ const config: NextConfig = {
   transpilePackages: ["@skywake/ui"],
   // pg is a Node package; keep it out of the server bundle.
   serverExternalPackages: ["pg"],
+  // No page may be framed: a framed "Approve" or "Make key" button could be clicked
+  // through a decoy. Links out send only the origin, never a sign-in code or invite.
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
 };
 
 export default config;

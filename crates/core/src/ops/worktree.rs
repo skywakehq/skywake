@@ -350,7 +350,8 @@ async fn write_file(
     file.flush().await?;
     let file = file.into_std().await;
     tokio::task::spawn_blocking(move || -> io::Result<()> {
-        file.set_permissions(Permissions::from_mode(permissions(mode)))?;
+        // Never setuid, setgid or sticky: a writer of the disk chose these bits.
+        file.set_permissions(Permissions::from_mode(permissions(mode) & 0o777))?;
         file.set_modified(UNIX_EPOCH + Duration::from_nanos(modified_ns))
     })
     .await

@@ -41,9 +41,11 @@ export async function list(c: Ctx, query: { prefix?: string; cursor?: string; si
   const hidden = new Set(rows.filter((row) => row.hidden).map((row) => row.name));
   const all = [
     ...(await indexes.list(db, caller.org))
-      .filter((row) => mayUse(caller, row.name) && !hidden.has(row.name))
+      .filter((row) => mayUse(caller, row.name, "index") && !hidden.has(row.name))
       .map((row) => row.name),
-    ...rows.filter((row) => !row.hidden && mayUse(caller, row.index)).map((row) => row.name),
+    ...rows
+      .filter((row) => !row.hidden && mayUse(caller, row.index, "index"))
+      .map((row) => row.name),
   ].sort();
   const { prefix = "", cursor, size } = query;
   const after = all.filter((name) => name.startsWith(prefix) && (!cursor || name > cursor));

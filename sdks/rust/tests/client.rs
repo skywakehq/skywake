@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -339,4 +340,66 @@ async fn restore_to_a_time_picks_the_newest_commit_at_or_before_it() {
         api.seen()[1].json(),
         json!({ "to": "c2", "branch": "main" })
     );
+}
+
+fn disk_tree(seen: &Seen) -> Response {
+    if seen.path.starts_with("/v2/disks/app/files/") {
+        return (StatusCode::OK, "from the disk").into_response();
+    }
+    let listing = match seen.query.get("path").map(String::as_str).unwrap_or("") {
+        "" => json!([
+            { "path": "a", "kind": "folder" },
+            { "path": "link", "kind": "symlink", "target": "a/x" },
+            { "path": "top", "kind": "file", "size": 13 }
+        ]),
+        "a" => json!([{ "path": "a/x", "kind": "file", "size": 13 }]),
+        _ => json!([]),
+    };
+    ok(json!({ "data": listing, "next": null }))
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_download_never_writes_through_a_symlink() {
+    let api = fake(|seen, _| disk_tree(seen)).await;
+    let sky = api.sky().build().unwrap();
+    let base = std::env::temp_dir().join(format!("skywake-links-{}", std::process::id()));
+    let (into, outside) = (base.join("into"), base.join("outside"));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&into).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+
+    // A clean download: files, then the link.
+    sky.disk("app").download(&into).at("c1").await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(into.join("a/x")).unwrap(),
+        "from the disk"
+    );
+    assert_eq!(
+        std::fs::read_link(into.join("link")).unwrap(),
+        Path::new("a/x")
+    );
+
+    // A folder an earlier download left as a link is refused, not followed.
+    std::fs::remove_dir_all(into.join("a")).unwrap();
+    std::os::unix::fs::symlink(&outside, into.join("a")).unwrap();
+    let refused = sky.disk("app").download(&into).at("c1").await;
+    assert!(refused.is_err());
+    assert!(!outside.join("x").exists());
+
+    // A file where a link pointing out was is replaced, not written through.
+    std::fs::remove_file(into.join("a")).unwrap();
+    std::fs::write(outside.join("kept"), "mine").unwrap();
+    std::fs::remove_file(into.join("top")).unwrap();
+    std::os::unix::fs::symlink(outside.join("kept"), into.join("top")).unwrap();
+    sky.disk("app").download(&into).at("c1").await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(outside.join("kept")).unwrap(),
+        "mine"
+    );
+    assert_eq!(
+        std::fs::read_to_string(into.join("top")).unwrap(),
+        "from the disk"
+    );
+    std::fs::remove_dir_all(&base).unwrap();
 }

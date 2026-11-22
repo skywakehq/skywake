@@ -193,7 +193,8 @@ export function fileTools(server: McpServer, places: Places, write: Promise<bool
           dry_run: z.boolean().optional(),
           disk,
         },
-        annotations: WRITE,
+        // It changes the branch merged into, main by default, and `prefer` overwrites there.
+        annotations: DESTROY,
       },
       guarded(async ({ into, message, prefer, dry_run, disk }) =>
         json(

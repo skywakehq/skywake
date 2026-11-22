@@ -76,6 +76,18 @@ test("requests go to /v2 with the key and the environment", async (t) => {
   assert.equal(api.seen[0]!.headers["skywake-environment"], "prod");
 });
 
+test("a path can't climb out of its disk with `.` or `..`", async (t) => {
+  const api = await fake(() => ({ raw: Buffer.from("hi") }));
+  t.after(api.close);
+  const app = api.sky().disk("app");
+  await assert.rejects(app.read("../../../keys"), TypeError);
+  await assert.rejects(app.read("docs/./a.md"), TypeError);
+  await assert.rejects(api.sky().disk("..").read("a.md"), TypeError);
+  assert.equal(await app.read("docs/..a.md"), "hi");
+  assert.equal(api.seen.length, 1);
+  assert.equal(api.seen[0]!.path, "/v2/disks/app/files/docs/..a.md");
+});
+
 test("each status becomes its own error, with the hint in the message", async (t) => {
   const replies = [
     failure(401, "unauthorized"),

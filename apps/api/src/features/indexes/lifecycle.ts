@@ -43,7 +43,7 @@ export async function makeIndex(
   asked: NewIndex,
   fill: (target: Target) => Promise<void>,
 ) {
-  allow(caller, "admin", asked.name);
+  allow(caller, "admin", asked.name, "index");
   if (asked.encryption) await requires(c, caller.org, "customer_keys");
   if (asked.pinned) await requires(c, caller.org, "pinning");
   const { db, stores } = c.var.services;

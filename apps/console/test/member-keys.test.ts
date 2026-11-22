@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { APIError } from "better-auth/api";
 
-import { leaverOf, revokeKeysOf } from "../server/member-keys.ts";
+import { demoted, leaverOf, revokeKeysOf } from "../server/member-keys.ts";
 
 process.env.SKYWAKE_API_URL = "http://api.test/v1";
 process.env.SKYWAKE_API_ADMIN_TOKEN = "admin-token";
@@ -40,4 +40,13 @@ test("only a leave that went through names who left", () => {
   const refused = { ...left, context: { session, returned: new APIError("BAD_REQUEST") } };
   assert.equal(leaverOf(refused), null);
   assert.equal(leaverOf({ ...left, path: "/organization/remove-member" }), null);
+});
+
+test("a role change that takes away power is a demotion", () => {
+  assert.ok(demoted("admin", "member"));
+  assert.ok(demoted("owner", "member"));
+  assert.ok(demoted("admin,member", "member"));
+  assert.ok(!demoted("owner", "admin"));
+  assert.ok(!demoted("member", "admin"));
+  assert.ok(!demoted("member", "member"));
 });

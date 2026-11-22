@@ -28,13 +28,16 @@ export class Places {
 
   async reading(asked?: string): Promise<Disk> {
     const name = this.name(asked);
-    const branch = this.#fixed ?? (await this.#working.get(name)) ?? MAIN;
+    // A branch forked to in this session wins over SKYWAKE_BRANCH: the agent moved there.
+    const branch = (await this.#working.get(name)) ?? this.#fixed ?? MAIN;
     return this.#sky.disk(name, { branch });
   }
 
   async writing(asked?: string): Promise<Disk> {
     const name = this.name(asked);
-    if (this.#fixed) return this.#sky.disk(name, { branch: this.#fixed });
+    if (this.#fixed && !this.#working.has(name)) {
+      return this.#sky.disk(name, { branch: this.#fixed });
+    }
     let branch = this.#working.get(name);
     if (!branch) {
       branch = this.#fork(name);
