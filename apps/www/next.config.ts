@@ -12,7 +12,8 @@ const dashboard = {
 const docsLink = process.env.DOCS_LINK ?? (docs.url ? docs.path : "https://skywake.dev/docs");
 // With no console zone wired up (local dev), buttons still point at where it would live.
 const consoleLink = process.env.CONSOLE_LINK ?? dashboard.path;
-const siteUrl = process.env.SITE_URL ?? "https://skywake.dev";
+const consoleOrigin = process.env.CONSOLE_ORIGIN ?? "https://app.skywake.dev";
+const siteUrl =process.env.SITE_URL ?? "https://skywake.dev";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["@skywake/ui"],
@@ -48,6 +49,17 @@ const nextConfig: NextConfig = {
       { source: "/:page(filesystem|search|benchmarks)", destination: "/", permanent: true },
       // The site's llms.txt covers the pages; the docs have the full text.
       { source: "/llms-full.txt", destination: `${docsLink}/llms-full.txt`, permanent: false },
+      // With no console zone behind the site, /dashboard sends people to the console's own host.
+      ...(dashboard.url
+        ? []
+        : [
+            { source: dashboard.path, destination: consoleOrigin, permanent: false },
+            {
+              source: `${dashboard.path}/:path*`,
+              destination: `${consoleOrigin}/:path*`,
+              permanent: false,
+            },
+          ]),
     ];
   },
   async rewrites() {
