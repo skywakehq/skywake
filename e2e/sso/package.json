@@ -15,7 +15,7 @@
     "@skywake/config": "workspace:*",
     "@types/node": "^24.10.1",
     "@xmldom/xmldom": "^0.9.12",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "xml-crypto": "^6.4.0"
   }
 }
