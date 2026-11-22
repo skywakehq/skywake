@@ -7,7 +7,7 @@ on each disk. Java 17+, with Jackson for JSON.
 <dependency>
   <groupId>dev.skywake</groupId>
   <artifactId>skywake</artifactId>
-  <version>0.4.4</version>
+  <version>0.4.5</version>
 </dependency>
 ```
 

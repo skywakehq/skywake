@@ -9,12 +9,12 @@
     "source": "github",
     "subfolder": "packages/skywake"
   },
-  "version": "0.4.4",
+  "version": "0.4.5",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "skywake",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "transport": { "type": "stdio" },
       "packageArguments": [{ "type": "positional", "value": "mcp" }],
       "environmentVariables": [
