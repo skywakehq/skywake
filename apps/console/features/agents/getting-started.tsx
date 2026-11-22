@@ -1,16 +1,16 @@
 "use client";
 
 import { Check, Lock, Plug, X } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { FolderBack, FolderFront } from "@skywake/ui/components/folder-icon";
 import { Link, navigate } from "@/components/shell/router";
 import { Button, cx } from "@/components/kit";
 import { nameInEnv } from "@/lib/names";
 import { nsPath } from "@/lib/paths";
-import { withBase } from "@/lib/zone";
 import { AGENTS, type Agent } from "./agents";
 import { Confetti, useJustDone } from "./celebrate";
 import { AgentMark, connectAgent } from "./connect-agent";
+import { type UsedKey, useUsedKey } from "./used-key";
 
 const STATE = "skywake:getting-started";
 
@@ -36,39 +36,19 @@ function subscribe(listener: () => void) {
 
 /** Whether the card has been put away, so the page shows its own empty state again. */
 export function useGettingStartedClosed() {
-  return useSyncExternalStore(subscribe, () => readState() === "closed", () => false);
-}
-
-type UsedKey = { name: string } | null;
-
-/** The first key that has been used, if any: an agent, a script or the CLI has connected. */
-function useUsedKey() {
-  const [used, setUsed] = useState<UsedKey>();
-  useEffect(() => {
-    fetch(withBase("/api/keys"))
-      .then((response) => (response.ok ? response.json() : []))
-      .then((keys: { name: string; last_used?: string | null }[]) =>
-        setUsed(keys.find((key) => key.last_used) ?? null),
-      )
-      .catch(() => setUsed(null));
-  }, []);
-  return used;
+  return useSyncExternalStore(
+    subscribe,
+    () => readState() === "closed",
+    () => false,
+  );
 }
 
 /** The agent a key was made for, from the name the connect dialog gives it. */
-const agentOf = (key: UsedKey) =>
+const agentOf = (key: UsedKey | null | undefined) =>
   key ? AGENTS.find((agent) => key.name.startsWith(`${agent.name} on `)) : undefined;
 
 /** The disk as a folder that fills up: it lights up, an agent docks, a file drops in. */
-function Progress({
-  stage,
-  agent,
-  file,
-}: {
-  stage: number;
-  agent?: Agent;
-  file?: string;
-}) {
+function Progress({ stage, agent, file }: { stage: number; agent?: Agent; file?: string }) {
   return (
     <div aria-hidden className="relative mx-auto w-36 animate-[float_5s_ease-in-out_infinite]">
       <div
@@ -79,9 +59,7 @@ function Progress({
       >
         <FolderBack className="absolute inset-0 size-full" />
         {stage >= 3 && (
-          <div
-            className="absolute top-[-14%] left-[16%] flex h-[66%] w-[68%] animate-[drop-in_0.7s_cubic-bezier(.2,.8,.3,1.2)_both] flex-col gap-1.5 rounded-lg bg-[#f7f5f0] p-2.5 text-[#1d1b18] [--tilt:-4deg]"
-          >
+          <div className="absolute top-[-14%] left-[16%] flex h-[66%] w-[68%] animate-[drop-in_0.7s_cubic-bezier(.2,.8,.3,1.2)_both] flex-col gap-1.5 rounded-lg bg-[#f7f5f0] p-2.5 text-[#1d1b18] [--tilt:-4deg]">
             <span className="flex items-center gap-1.5 text-[9px] leading-none">
               <span className="rounded-[3px] bg-[#3b82f6] px-1 py-0.5 text-[7px] font-bold text-white">
                 NEW
@@ -145,7 +123,7 @@ export function GettingStarted({
   onNewDisk: () => void;
 }) {
   const state = useSyncExternalStore(subscribe, readState, () => null);
-  const usedKey = useUsedKey();
+  const usedKey = useUsedKey({ enabled: state !== "closed" });
   const first = disks[0];
   const wrote = agentFile !== undefined;
   const steps = [
