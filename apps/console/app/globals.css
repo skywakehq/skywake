@@ -81,14 +81,10 @@ button.panel:hover {
   animation: breathe 2.4s ease-in-out infinite;
 }
 
-/* A sign-in grid cell filling in and fading, like a file being written. */
-@keyframes cell-pulse {
-  30%,
-  55% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
+/* The sign-in folder, floating like the landing page's. */
+@keyframes float {
+  50% {
+    transform: translateY(-6px);
   }
 }
 
