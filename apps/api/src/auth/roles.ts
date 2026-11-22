@@ -38,8 +38,14 @@ export const mayUseEnvironment = (caller: Caller, environment: string) =>
 export function mayUse(caller: Caller, name: string) {
   if (!mayUseEnvironment(caller, environmentOf(name))) return false;
   const local = nameIn(name);
-  return caller.only.some((pattern) => globMatches(pattern, local));
+  // A disk's search index, `<disk>.files`, goes with the disk: a key for the disk searches it.
+  const disk = local.endsWith(DISK_INDEX) ? local.slice(0, -DISK_INDEX.length) : undefined;
+  return caller.only.some(
+    (pattern) => globMatches(pattern, local) || (disk !== undefined && globMatches(pattern, disk)),
+  );
 }
+
+const DISK_INDEX = ".files";
 
 export function covers(caller: Caller, only: string[]) {
   return only.every((inner) => caller.only.some((outer) => globCovers(outer, inner)));

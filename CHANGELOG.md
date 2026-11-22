@@ -3,6 +3,13 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.3 (2026-11-22)
+
+### Search
+
+- A key made for one disk, as the console's connect dialog makes, can search
+  that disk. It was refused with "no access to `<disk>.files`".
+
 ## 0.4.2 (2026-11-22)
 
 ### Search
