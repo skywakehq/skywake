@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@rocicorp/zero/react";
-import { GitFork } from "lucide-react";
+import { GitFork, Plug } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useRoute } from "@/components/shell/router";
 import { nameInEnv } from "@/lib/names";
 import { nsPath } from "@/lib/paths";
 import { Button, DiskMark, Hash, TabNav, plural } from "@/components/kit";
+import { ConnectAgent, connectAgent, useConnectAgent } from "@/features/agents/connect-agent";
 import { ForkDialog, useForkDialog } from "@/features/branches/branch-actions";
 import { useFleet } from "@/features/fleet/fleet";
 import { queries } from "@/zero/queries";
@@ -38,6 +39,7 @@ export function NamespacePage({
 }) {
   const { view } = useRoute();
   const { fork, openFork, closeFork } = useForkDialog();
+  const [connecting, setConnecting] = useConnectAgent(ns);
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="grid gap-6 px-8 pt-8 pb-16 max-sm:px-4 max-sm:pt-6">
@@ -47,6 +49,14 @@ export function NamespacePage({
             {nameInEnv(ns)}
           </h1>
           <div className="ml-auto flex gap-2">
+            <Button
+              size="default"
+              variant="primary"
+              leadingIcon={Plug}
+              onClick={() => connectAgent(ns)}
+            >
+              Connect an agent
+            </Button>
             {main && (
               <Button size="default" onClick={() => openFork(main)} leadingIcon={GitFork}>
                 Fork {main}
@@ -70,6 +80,7 @@ export function NamespacePage({
         </div>
       </div>
       {fork && <ForkDialog ns={ns} from={fork.from} at={fork.at} open onOpenChange={closeFork} />}
+      <ConnectAgent ns={ns} open={connecting} onOpenChange={setConnecting} />
     </div>
   );
 }

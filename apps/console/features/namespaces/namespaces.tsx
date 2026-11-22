@@ -7,7 +7,7 @@ import { nameInEnv } from "@/lib/names";
 import { nsPath } from "@/lib/paths";
 import { useChecks, useFleet } from "@/features/fleet/fleet";
 import { Ago, Button, DiskMark, Empty, Kbd, Page, plural } from "@/components/kit";
-import { Connect } from "./connect";
+import { GettingStarted, useGettingStartedClosed } from "@/features/agents/getting-started";
 import { NewNamespace } from "./new-namespace";
 
 type Card = {
@@ -21,6 +21,7 @@ type Card = {
 /** An environment's home: a folder per disk, the ones that need you first. */
 export function Namespaces({ env }: { env: string }) {
   const fleet = useFleet({ env });
+  const checklistClosed = useGettingStartedClosed();
   const checks = useChecks(fleet.reviews, fleet.branches);
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState("");
@@ -57,12 +58,6 @@ export function Namespaces({ env }: { env: string }) {
     return [...cards.values()].sort((a, b) => rank(b) - rank(a) || b.updated - a.updated);
   }, [fleet, checks]);
 
-  // Nothing has happened here yet: show how to connect an agent instead of zeros.
-  const fresh =
-    !fleet.loading &&
-    cards.length > 0 &&
-    !fleet.commits.length &&
-    fleet.branches.every((branch) => branch.protected);
   const shown = cards.filter((card) => nameInEnv(card.name).includes(filter.trim()));
 
   // `/` filters and `c` makes a new disk, as in Linear.
@@ -111,7 +106,16 @@ export function Namespaces({ env }: { env: string }) {
         </>
       }
     >
-      {fresh && <Connect ns={cards[0]!.name} />}
+      {!fleet.loading && (
+        <GettingStarted
+          disks={cards.map((card) => card.name)}
+          agentFile={(() => {
+            const write = fleet.commits.find((commit) => commit.actor.startsWith("key:"));
+            return write && (write.changes[0]?.path ?? "");
+          })()}
+          onNewDisk={() => setCreating(true)}
+        />
+      )}
 
       {fleet.loading && !cards.length ? (
         <div className={GRID}>
@@ -125,7 +129,7 @@ export function Namespaces({ env }: { env: string }) {
             <DiskFolder key={card.name} card={card} />
           ))}
         </div>
-      ) : (
+      ) : !filter && !checklistClosed ? null : (
         <Empty title={filter ? `No disk matches “${filter}”` : `No disks in ${env}`}>
           <p>{filter ? "Try another name." : "Make one, mount it, and point your agents at it."}</p>
           {!filter && (

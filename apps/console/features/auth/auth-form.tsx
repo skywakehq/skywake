@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { type ComponentProps, type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { cx } from "@/components/kit";
 import { authClient } from "@/features/auth/auth-client";
@@ -54,11 +54,13 @@ export function AuthForm({
 
 export function AuthTitle({ lead, children }: { lead?: ReactNode; children: ReactNode }) {
   return (
-    <div className="mb-3 grid gap-2">
-      <h1 className="text-[28px] leading-[1.1] font-medium tracking-[-0.03em] text-foreground">
+    <div className="mb-4 grid gap-2.5 text-center">
+      <h1 className="text-[30px] leading-[1.1] font-medium tracking-[-0.035em] text-foreground">
         {children}
       </h1>
-      {lead && <p className="text-[14px] leading-[1.5] text-muted-foreground">{lead}</p>}
+      {lead && (
+        <p className="text-balance text-[14px] leading-[1.5] text-muted-foreground">{lead}</p>
+      )}
     </div>
   );
 }
@@ -77,7 +79,7 @@ export function AuthField({
       <input
         {...input}
         className={cx(
-          "h-[44px] w-full rounded-md border border-border bg-transparent px-3 text-[14px] text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:border-foreground/30 focus:border-foreground",
+          "h-11 w-full rounded-xl bg-foreground/[0.04] px-3.5 text-[14px] text-foreground ring-1 ring-foreground/[0.08] outline-none transition placeholder:text-muted-foreground/60 hover:ring-foreground/20 focus:bg-transparent focus:ring-foreground/50",
           input.className,
         )}
       />
@@ -86,11 +88,12 @@ export function AuthField({
 }
 
 const BUTTON =
-  "inline-flex h-[44px] w-full items-center justify-center gap-1.5 rounded-md px-4 text-[14px] transition disabled:opacity-50";
+  "inline-flex h-11 w-full items-center justify-center gap-2 rounded-full px-5 text-[14px] font-medium transition disabled:opacity-50";
 const VARIANTS = {
   primary: "bg-foreground text-background hover:opacity-85",
-  outline: "border border-border text-foreground hover:bg-foreground/5",
-  quiet: "border border-border text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+  outline: "bg-foreground/[0.03] text-foreground ring-1 ring-foreground/[0.1] hover:bg-foreground/[0.07]",
+  quiet:
+    "text-muted-foreground ring-1 ring-foreground/[0.1] hover:bg-foreground/[0.05] hover:text-foreground",
 };
 
 /** The landing page's buttons: a solid one with its arrow, and outlined ones. */
@@ -103,7 +106,7 @@ export function AuthButton({
   return (
     <button className={cx(BUTTON, VARIANTS[variant], className)} {...props}>
       {children}
-      {variant === "primary" && <ArrowUpRight className="size-3.5" />}
+      {variant === "primary" && <ArrowRight className="size-4" />}
     </button>
   );
 }
@@ -114,7 +117,7 @@ export function authButton(variant: keyof typeof VARIANTS = "outline") {
 
 /** A line under the form, like "New here? Create an account". */
 export function AuthFooter({ children }: { children: ReactNode }) {
-  return <p className="mt-8 text-[13px] text-muted-foreground">{children}</p>;
+  return <div className="mt-8 text-center text-[13px] text-muted-foreground">{children}</div>;
 }
 
 export const authLink = "text-foreground underline-offset-4 hover:underline";
