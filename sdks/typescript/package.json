@@ -1,6 +1,6 @@
 {
   "name": "@skywake/sdk",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Skywake for TypeScript: a filesystem with branches for AI agents, and vector, full-text and hybrid search, on your own S3 bucket.",
   "keywords": [
     "skywake",
