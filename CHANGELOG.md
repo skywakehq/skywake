@@ -3,6 +3,29 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.4 (2026-11-23)
+
+### Security
+
+- Signing in to a self-hosted console no longer follows an unchecked `?next=`
+  link, which could run script or send you to another site.
+- Demoting an admin to member revokes the admin keys they made and their
+  desktop sign-in.
+- A key for disk `app` no longer reaches a separate disk named `app.files`;
+  it reaches only `app`'s own search index.
+- `skywake download` no longer follows symlinks out of the target folder, and
+  drops setuid bits.
+- The MCP `merge` tool is marked destructive.
+- The console sends security headers, rate-limits each user separately, and
+  no longer hands out API tokens on every session read.
+- Copying an index into another org respects that org's required SSO, and
+  expired invites no longer count past the sign-up cap.
+
+### Website
+
+- Every page has its own share image, plus a sitemap, structured data,
+  `llms.txt` and `/.well-known/mcp/server.json` for agents.
+
 ## 0.4.3 (2026-11-22)
 
 ### Search
