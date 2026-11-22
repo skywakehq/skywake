@@ -47,7 +47,9 @@ export const AGENTS: Agent[] = [
     mark: MARKS.claude,
     tile: "#d97757",
     ink: "#fff",
-    command: (setup) => `claude mcp add skywake ${flags("-e", setup)} -- npx -y skywake mcp`,
+    // User scope, so it is there in every folder, not just the one it was added in.
+    command: (setup) =>
+      `claude mcp add -s user skywake ${flags("-e", setup)} -- npx -y skywake mcp`,
   },
   {
     id: "codex",
@@ -90,7 +92,7 @@ export const AGENTS: Agent[] = [
     mark: MARKS.gemini,
     tile: "#fff",
     ink: "#4285f4",
-    command: (setup) => `gemini mcp add ${flags("-e", setup)} skywake npx -y skywake mcp`,
+    command: (setup) => `gemini mcp add -s user ${flags("-e", setup)} skywake npx -y skywake mcp`,
   },
   {
     id: "windsurf",
@@ -102,7 +104,20 @@ export const AGENTS: Agent[] = [
   },
 ];
 
-/** A first thing to ask the agent, so it tries the disk and its branches. */
+/**
+ * The first thing to paste into the agent. Each step names the tool to call and
+ * how to tell it worked, and it says where things go wrong most: an agent
+ * started before the server was added, and writing to its own computer instead.
+ */
 export function starterPrompt(disk: string) {
-  return `Use the Skywake disk "${disk}" as your workspace. Write a short notes.md there saying what you're working on, then keep your files on the disk as you go. When a piece of work is done, merge your branch into main.`;
+  return `Check that Skywake works. Skywake is an MCP server named "skywake". Its tools (list, read, write, merge and more) work on a remote disk named "${disk}", and already point at it.
+
+1. Look for the skywake tools. If you don't have them, stop and reply: "I can't see the Skywake tools. Start a new session, then paste this again."
+2. Call skywake's list tool. Any answer without an error means you're connected. An empty disk is fine.
+3. Call skywake's write tool to create notes.md with one line: "Connected on <today's date>." Use skywake's tool, not your own file tools: the file goes on the disk, not on this computer.
+4. Call skywake's read tool on notes.md and check the line is there.
+5. Your writes went to a branch of your own. Call skywake's merge tool to merge it into main. If it lists conflicts, stop and show them to me.
+6. Reply in one line: "Skywake works: notes.md is on ${disk}."
+
+From now on, when I ask you to save, find or share work on Skywake, use the skywake tools.`;
 }
