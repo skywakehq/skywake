@@ -3,6 +3,38 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.1 (2026-11-22)
+
+### Agents
+
+- The setup prompt walks an agent through Skywake step by step: find the
+  skywake tools, list, write notes.md through skywake rather than a local file,
+  read it back, merge and confirm. It says to start a new session first.
+  Claude Code and Gemini CLI add the server at user scope, so it works in
+  every folder.
+- The MCP server answers the client before it hears back about the key, so it
+  is ready about a round trip sooner. A read-only key still loses the write
+  tools once that answer comes in.
+
+### Console
+
+- The connect dialog sees the agent's first use of its key within a second,
+  and checks again as soon as the tab comes back. The getting-started
+  checklist updates without a reload.
+
+### Hosted
+
+- The hosted API has an embedding model, so search works on its disks.
+
+### Site
+
+- Buttons say Get started and open the console, or Open for someone signed
+  in. Setting `CLOUD_OPEN=0` brings the waitlist back.
+- A new section compares Skywake with Google Drive and Dropbox. The hero says
+  Durable disks, and section lines are rewritten in plain words.
+- Scrolling is eased, and the file's trip from the hero into the shared disk
+  runs without stopping.
+
 ## 0.4.0 (2026-11-22)
 
 ### Console
