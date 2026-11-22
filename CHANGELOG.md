@@ -3,6 +3,25 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.0 (2026-11-22)
+
+### Console
+
+- New people are walked through connecting an agent: a checklist on the disks
+  page (create a disk, connect an agent, see its first file), and a connect
+  dialog that makes a key for one disk, shows the setup for Claude Code, Codex,
+  Cursor, VS Code, Gemini CLI or Windsurf, and waits for the agent's first write.
+- The sign-in pages are redesigned after the landing page.
+- Signing in opens the disks page, and a new disk's region is picked on a globe
+  from the regions the API serves.
+- A new person whose default organization name is taken gets "Name 2" instead
+  of an error.
+
+### Hosted
+
+- skywake.dev deploys each release through AWS Systems Manager, and the API
+  names its region after the machine's AWS region.
+
 ## 0.3.0 (2026-11-22)
 
 ### Disks
