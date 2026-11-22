@@ -122,11 +122,6 @@ button.panel:hover {
     opacity: 1;
   }
 }
-@keyframes float {
-  50% {
-    transform: translateY(-6px);
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,
