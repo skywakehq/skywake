@@ -20,6 +20,7 @@ import {
   Lock,
   MoreHorizontal,
   Pencil,
+  Plug,
   Search,
   Trash2,
   Upload as UploadIcon,
@@ -51,6 +52,7 @@ import {
   AlertDialogTitle,
 } from "@skywake/ui/components/alert-dialog";
 import { mainOf, useFleet } from "@/features/fleet/fleet";
+import { connectAgent } from "@/features/agents/connect-agent";
 import { NamespacePage } from "@/features/namespaces/namespace-header";
 import { Link, navigate } from "@/components/shell/router";
 import { Ago, Button, Checkbox, Choice, Glide, cx } from "@/components/kit";
@@ -463,6 +465,7 @@ export function Files({ ns }: { ns: string }) {
             <Blank title="This disk is empty">
               Drop files here, or start with one of these.
               <StartHere
+                ns={ns}
                 onUpload={() => filesInput.current?.click()}
                 onFolder={() => setMaking(true)}
               />
@@ -488,6 +491,7 @@ export function Files({ ns }: { ns: string }) {
                 <>
                   Drop files here, or start with one of these.
                   <StartHere
+                    ns={ns}
                     onUpload={() => filesInput.current?.click()}
                     onFolder={() => setMaking(true)}
                   />
@@ -1048,10 +1052,21 @@ function Blank({ title, children }: { title: string; children?: React.ReactNode 
   );
 }
 
-function StartHere({ onUpload, onFolder }: { onUpload: () => void; onFolder: () => void }) {
+function StartHere({
+  ns,
+  onUpload,
+  onFolder,
+}: {
+  ns: string;
+  onUpload: () => void;
+  onFolder: () => void;
+}) {
   return (
-    <span className="mt-5 flex justify-center gap-2">
-      <Button variant="primary" size="default" leadingIcon={UploadIcon} onClick={onUpload}>
+    <span className="mt-5 flex flex-wrap justify-center gap-2">
+      <Button variant="primary" size="default" leadingIcon={Plug} onClick={() => connectAgent(ns)}>
+        Connect an agent
+      </Button>
+      <Button size="default" leadingIcon={UploadIcon} onClick={onUpload}>
         Upload files
       </Button>
       <Button size="default" leadingIcon={FolderPlus} onClick={onFolder}>

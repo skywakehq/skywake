@@ -18,6 +18,7 @@ import { settled } from "@/lib/mutate";
 import { nsPath } from "@/lib/paths";
 import { area, city, useRegions } from "@/features/environments/regions";
 import { defaultRegion, RegionPicker } from "@/features/environments/region-picker";
+import { connectAgent } from "@/features/agents/connect-agent";
 import { mutators } from "@/zero/mutators";
 import { Button, Field, Input } from "@/components/kit";
 import { navigate } from "@/components/shell/router";
@@ -59,6 +60,7 @@ export function NewNamespace({
       await settled(zero.mutate(mutators.namespace.create({ name, region })));
       toast.success(`Created ${value} in ${city(region)}`);
       close(false);
+      connectAgent(name);
       navigate(nsPath(name));
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure));
