@@ -1,6 +1,6 @@
 {
   "name": "skywake",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "mcpName": "dev.skywake/skywake",
   "description": "Skywake in one package: the TypeScript SDK, a bash shell for AI agents over a branch, and the skywake command.",
   "keywords": [
