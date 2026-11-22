@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Skywake</RootNamespace>
     <PackageId>Skywake</PackageId>
-    <Version>0.4.4</Version>
+    <Version>0.4.5</Version>
     <Authors>Skywake</Authors>
     <Description>Skywake for .NET: shared, branchable disks with search, for AI agents.</Description>
     <PackageTags>skywake;vector-search;full-text-search;branches;files;rag;ai-agents</PackageTags>

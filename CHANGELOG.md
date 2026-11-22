@@ -3,6 +3,10 @@
 All notable changes to Skywake. Releases follow [Semantic Versioning](https://semver.org);
 release-please writes each release's section from the commit messages.
 
+## 0.4.5 (2026-11-23)
+
+Ships 0.4.4, whose release stopped on a broken docs link.
+
 ## 0.4.4 (2026-11-23)
 
 ### Security
