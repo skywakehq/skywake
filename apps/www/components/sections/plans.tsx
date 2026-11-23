@@ -13,7 +13,7 @@ const LINKS = [
   { href: site.cloudOpen ? site.consoleUrl : "#waitlist", featured: true },
 ];
 
-/** Pricing while the cloud is in private beta: free self-hosting, and the cloud to come. */
+/** Pricing: free self-hosting, and the cloud, free to start. */
 export function Plans({ t }: { t: HomeMessages }) {
   const p = t.plans;
   const options = p.options.map((option, i) => ({ ...option, ...LINKS[i]! }));

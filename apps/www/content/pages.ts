@@ -16,7 +16,7 @@ export const pages = {
   "/pricing": {
     title: "Pricing",
     description:
-      "Free to self-host, with every feature and no limits. Skywake Cloud is in private beta.",
+      "Free to self-host, with every feature and no limits. Skywake Cloud is free to start, then $20 or $50 a month plus usage.",
     priority: 0.8,
   },
   "/privacy": {

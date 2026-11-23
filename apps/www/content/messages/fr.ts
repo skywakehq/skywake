@@ -15,7 +15,7 @@ export const fr: HomeMessages = {
     "/pricing": {
       title: "Tarifs",
       description:
-        "L’auto-hébergement est gratuit, avec toutes les fonctionnalités et sans limite. Skywake Cloud est en bêta privée.",
+        "L’auto-hébergement est gratuit, avec toutes les fonctionnalités et sans limite. Skywake Cloud est gratuit pour démarrer, puis 20 $ ou 50 $ par mois plus l’usage.",
     },
     "/privacy": {
       title: "Confidentialité",
@@ -230,8 +230,8 @@ export const fr: HomeMessages = {
   },
   plans: {
     eyebrow: "Tarifs",
-    title: "Gratuit en self-hosting, dès aujourd'hui.",
-    line: "Le cloud est en bêta privée.",
+    title: "Gratuit en self-hosting. Gratuit pour démarrer dans le cloud.",
+    line: "Hébergez-le vous-même gratuitement, ou laissez-nous le faire tourner.",
     options: [
       {
         name: "Self-host",
@@ -248,16 +248,16 @@ export const fr: HomeMessages = {
       },
       {
         name: "Cloud",
-        price: "Bêta privée",
-        per: "",
-        line: "On le fait tourner pour vous. Tarifs annoncés au lancement.",
+        price: "0 $",
+        per: "pour démarrer",
+        line: "10 Go offerts. Launch coûte 20 $ par mois, Scale 50 $, plus votre usage.",
         includes: [
           "Rien à installer ni à gérer",
           "Un cache partagé à côté de vos agents",
           "Payez seulement ce que vous utilisez",
           "Tourne sur votre propre bucket",
         ],
-        action: "Rejoindre la liste d'attente",
+        action: "Commencer",
       },
     ],
   },

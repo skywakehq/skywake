@@ -21,7 +21,7 @@ ${site.name} is open source (Apache-2.0) and runs on any object storage with con
 - **Filesystem**: a shared, versioned disk. Mount it as a normal local folder on any machine, so many agents read and write the same files, then branch, diff and merge the changes like git. Saved writes survive a crash.
 - **Search**: vector, full-text (BM25) and hybrid search indexes, read straight from object storage, with branches and time travel like the filesystem.
 
-Self-hosting is free today. A hosted version, Skywake Cloud, is coming soon: join the waitlist at ${url("/#waitlist")}.
+Self-hosting is free. Skywake Cloud is free to start with 10 GB, then Launch ($20 a month) or Scale ($50 a month) plus usage: ${url("/pricing")}.
 
 Agents use it through an MCP server (\`npx -y skywake mcp\`), a bash tool, the \`skywake\` CLI, an HTTP API, or SDKs in TypeScript, Python, Go, Rust, Ruby, Java and C#.
 

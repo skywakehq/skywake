@@ -201,8 +201,8 @@ export const en: HomeMessages = {
   },
   plans: {
     eyebrow: "Pricing",
-    title: "Free to self-host, today.",
-    line: "The cloud is in private beta.",
+    title: "Free to self-host. Free to start in the cloud.",
+    line: "Run it yourself for nothing, or let us run it.",
     options: [
       {
         name: "Self-host",
@@ -219,16 +219,16 @@ export const en: HomeMessages = {
       },
       {
         name: "Cloud",
-        price: "Private beta",
-        per: "",
-        line: "We run it for you. Prices come at launch.",
+        price: "$0",
+        per: "to start",
+        line: "10 GB free. Launch is $20 a month, Scale $50, plus what you use.",
         includes: [
           "Nothing to set up or run",
           "A shared cache next to your agents",
           "Pay only for what you use",
           "Runs on your own bucket",
         ],
-        action: "Join the waitlist",
+        action: "Get started",
       },
     ],
   },
