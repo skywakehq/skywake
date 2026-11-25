@@ -93,7 +93,7 @@ export function guideArticle(
     description,
     url: url(localizePath(locale, path)),
     inLanguage: locale,
-    image: url(`${localizePath(locale, path)}/opengraph-image`),
+    image: url(localizePath(locale, `${path.replace(/\/$/, "")}/opengraph-image`)),
     author: organization,
     publisher: organization,
     about: { "@id": url("/#software") },
