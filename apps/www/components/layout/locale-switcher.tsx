@@ -4,7 +4,14 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { DropdownContent, DropdownMenu, DropdownTrigger } from "@skywake/ui/components/dropdown";
 import { MenuItem } from "@skywake/ui/components/menu-item";
-import { localeFlags, localeNames, locales, stripLocale, type Locale } from "@/lib/i18n";
+import {
+  localeFlags,
+  localeNames,
+  locales,
+  localizePath,
+  stripLocale,
+  type Locale,
+} from "@/lib/i18n";
 import { NAV_ICON } from "./nav-icon";
 
 // The middleware reads this cookie to send later visits to the same language.
@@ -19,7 +26,7 @@ export function LocaleSwitcher({ locale, label }: { locale: Locale; label: strin
 
   function choose(next: Locale) {
     remember(next);
-    router.push(bare === "/" ? `/${next}` : `/${next}${bare}`);
+    router.push(localizePath(next, bare));
   }
 
   return (

@@ -42,14 +42,15 @@ export function isSitePath(href: string) {
   return href.startsWith("/") && !isZonePath(href);
 }
 
+// English lives at the root ("/pricing"); other languages have a prefix ("/fr/pricing").
 export function localizePath(locale: Locale, path = "/") {
-  if (path.startsWith("/#")) return `/${locale}${path.slice(1)}`;
+  const prefix = locale === defaultLocale ? "" : `/${locale}`;
   const hashIndex = path.indexOf("#");
   const hash = hashIndex >= 0 ? path.slice(hashIndex) : "";
   const bare = hashIndex >= 0 ? path.slice(0, hashIndex) : path;
   const normalized = bare.startsWith("/") ? bare : `/${bare}`;
-  if (normalized === "/") return `/${locale}${hash}`;
-  return `/${locale}${normalized}${hash}`;
+  if (normalized === "/") return `${prefix || "/"}${hash}`;
+  return `${prefix}${normalized}${hash}`;
 }
 
 export function stripLocale(pathname: string) {

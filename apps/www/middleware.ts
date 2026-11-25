@@ -1,14 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { defaultLocale, isLocale } from "@/lib/i18n";
-
-function detectLocale(request: NextRequest) {
-  // English is the default. Other locales only after an explicit choice
-  // (language switcher sets NEXT_LOCALE).
-  const cookie = request.cookies.get("NEXT_LOCALE")?.value;
-  if (cookie && isLocale(cookie)) return cookie;
-  return defaultLocale;
-}
+import { defaultLocale, isLocale, localizePath, stripLocale } from "@/lib/i18n";
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -30,6 +22,16 @@ export function middleware(request: NextRequest) {
   }
 
   const segment = pathname.split("/").filter(Boolean)[0];
+
+  // English has no prefix, so old /en links move to the root.
+  if (segment === defaultLocale) {
+    const url = request.nextUrl.clone();
+    url.pathname = stripLocale(pathname);
+    const response = NextResponse.redirect(url, 308);
+    response.cookies.set("NEXT_LOCALE", defaultLocale, { path: "/" });
+    return response;
+  }
+
   if (segment && isLocale(segment)) {
     const response = NextResponse.next();
     response.cookies.set("NEXT_LOCALE", segment, { path: "/" });
@@ -37,11 +39,19 @@ export function middleware(request: NextRequest) {
     return response;
   }
 
-  const locale = detectLocale(request);
+  // A visitor who picked another language in the switcher goes back to it.
+  const saved = request.cookies.get("NEXT_LOCALE")?.value;
+  if (saved && isLocale(saved) && saved !== defaultLocale) {
+    const url = request.nextUrl.clone();
+    url.pathname = localizePath(saved, pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Everyone else gets English right here, with no redirect.
   const url = request.nextUrl.clone();
-  url.pathname = pathname === "/" ? `/${locale}` : `/${locale}${pathname}`;
-  const response = NextResponse.redirect(url);
-  response.cookies.set("NEXT_LOCALE", locale, { path: "/" });
+  url.pathname = `/${defaultLocale}${pathname === "/" ? "" : pathname}`;
+  const response = NextResponse.rewrite(url);
+  response.headers.set("x-locale", defaultLocale);
   return response;
 }
 
