@@ -151,14 +151,15 @@ export type HomeMessages = {
     eyebrow: string;
     title: string;
     line: string;
+    /** Free, Launch and Scale, in that order. */
     options: {
       name: string;
       price: string;
       per: string;
       line: string;
       includes: string[];
-      action: string;
     }[];
+    selfHost: { name: string; line: string; action: string };
   };
   /** Section bodies may hold {contact}, filled with the contact email. */
   legal: {
